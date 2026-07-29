@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
+import { Plus, Search, Filter, Edit, Trash2 } from 'lucide-react'
 import { Table } from '../components/Table'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -30,10 +30,10 @@ export default function Labores() {
       console.error('Error al cargar labores', err)
       // Mock data for demo if API is not running/migrated yet
       setLabores([
-         { id: 1, nombre: 'Arado', descripcion: 'Preparación del suelo' },
-         { id: 2, nombre: 'Siembra', descripcion: 'Colocación de semillas' },
-         { id: 3, nombre: 'Cosecha', descripcion: 'Recolección de frutos' },
-         { id: 4, nombre: 'Fumigación', descripcion: 'Aplicación de agroquímicos' },
+        { id: 1, nombre: 'Arado', descripcion: 'Preparación del suelo' },
+        { id: 2, nombre: 'Siembra', descripcion: 'Colocación de semillas' },
+        { id: 3, nombre: 'Cosecha', descripcion: 'Recolección de frutos' },
+        { id: 4, nombre: 'Fumigación', descripcion: 'Aplicación de agroquímicos' },
       ])
     } finally {
       setLoading(false)
@@ -44,9 +44,9 @@ export default function Labores() {
     { header: 'ID', accessor: 'id' as keyof Labor },
     { header: 'Nombre', accessor: 'nombre' as keyof Labor },
     { header: 'Descripción', accessor: 'descripcion' as keyof Labor },
-    { 
-      header: 'Acciones', 
-      accessor: (item: Labor) => (
+    {
+      header: 'Acciones',
+      accessor: () => (
         <div className="row-actions">
           <button className="icon-btn" title="Editar"><Edit size={16} /></button>
           <button className="icon-btn delete" title="Eliminar"><Trash2 size={16} /></button>
@@ -71,7 +71,7 @@ export default function Labores() {
           <h1>🚜 Labores</h1>
           <p>Catálogo maestro de actividades agrícolas</p>
         </div>
-        
+
         {canWrite && (
           <button className="primary-btn">
             <Plus size={20} />
@@ -91,9 +91,9 @@ export default function Labores() {
         </button>
       </div>
 
-      <Table 
-        data={labores} 
-        columns={columns} 
+      <Table
+        data={labores}
+        columns={columns}
       />
 
       {loading && <div className="loading-spinner">Cargando...</div>}

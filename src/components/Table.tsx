@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 interface Column<T> {
   header: string
@@ -19,7 +19,7 @@ export function Table<T>({ data, columns, title, actions }: TableProps<T>) {
         {title && <h2>{title}</h2>}
         {actions && <div className="table-actions">{actions}</div>}
       </div>
-      
+
       <div className="table-container">
         <table>
           <thead>
@@ -35,8 +35,8 @@ export function Table<T>({ data, columns, title, actions }: TableProps<T>) {
                 <tr key={ri}>
                   {columns.map((col, ci) => (
                     <td key={ci}>
-                      {typeof col.accessor === 'function' 
-                        ? col.accessor(item) 
+                      {typeof col.accessor === 'function'
+                        ? col.accessor(item)
                         : (item[col.accessor] as ReactNode)}
                     </td>
                   ))}
