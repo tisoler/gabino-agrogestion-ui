@@ -36,7 +36,6 @@ export default function Login() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         await sendEmailVerification(userCredential.user)
         setSuccess('¡Cuenta creada! Por favor, verifica tu email para poder ingresar.')
-        // Nos deslogueamos para forzar que verifiquen antes de entrar
         await signOut(auth)
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, email, password)
@@ -86,89 +85,101 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
-      {/* Background Image with Blur */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat filter blur-xs scale-110"
-          style={{ backgroundImage: 'url("fondoLogin.png")' }}
-        />
-      </div>
-
-      {/* Decorative Circles */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-3xl animate-pulse decoration-1000" />
-      </div>
+      {/* Background */}
+      <div
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat scale-105"
+        style={{ backgroundImage: 'url("fondoLogin.png")', filter: 'blur(2px)' }}
+        aria-hidden
+      />
+      <div className="absolute inset-0 z-0 bg-background/70 dark:bg-background/80" aria-hidden />
 
       <div className="relative z-10 w-full max-w-[420px]">
-        <div className="bg-card/80 dark:bg-card/40 border border-border shadow-2xl rounded-3xl overflow-hidden backdrop-blur-xl transition-all duration-300">
+        <div className="bg-card/90 border border-border shadow-xl rounded-lg overflow-hidden backdrop-blur-md">
           <div className="p-8 pb-4 text-center">
-            <div className="inline-flex p-3 rounded-2xl bg-primary/10 mb-4 shadow-inner">
-              <Sprout className="size-10 text-primary" />
+            <div className="inline-flex p-2.5 rounded-md bg-primary-soft mb-4">
+              <Sprout className="size-7 text-primary" strokeWidth={1.75} />
             </div>
-            <h1 className="text-3xl font-black text-foreground tracking-tight">Gabino Agrogestión</h1>
-            <p className="text-muted-foreground font-medium mt-1">
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Gabino Agrogestión</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               {isRegister ? 'Crea tu cuenta' : 'Gestión inteligente para el campo'}
             </p>
           </div>
 
           <div className="p-8 pt-4">
-            <form onSubmit={handleAuth} className="space-y-5">
+            <form onSubmit={handleAuth} className="space-y-4">
               {error && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive dark:text-red-500 text-sm rounded-xl text-center font-medium transition-all animate-in fade-in slide-in-from-top-1">
+                <div
+                  role="alert"
+                  className="p-3 bg-destructive-soft border border-destructive/20 text-destructive text-sm rounded-md text-center"
+                >
                   {error}
                 </div>
               )}
 
               {success && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm rounded-xl flex items-center gap-3 font-medium animate-in fade-in slide-in-from-top-1">
-                  <CheckCircle2 className="size-5 shrink-0" />
+                <div
+                  role="status"
+                  className="p-3 bg-success-soft border border-success/20 text-success text-sm rounded-md flex items-center gap-2.5"
+                >
+                  <CheckCircle2 className="size-4 shrink-0" strokeWidth={2} />
                   <span>{success}</span>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground px-1">Email</label>
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="text-sm font-medium text-foreground">Email</label>
                 <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                  <Mail
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
+                    strokeWidth={1.75}
+                  />
                   <input
+                    id="email"
                     type="email"
                     placeholder="tu@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full pl-12 pr-4 py-3 bg-accent/30 dark:bg-accent/10 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/60 text-foreground"
+                    className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground px-1">Contraseña</label>
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                  <Lock
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
+                    strokeWidth={1.75}
+                  />
                   <input
+                    id="password"
                     type="password"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full pl-12 pr-4 py-3 bg-accent/30 dark:bg-accent/10 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/60 text-foreground"
+                    className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   />
                 </div>
               </div>
 
               {isRegister && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="text-sm font-semibold text-foreground px-1">Confirmar Contraseña</label>
+                <div className="space-y-1.5">
+                  <label htmlFor="confirm-password" className="text-sm font-medium text-foreground">Confirmar contraseña</label>
                   <div className="relative group">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Lock
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
+                      strokeWidth={1.75}
+                    />
                     <input
+                      id="confirm-password"
                       type="password"
                       placeholder="••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
-                      className="w-full pl-12 pr-4 py-3 bg-accent/30 dark:bg-accent/10 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/60 text-foreground"
+                      className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     />
                   </div>
                 </div>
@@ -176,18 +187,18 @@ export default function Login() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-bold text-base shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 disabled={loading}
               >
                 {loading ? (
-                  <Loader2 className="size-5 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : isRegister ? (
                   <>
-                    <UserPlus className="size-5" /> Registrarse
+                    <UserPlus className="size-4" strokeWidth={2} /> Registrarse
                   </>
                 ) : (
                   <>
-                    <LogIn className="size-5" /> Iniciar Sesión
+                    <LogIn className="size-4" strokeWidth={2} /> Iniciar sesión
                   </>
                 )}
               </button>
@@ -196,7 +207,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setIsRegister(!isRegister)}
-                  className="text-sm font-semibold text-primary hover:underline transition-all cursor-pointer"
+                  className="text-sm font-medium text-primary hover:underline transition-colors"
                 >
                   {isRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
                 </button>
@@ -204,11 +215,11 @@ export default function Login() {
 
               {!isRegister && (
                 <>
-                  <div className="relative my-6 text-center">
-                    <div className="absolute inset-0 flex items-center px-4 mb-6">
+                  <div className="relative my-5 text-center">
+                    <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-border" />
                     </div>
-                    <span className="relative px-3 text-[10px] font-black uppercase text-muted-foreground/60 bg-transparent tracking-widest">
+                    <span className="relative px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-card">
                       O continuar con
                     </span>
                   </div>
@@ -216,10 +227,10 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={handleGoogleAuth}
-                    className="w-full py-3 bg-card border border-border rounded-xl font-bold flex items-center justify-center gap-3 text-foreground hover:bg-accent hover:border-border transition-all hover:shadow-sm cursor-pointer"
+                    className="w-full py-2 bg-card border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors flex items-center justify-center gap-2.5"
                     disabled={loading}
                   >
-                    <svg className="size-5" viewBox="0 0 24 24">
+                    <svg className="size-4" viewBox="0 0 24 24" aria-hidden>
                       <path
                         fill="#4285F4"
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -245,11 +256,10 @@ export default function Login() {
           </div>
         </div>
 
-        <p className="text-center mt-8 text-sm text-muted-foreground/40 font-bold tracking-tight">
-          &copy; 2026 GABINO AGROGESTIÓN.
+        <p className="text-center mt-6 text-xs text-muted-foreground">
+          © 2026 Gabino Agrogestión
         </p>
       </div>
     </div>
   )
 }
-

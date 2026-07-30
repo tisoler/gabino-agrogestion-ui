@@ -10,19 +10,19 @@ export default function Layout() {
     <div className="min-h-screen bg-background">
       <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
 
-      {/* Main content area */}
-      <main className={`transition-all duration-300 ease-in-out pl-0 ${isCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
-
-        {/* Company Banner / Selector */}
-        <div className="pt-[56px] md:pt-0 md:sticky md:top-0 z-40 bg-background/80 backdrop-blur-md">
+      <main
+        className={`transition-[padding] duration-200 ease-out pl-0 ${
+          isCollapsed ? 'lg:pl-16' : 'lg:pl-64'
+        }`}
+      >
+        <div className="pt-14 md:pt-0 md:sticky md:top-0 z-40 bg-background/85 backdrop-blur">
           <EmpresaSelector />
         </div>
 
-        <div className="mx-auto max-w-7xl p-4 md:p-8 pt-8 min-h-screen">
+        <div className="mx-auto max-w-7xl p-4 md:p-8 pt-6 md:pt-8 min-h-screen">
           <Outlet />
         </div>
       </main>
     </div>
   )
 }
-

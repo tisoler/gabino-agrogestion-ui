@@ -18,9 +18,8 @@ interface Empresa {
 interface User {
   id: string
   nombreUsuario: string
-  idEmpresa: number | null
-  idEmpresas: number[] // Para asesores
-  nombreEmpresa: string | null
+  email?: string | null
+  idEmpresas: number[]
   roles: string[]
   permisos: string[]
 }
@@ -34,6 +33,7 @@ interface AuthContextType {
   currentEmpresa: string | null
   isSysAdmin: boolean
   isAsesor: boolean
+  isProductor: boolean
   empresas: Empresa[]
   isLoadingEmpresas: boolean
   setCurrentEmpresaId: (id: number | null) => void
@@ -42,33 +42,90 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const STORAGE_KEY = 'currentEmpresaId'
+
+const readStoredEmpresaId = (): number | null => {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem(STORAGE_KEY)
+  if (!raw) return null
+  const n = parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [permisos, setPermisos] = useState<string[]>([])
-  const [currentEmpresaId, _setCurrentEmpresaId] = useState<number | null>(() => {
-    const saved = localStorage.getItem('currentEmpresaId')
-    return saved ? parseInt(saved, 10) : null
-  })
+  const [currentEmpresaId, setCurrentEmpresaIdState] = useState<number | null>(
+    () => readStoredEmpresaId()
+  )
 
   const isSysAdmin = user?.roles?.includes(Roles.SYS_ADMIN) || false
   const isAsesor = user?.roles?.includes(Roles.ASESOR) || false
+  const isProductor = user?.roles?.includes(Roles.PRODUCTOR) || false
 
-  // Fetch empresas centralizado para asesores y sys-admin
+  // Empresas visibles para el usuario (sys-admin: todas; resto: sus idEmpresas)
   const { data: listadoEmpresas, isLoading: isLoadingEmpresas } = useSWR<Empresa[]>(
-    user && (isAsesor || isSysAdmin) ? '/empresas' : null,
+    user ? '/empresas' : null,
     fetcher
   )
 
-  // Nombre de la empresa actual derivado del listado o del perfil
+  const empresasVisibles = useMemo<number[]>(() => {
+    if (!user) return []
+    if (isSysAdmin) {
+      return (listadoEmpresas || []).map((e) => e.id)
+    }
+    return (user.idEmpresas || []).map((e) => Number(e)).filter((n) => Number.isFinite(n) && n > 0)
+  }, [user, isSysAdmin, listadoEmpresas])
+
+  // Sincroniza currentEmpresaId con la lista de empresas válidas del usuario.
+  // - Si no hay ninguna en localStorage, toma la primera de idEmpresas (asesor/productor) o null (sys-admin).
+  // - Si la guardada no está en la lista visible, la reemplaza.
+  useEffect(() => {
+    if (!user) {
+      setCurrentEmpresaIdState(null)
+      return
+    }
+
+    if (isSysAdmin) {
+      // sys-admin no usa empresa actual: la UI trabaja con la admin-toggle.
+      setCurrentEmpresaIdState(null)
+      try {
+        window.localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        /* noop */
+      }
+      return
+    }
+
+    const visibles = empresasVisibles
+
+    if (visibles.length === 0) {
+      setCurrentEmpresaIdState(null)
+      try {
+        window.localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        /* noop */
+      }
+      return
+    }
+
+    const stored = readStoredEmpresaId()
+    if (stored && visibles.includes(stored)) {
+      setCurrentEmpresaIdState(stored)
+    } else {
+      setCurrentEmpresaIdState(visibles[0])
+    }
+  }, [user, isSysAdmin, empresasVisibles])
+
   const currentEmpresa = useMemo(() => {
     if (currentEmpresaId && listadoEmpresas) {
-      const e = listadoEmpresas.find(emp => emp.id === currentEmpresaId)
+      const e = listadoEmpresas.find((emp) => emp.id === currentEmpresaId)
       if (e) return e.nombre
     }
-    return user?.nombreEmpresa || null
-  }, [currentEmpresaId, listadoEmpresas, user])
+    return null
+  }, [currentEmpresaId, listadoEmpresas])
 
   const navigate = useNavigate()
 
@@ -82,8 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setFirebaseUser(null)
         setUser(null)
         setPermisos([])
-        _setCurrentEmpresaId(null)
-        localStorage.removeItem('currentEmpresaId')
+        setCurrentEmpresaIdState(null)
+        try {
+          window.localStorage.removeItem(STORAGE_KEY)
+        } catch {
+          /* noop */
+        }
       }
       setLoading(false)
     })
@@ -95,39 +156,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await api.get('/auth/me')
       const userData = response.data
-      setUser(userData)
+      setUser({
+        id: userData.id,
+        nombreUsuario: userData.nombreUsuario,
+        email: userData.email,
+        idEmpresas: Array.isArray(userData.idEmpresas)
+          ? userData.idEmpresas.map((e: unknown) => Number(e)).filter((n: number) => Number.isFinite(n) && n > 0)
+          : [],
+        roles: userData.roles || [],
+        permisos: userData.permisos || [],
+      })
       setPermisos(userData.permisos || [])
-
-      const isUserSysAdmin = userData.roles?.includes(Roles.SYS_ADMIN)
-      const isUserAsesor = userData.roles?.includes(Roles.ASESOR)
-
-      // Lógica de empresa actual según requerimiento
-      if (isUserSysAdmin) {
-        // sys-admin no usa banner y idEmpresa suele ser null en el backend
-        _setCurrentEmpresaId(null)
-        localStorage.removeItem('currentEmpresaId')
-      } else if (isUserAsesor) {
-        // Si ya hay una en localStorage que es válida para el asesor, la dejamos.
-        // Si no, asignamos idEmpresa o la primera de idEmpresas.
-        const validIds = userData.idEmpresas || []
-        if (userData.idEmpresa) validIds.push(userData.idEmpresa)
-
-        if (!currentEmpresaId || !validIds.includes(currentEmpresaId)) {
-          const defaultId = userData.idEmpresa || (validIds.length > 0 ? validIds[0] : null)
-          if (defaultId && !isNaN(defaultId)) {
-            const defaultIdNumber = Number(defaultId)
-            _setCurrentEmpresaId(defaultIdNumber)
-            localStorage.setItem('currentEmpresaId', defaultIdNumber.toString())
-          }
-        }
-      } else if (userData.idEmpresa) {
-        // Usuario común: siempre su idEmpresa
-        if (currentEmpresaId !== userData.idEmpresa && !isNaN(userData.idEmpresa)) {
-          const idEmpresaNumber = Number(userData.idEmpresa)
-          _setCurrentEmpresaId(idEmpresaNumber)
-          localStorage.setItem('currentEmpresaId', idEmpresaNumber.toString())
-        }
-      }
     } catch (error) {
       console.error('Error obteniendo perfil del backend', error)
       setUser(null)
@@ -136,11 +175,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const setCurrentEmpresaId = (id: number | null) => {
-    _setCurrentEmpresaId(id)
-    if (id) {
-      localStorage.setItem('currentEmpresaId', id.toString())
-    } else {
-      localStorage.removeItem('currentEmpresaId')
+    if (id === null) {
+      setCurrentEmpresaIdState(null)
+      try {
+        window.localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        /* noop */
+      }
+      return
+    }
+    if (!empresasVisibles.includes(id)) return
+    setCurrentEmpresaIdState(id)
+    try {
+      window.localStorage.setItem(STORAGE_KEY, id.toString())
+    } catch {
+      /* noop */
     }
   }
 
@@ -149,26 +198,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setFirebaseUser(null)
     setPermisos([])
-    _setCurrentEmpresaId(null)
-    localStorage.removeItem('currentEmpresaId')
+    setCurrentEmpresaIdState(null)
+    try {
+      window.localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* noop */
+    }
     navigate('/login')
   }
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      firebaseUser,
-      permisos,
-      loading,
-      currentEmpresaId,
-      currentEmpresa,
-      isSysAdmin,
-      isAsesor,
-      empresas: listadoEmpresas || [],
-      isLoadingEmpresas,
-      setCurrentEmpresaId,
-      logout
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        firebaseUser,
+        permisos,
+        loading,
+        currentEmpresaId,
+        currentEmpresa,
+        isSysAdmin,
+        isAsesor,
+        isProductor,
+        empresas: listadoEmpresas || [],
+        isLoadingEmpresas,
+        setCurrentEmpresaId,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

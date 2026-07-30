@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Building2, ChevronDown, Check, UserCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -11,18 +11,34 @@ export function EmpresaSelector() {
   const {
     currentEmpresaId,
     currentEmpresa,
-    setCurrentEmpresaId,
     isSysAdmin,
     isAsesor,
     empresas,
-    isLoadingEmpresas
+    isLoadingEmpresas,
+    user,
+    setCurrentEmpresaId,
   } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
 
-  // Req: sys-admin: no mostrar el banner
-  if (isSysAdmin) return null;
+  // sys-admin: no usa banner
+  if (isSysAdmin) return null
 
-  const canSwitch = isAsesor
+  // Para asesor y productor, sólo pueden elegir entre sus idEmpresas
+  const opciones = useMemo<Empresa[]>(() => {
+    if (!user) return []
+    const visibles = (user.idEmpresas || []).map(Number)
+    return empresas.filter((e) => visibles.includes(e.id))
+  }, [empresas, user])
+
+  // canSwitch: tiene más de una empresa y puede elegir
+  const canSwitch = opciones.length > 1
+
+  // Si el usuario tiene 0 empresas (caso patológico) o 1, mostramos el banner
+  // sin botón de switch.
+  const label = isAsesor ? 'Empresa actual' : 'Empresa'
+  const empresaActual =
+    opciones.find((e) => e.id === currentEmpresaId) ??
+    (currentEmpresaId ? { id: currentEmpresaId, nombre: currentEmpresa || 'Empresa actual' } : null)
 
   const handleSelect = (empresa: Empresa) => {
     setCurrentEmpresaId(empresa.id)
@@ -30,52 +46,72 @@ export function EmpresaSelector() {
   }
 
   return (
-    <div className="flex items-center gap-4 px-4 h-12 w-full bg-primary/5 border-b border-primary/10 shadow-sm">
+    <div className="flex items-center gap-3 px-4 sm:px-6 h-11 w-full bg-card/60 border-b border-border">
       <div className="flex items-center gap-2 min-w-0">
-        <Building2 size={16} className="text-primary shrink-0" />
-        <span className="text-xs font-black uppercase tracking-wider text-muted-foreground whitespace-nowrap">
-          {isAsesor ? 'Empresa Actual:' : 'Empresa:'}
+        <Building2 className="size-4 text-primary shrink-0" strokeWidth={1.75} />
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+          {label}:
         </span>
-        <span className="text-sm font-bold text-foreground truncate">{currentEmpresa || 'Ninguna seleccionada'}</span>
+        <span className="text-sm font-medium text-foreground truncate">
+          {empresaActual?.nombre || 'Ninguna seleccionada'}
+        </span>
       </div>
 
       {canSwitch && (
-        <div className="relative">
+        <div className="relative ml-auto">
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-bold hover:bg-accent transition-all shadow-sm"
+            className="flex items-center gap-2 px-3 py-1.5 bg-card border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+            aria-haspopup="menu"
+            aria-expanded={isOpen}
           >
-            <UserCircle size={14} className="text-primary" />
-            <span>Cambiar Empresa</span>
-            <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            <UserCircle className="size-4 text-primary" strokeWidth={1.75} />
+            <span>Cambiar empresa</span>
+            <ChevronDown
+              className={`size-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
           </button>
 
           {isOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-              <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right">
-                <div className="p-3 border-b border-border bg-accent/30 flex justify-between items-center">
-                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Seleccionar Empresa</span>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsOpen(false)}
+                aria-hidden
+              />
+              <div
+                role="menu"
+                className="absolute right-0 mt-1.5 w-64 bg-popover border border-border rounded-md shadow-lg overflow-hidden z-50"
+              >
+                <div className="px-3 py-2 border-b border-border bg-accent/40">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Seleccionar empresa
+                  </span>
                 </div>
-                <div className="max-h-72 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                <div className="max-h-72 overflow-y-auto p-1">
                   {isLoadingEmpresas ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground italic">Cargando empresas...</div>
+                    <div className="p-3 text-center text-xs text-muted-foreground">Cargando empresas...</div>
+                  ) : opciones.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-muted-foreground">
+                      No hay empresas disponibles
+                    </div>
                   ) : (
-                    <>
-                      {empresas.map(e => (
-                        <div
-                          key={e.id}
-                          onClick={() => handleSelect(e)}
-                          className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all group ${currentEmpresaId === e.id ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-                        >
-                          <span className="text-sm font-bold">{e.nombre}</span>
-                          {currentEmpresaId === e.id && <Check size={14} className="shrink-0" />}
-                        </div>
-                      ))}
-                      {empresas.length === 0 && (
-                        <div className="p-4 text-center text-xs text-muted-foreground italic">No hay empresas disponibles</div>
-                      )}
-                    </>
+                    opciones.map((e) => (
+                      <button
+                        type="button"
+                        key={e.id}
+                        onClick={() => handleSelect(e)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-sm text-sm transition-colors ${
+                          currentEmpresaId === e.id
+                            ? 'bg-primary-soft text-primary font-medium'
+                            : 'text-foreground hover:bg-accent'
+                        }`}
+                      >
+                        <span className="truncate">{e.nombre}</span>
+                        {currentEmpresaId === e.id && <Check className="size-4 shrink-0" strokeWidth={2} />}
+                      </button>
+                    ))
                   )}
                 </div>
               </div>

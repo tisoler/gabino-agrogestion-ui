@@ -8,8 +8,22 @@ import Insumos from './pages/Insumos'
 import Labores from './pages/Labores'
 import Costos from './pages/Costos'
 import Cultivos from './pages/Cultivos'
+import Lotes from './pages/Lotes'
+import Productores from './pages/Productores'
+import Campanias from './pages/Campanias'
+import CampaniaDetalle from './pages/CampaniaDetalle'
 
-const Dashboard = () => <div className="premium-card"><h1>🏠 Dashboard</h1><p>Bienvenido a Gabino Agrogestión.</p></div>
+const Dashboard = () => (
+  <div className="space-y-4">
+    <div>
+      <h1 className="text-2xl font-semibold text-foreground tracking-tight">Dashboard</h1>
+      <p className="text-sm text-muted-foreground mt-0.5">Bienvenido a Gabino Agrogestión.</p>
+    </div>
+    <div className="bg-card border border-border rounded-lg p-6">
+      <p className="text-sm text-muted-foreground">Pronto verás aquí los indicadores clave de tu gestión agropecuaria.</p>
+    </div>
+  </div>
+)
 
 
 function App() {
@@ -28,6 +42,11 @@ function App() {
               <Route path="/insumos" element={<Insumos />} />
               <Route path="/costos" element={<Costos />} />
               <Route path="/cultivos" element={<Cultivos />} />
+              <Route path="/lotes" element={<Lotes />} />
+              <Route path="/productores" element={<Productores />} />
+              <Route path="/campanias" element={<Campanias />} />
+              <Route path="/campanias/nueva" element={<CampaniaDetalle />} />
+              <Route path="/campanias/:id" element={<CampaniaDetalle />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
