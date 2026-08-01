@@ -240,6 +240,25 @@ export function fmtMoneda(value: number | null | undefined, decimales = 2): stri
   return '$ ' + fmtNumero(value, decimales)
 }
 
+/**
+ * Redondea un número a 2 decimales (half-up) preservando el signo.
+ */
+export function round2(n: number): number {
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100) / 100
+}
+
+/**
+ * Formato para un input numérico: "0" si el valor es 0, si no
+ * "n.toFixed(2)". Sirve para mostrar valores a 2 decimales sin ceros
+ * innecesarios en el caso 0.
+ */
+export function formatInputNumber(n: number | null | undefined): string {
+  const v = round2(typeof n === 'number' ? n : 0)
+  if (v === 0) return '0'
+  return v.toFixed(2)
+}
+
 export function fmtQQ(value: number | null | undefined, decimales = 2): string {
   return fmtNumero(value, decimales) + ' qq'
 }
