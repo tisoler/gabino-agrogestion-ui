@@ -282,6 +282,7 @@ export default function CampaniaDetalle() {
 
   // Estado del guardado batch
   const [isSaving, setIsSaving] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   // Contador que se incrementa en cada cambio. El useEffect del debounce
@@ -732,6 +733,31 @@ export default function CampaniaDetalle() {
   const saveRef = useRef(save)
   saveRef.current = save
 
+  // Descarga el .xls de la campaña desde el backend.
+  const handleExport = useCallback(async () => {
+    if (!campaniaId || isExporting) return
+    setIsExporting(true)
+    try {
+      const res = await api.get(`/campanias/${campaniaId}/export`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      const header = res.headers?.['content-disposition'] as string | undefined
+      const match = header ? /filename="?([^";]+)"?/.exec(header) : null
+      a.href = url
+      a.download = match?.[1] || `export-campania-${campaniaId}.xls`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error al exportar', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [campaniaId, isExporting])
+
   // Cada vez que hay un cambio, dirtyVersion se incrementa arriba. El
   // useEffect de abajo arma un setTimeout de 3s; si llega otro cambio
   // antes, se cancela y se vuelve a armar. Así el guardado se dispara 3s
@@ -854,11 +880,16 @@ export default function CampaniaDetalle() {
         <div className="flex items-center gap-2 shrink-0">
           {!isNew && (
             <button
-              onClick={() => alert('Exportar XLS — pendiente de implementación')}
-              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              onClick={handleExport}
+              disabled={isExporting}
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Exportar a XLS"
             >
-              <FileDown className="size-4" strokeWidth={1.75} />
+              {isExporting ? (
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <FileDown className="size-4" strokeWidth={1.75} />
+              )}
               <span>Exportar</span>
             </button>
           )}
@@ -1470,24 +1501,34 @@ function FilaRes({
   subtract?: boolean
   positive?: boolean
 }) {
-  const tone = positive
-    ? (lote < 0 ? 'text-destructive' : 'text-success')
+  // Los ítems de costo (subtract) se muestran con signo menos para indicar que
+  // se restan de los ingresos. Todo resultado negativo (en cualquier fila) se
+  // unifica en rojo.
+  const fmt = (v: number) => {
+    if (v < 0) return `−${fmtMoneda(Math.abs(v), 2)}`
+    if (subtract) return `−${fmtMoneda(v, 2)}`
+    return fmtMoneda(v, 2)
+  }
+
+  const negative = ha < 0 || lote < 0
+  const tone = negative
+    ? 'text-destructive'
+    : positive
+    ? 'text-success'
+    : subtract
+    ? 'text-muted-foreground'
     : 'text-foreground'
+
   return (
     <tr className={bold ? 'bg-muted/10' : ''}>
       <td className={`px-4 py-2 ${bold ? 'font-semibold' : 'text-foreground'}`}>
-        <span className="inline-flex items-center gap-2">
-          {label}
-          {subtract && (
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">resta</span>
-          )}
-        </span>
+        {label}
       </td>
       <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-semibold' : ''} ${tone}`}>
-        {fmtMoneda(ha, 2)}
+        {fmt(ha)}
       </td>
       <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-semibold' : ''} ${tone}`}>
-        {fmtMoneda(lote, 2)}
+        {fmt(lote)}
       </td>
     </tr>
   )

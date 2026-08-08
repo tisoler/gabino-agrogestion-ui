@@ -64,7 +64,8 @@ export default function Productores() {
   const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresa, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const canRead = permisos.includes('lectura:productor')
-  const canWrite = permisos.includes('escritura:empresa')
+  // Productor no puede crear empresas ni asociar/desasociar usuarios: sólo es asociado.
+  const canWrite = permisos.includes('escritura:empresa') && !user?.roles?.includes(Roles.PRODUCTOR)
 
   const { data, isLoading, mutate } = useSWR<EmpresaConUsuarios[]>(
     canRead ? '/empresas/with-users' : null,
@@ -180,6 +181,10 @@ export default function Productores() {
   }
 
   const handleRemove = (uid: string, empresaId: number, nombre: string) => {
+    if (!isAdmin && uid === user?.id) {
+      setActionError('No podés desasociarte a vos mismo de una empresa.')
+      return
+    }
     if (typeof window !== 'undefined' && !window.confirm(`¿Desasociar a ${nombre} de esta empresa?`)) {
       return
     }
@@ -218,7 +223,7 @@ export default function Productores() {
     )
     const term = addSearch.trim().toLowerCase()
     return allUsers
-      .filter((u) => u.uid !== user?.id)
+      .filter((u) => isAdmin || u.uid !== user?.id)
       .filter((u) => !inEmpresa.has(u.uid))
       .filter((u) => matchesSearch(u, term))
   }, [allUsers, data, addModalEmpresaId, addSearch, user])
@@ -228,15 +233,18 @@ export default function Productores() {
   const createCandidates = useMemo(() => {
     const term = createSearch.trim().toLowerCase()
     return allUsers
-      .filter((u) => u.uid !== user?.id)
+      .filter((u) => isAdmin || u.uid !== user?.id)
       .filter((u) => matchesSearch(u, term))
-  }, [allUsers, createSearch, user])
+  }, [allUsers, createSearch, user, isAdmin])
 
   const toggleCreateUser = (uid: string) => {
     setCreateSelectedUids((prev) =>
       prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid],
     )
   }
+
+  // Un usuario no-admin no puede desasociarse a sí mismo de una empresa.
+  const canRemoveUser = (uid: string) => canWrite && !(!isAdmin && uid === user?.id)
 
   if (!canRead) {
     return (
@@ -411,7 +419,7 @@ export default function Productores() {
                               key={u.uid}
                               usuario={u}
                               empresaId={empresa.id}
-                              onRemove={canWrite ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -430,7 +438,7 @@ export default function Productores() {
                               key={u.uid}
                               usuario={u}
                               empresaId={empresa.id}
-                              onRemove={canWrite ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -449,7 +457,7 @@ export default function Productores() {
                               key={u.uid}
                               usuario={u}
                               empresaId={empresa.id}
-                              onRemove={canWrite ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}

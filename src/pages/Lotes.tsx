@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import useSWR from 'swr'
 import {
   Plus, Search, Pencil, MapPin, Activity,
-  Lock, AlertCircle, Shield, ToggleLeft, ToggleRight, Loader2, User, X
+  Lock, AlertCircle, Shield, ToggleLeft, ToggleRight, Loader2, User, X, Check, ChevronDown
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,6 +19,7 @@ interface UsuarioBasico {
 interface Lote {
   id: number
   descripcion: string | null
+  campo: string
   idUsuario: string
   idEmpresa: number
   lat: number | null
@@ -30,6 +31,7 @@ interface Lote {
 
 interface LoteFormData {
   descripcion: string
+  campo: string
   idUsuario: string
   lat: string
   long: string
@@ -38,6 +40,7 @@ interface LoteFormData {
 
 const emptyForm: LoteFormData = {
   descripcion: '',
+  campo: '',
   idUsuario: '',
   lat: '',
   long: '',
@@ -56,15 +59,110 @@ function formatCoords(lat: number | null, long: number | null) {
 
 const usuariosFetcher = (url: string) => api.get(url).then((r) => r.data)
 
+function CampoFiltro({
+  value,
+  opciones,
+  onChange,
+}: {
+  value: string[]
+  opciones: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const toggle = (c: string) => {
+    onChange(value.includes(c) ? value.filter((v) => v !== c) : [...value, c])
+  }
+
+  const resumen =
+    value.length === 0 ? 'Todos los campos' : `${value.length} campo${value.length === 1 ? '' : 's'}`
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full sm:w-64 flex items-center justify-between gap-2 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
+      >
+        <span className={`truncate ${value.length ? '' : 'text-muted-foreground'}`}>{resumen}</span>
+        <ChevronDown
+          className={`size-4 text-muted-foreground shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          strokeWidth={1.75}
+        />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full sm:w-64 bg-card border border-border rounded-md shadow-lg overflow-hidden">
+          <div className="max-h-56 overflow-y-auto divide-y divide-border">
+            {opciones.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => toggle(c)}
+                className="cursor-pointer w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
+              >
+                <span
+                  className={`size-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                    value.includes(c)
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'border-border bg-background'
+                  }`}
+                >
+                  {value.includes(c) && <Check className="size-3" strokeWidth={2.5} />}
+                </span>
+                <span className="truncate">{c}</span>
+              </button>
+            ))}
+          </div>
+          {opciones.length === 0 && (
+            <p className="px-3 py-2 text-xs text-muted-foreground">Sin campos cargados.</p>
+          )}
+          {value.length > 0 && (
+            <div className="px-3 py-2 border-t border-border bg-muted/30">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Limpiar filtro
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Lotes() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
+  const [filterCampos, setFilterCampos] = useState<string[]>([])
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingLote, setEditingLote] = useState<Lote | null>(null)
   const [formData, setFormData] = useState<LoteFormData>(emptyForm)
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
 
   const { user, permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -140,14 +238,23 @@ export default function Lotes() {
     }
   }, [isAdmin, isModalOpen, editingLote, empresas, formData.idEmpresa])
 
+  const campos = useMemo(
+    () =>
+      Array.from(new Set(lotes.map((l) => l.campo).filter((c) => c && c.trim())))
+        .sort((a, b) => a.localeCompare(b, 'es')),
+    [lotes]
+  )
+
   const filteredLotes = useMemo(() => {
     return lotes
       ?.filter((l) => {
+        if (filterCampos.length > 0 && !filterCampos.includes(l.campo)) return false
         const term = searchTerm.toLowerCase()
         if (!term) return true
         const dueno = findUsuario(l.idUsuario, l.idEmpresa)
         return (
           (l.descripcion?.toLowerCase() || '').includes(term) ||
+          (l.campo?.toLowerCase() || '').includes(term) ||
           (dueno?.nombreUsuario?.toLowerCase() || '').includes(term) ||
           (dueno?.email?.toLowerCase() || '').includes(term) ||
           l.idUsuario.toLowerCase().includes(term)
@@ -158,7 +265,7 @@ export default function Lotes() {
         if (a.idEmpresa !== b.idEmpresa) return a.idEmpresa - b.idEmpresa
         return (a.descripcion || '').localeCompare(b.descripcion || '')
       })
-  }, [lotes, searchTerm, findUsuario])
+  }, [lotes, searchTerm, findUsuario, filterCampos])
 
   const openCreate = () => {
     setEditingLote(null)
@@ -173,6 +280,7 @@ export default function Lotes() {
     setEditingLote(lote)
     setFormData({
       descripcion: lote.descripcion || '',
+      campo: lote.campo || '',
       idUsuario: lote.idUsuario,
       lat: lote.lat?.toString() ?? '',
       long: lote.long?.toString() ?? '',
@@ -189,8 +297,11 @@ export default function Lotes() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    setSaving(true)
     const payload: any = {
       descripcion: formData.descripcion || null,
+      campo: formData.campo.trim(),
       idUsuario: formData.idUsuario,
       lat: formData.lat === '' ? null : Number(formData.lat),
       long: formData.long === '' ? null : Number(formData.long),
@@ -208,6 +319,8 @@ export default function Lotes() {
       mutate()
     } catch (err) {
       console.error('Error al guardar lote', err)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -265,7 +378,7 @@ export default function Lotes() {
         {canWrite && (
           <button
             onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
           >
             <Plus className="size-4" strokeWidth={2} />
             <span>Nuevo Lote</span>
@@ -291,7 +404,7 @@ export default function Lotes() {
               aria-label="Filtrar por empresa"
               value={filterEmpresaId ?? 'all'}
               onChange={(e) => setFilterEmpresaId(e.target.value === 'all' ? null : Number(e.target.value))}
-              className="sm:w-64 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="sm:w-64 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
             >
               <option value="all">
                 {isAdmin
@@ -305,10 +418,22 @@ export default function Lotes() {
               ))}
             </select>
           )}
+          {campos.length > 0 && (
+            <CampoFiltro
+              value={filterCampos}
+              opciones={campos}
+              onChange={setFilterCampos}
+            />
+          )}
         </div>
         {filterEmpresaLabel && (
           <p className="text-[11px] text-muted-foreground mt-2 px-1">
             Filtrando por <span className="font-medium text-foreground">{filterEmpresaLabel}</span>
+          </p>
+        )}
+        {filterCampos.length > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-1 px-1">
+            Campos: <span className="font-medium text-foreground">{filterCampos.join(', ')}</span>
           </p>
         )}
       </div>
@@ -352,13 +477,16 @@ export default function Lotes() {
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
                         {formatCoords(lote.lat, lote.long)}
                       </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Campo: <span className="text-foreground font-medium">{lote.campo || '—'}</span>
+                      </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {editable ? (
                         <>
                           <button
                             onClick={() => openEdit(lote)}
-                            className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                            className="cursor-pointer p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
                             disabled={updatingIds.has(lote.id)}
                             aria-label="Editar"
                           >
@@ -366,7 +494,7 @@ export default function Lotes() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(lote)}
-                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
+                            className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${
                               lote.activo
                                 ? 'text-success hover:bg-success-soft'
                                 : 'text-muted-foreground hover:bg-muted'
@@ -413,6 +541,9 @@ export default function Lotes() {
                       Descripción
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Campo
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Dueño
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -441,6 +572,11 @@ export default function Lotes() {
                         <td className="px-4 py-3">
                           <span className={`font-medium ${lote.activo ? 'text-foreground' : 'text-muted-foreground'}`}>
                             {lote.descripcion || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                            {lote.campo || '—'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -481,7 +617,7 @@ export default function Lotes() {
                               <>
                                 <button
                                   onClick={() => openEdit(lote)}
-                                  className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                                  className="cursor-pointer p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
                                   title="Editar"
                                   aria-label="Editar"
                                 >
@@ -489,7 +625,7 @@ export default function Lotes() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(lote)}
-                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
+                                  className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${
                                     lote.activo
                                       ? 'text-success hover:bg-success-soft'
                                       : 'text-muted-foreground hover:bg-muted'
@@ -527,7 +663,7 @@ export default function Lotes() {
               <div className="p-12 text-center">
                 <MapPin className="size-10 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1.5} />
                 <p className="text-sm text-muted-foreground">
-                  {searchTerm || filterEmpresaId
+                  {searchTerm || filterEmpresaId || filterCampos.length > 0
                     ? 'No se encontraron lotes con esos criterios.'
                     : 'Aún no hay lotes cargados.'}
                 </p>
@@ -551,7 +687,7 @@ export default function Lotes() {
               </h2>
               <button
                 onClick={closeModal}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="cursor-pointer p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -574,7 +710,7 @@ export default function Lotes() {
                         idUsuario: '',
                       })
                     }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
                     disabled={!!editingLote}
                   >
                     {editingLote && formData.idEmpresa && (
@@ -606,7 +742,7 @@ export default function Lotes() {
                         idUsuario: '',
                       })
                     }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
                     required
                   >
                     <option value="">Seleccionar empresa</option>
@@ -627,7 +763,7 @@ export default function Lotes() {
                   onChange={(e) => setFormData({ ...formData, idUsuario: e.target.value })}
                   required
                   disabled={loadingUsuarios || !!usuariosError}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-60"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer disabled:opacity-60"
                 >
                   <option value="" disabled>
                     {loadingUsuarios
@@ -654,6 +790,22 @@ export default function Lotes() {
                     No hay usuarios con rol <em>asesor</em> o <em>productor</em> asignados a esta empresa. La asignación se gestiona desde el sistema de identidad (Firestore).
                   </p>
                 ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lote-campo" className="text-xs font-medium text-foreground">
+                  Campo <span className="text-destructive">*</span>
+                </label>
+                <input
+                  id="lote-campo"
+                  type="text"
+                  value={formData.campo}
+                  onChange={(e) => setFormData({ ...formData, campo: e.target.value })}
+                  placeholder="Ej: El Este, Jácurame, Lote 5"
+                  required
+                  maxLength={200}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -710,16 +862,24 @@ export default function Lotes() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!formData.idUsuario}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center gap-2"
+                  disabled={!formData.idUsuario || !formData.campo.trim() || saving}
                 >
-                  {editingLote ? 'Guardar cambios' : 'Crear Lote'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {editingLote ? 'Guardando…' : 'Creando…'}
+                    </>
+                  ) : (
+                    editingLote ? 'Guardar cambios' : 'Crear Lote'
+                  )}
                 </button>
               </div>
             </form>

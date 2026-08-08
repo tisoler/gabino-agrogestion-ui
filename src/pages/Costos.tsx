@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import useSWR from 'swr'
 import {
-  Plus, Search, Filter, Pencil, DollarSign, Activity,
-  Lock, AlertCircle, Globe, ChevronDown, Check, X, Shield, ToggleLeft, ToggleRight, Loader2, Package
+  Plus, Search, Pencil, DollarSign, Activity,
+  Lock, AlertCircle, Globe, X, Shield, ToggleLeft, ToggleRight, Loader2, Package
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -21,11 +21,7 @@ interface Costo {
 export default function Costos() {
   const [searchTerm, setSearchTerm] = useState('')
 
-  const [showAll, setShowAll] = useState(false)
-  const [selectedCompanies, setSelectedCompanies] = useState<number[]>([])
-  const [isFilterOpen, setIsFilterOpen] = useState(false)
-
-  // Alcance para asesor / productor: total / global / por empresa
+  // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
   const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
 
@@ -45,21 +41,18 @@ export default function Costos() {
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0)
+  // Empresas visibles en el alcance "Por empresa": admins ven todas, el resto solo sus asociadas
+  const scopeEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const canWrite = permisos.includes('escritura:costo')
   const canRead = permisos.includes('lectura:costo')
 
-  const costosFetcher = async ([url, all, third, fourth]: [string, boolean, string | number | boolean, string | number]) => {
+  const costosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
     const params: any = {}
-    if (isAdmin) {
-      if (all) params.all = true
-      if (typeof third === 'string' && third) params.companyIds = third
-    } else if (fourth === 'global') {
+    if (scopeSel === 'global') {
       params.scope = 'global'
-    } else if (fourth === 'empresa' && third) {
+    } else if (scopeSel === 'empresa' && empresaId) {
       params.scope = 'empresa'
-      params.currentEmpresaId = Number(third)
-    } else {
-      params.all = true
+      params.currentEmpresaId = Number(empresaId)
     }
 
     const res = await api.get(url, { params })
@@ -67,9 +60,7 @@ export default function Costos() {
   }
 
   const swrCostosKey = canRead
-    ? isAdmin
-      ? ['costos', showAll, selectedCompanies.join(','), '']
-      : ['costos', false, scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+    ? ['costos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
     : null
 
   const { data: costos = [], isLoading, mutate } = useSWR<Costo[]>(
@@ -155,12 +146,6 @@ export default function Costos() {
     }
   }
 
-  const toggleCompanySelection = (id: number) => {
-    setSelectedCompanies(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    )
-  }
-
   const isEditable = (costo: Costo) => {
     if (!canWrite) return false
     if (isAdmin) return true
@@ -204,169 +189,49 @@ export default function Costos() {
         )}
       </div>
 
-      {isAdmin ? (
-        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <span
-                role="switch"
-                aria-checked={showAll}
-                onClick={() => setShowAll(!showAll)}
-                onKeyDown={(e) => {
-                  if (e.key === ' ' || e.key === 'Enter') {
-                    e.preventDefault()
-                    setShowAll(!showAll)
-                  }
-                }}
-                tabIndex={0}
-                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${
-                  showAll ? 'bg-primary' : 'bg-muted-foreground/30'
+      <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alcance</span>
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
+            {([
+              ['todas', 'Todas'],
+              ['global', 'Global'],
+              ['empresa', 'Por empresa'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setScope(key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                  scope === key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-accent text-foreground hover:bg-muted'
                 }`}
               >
-                <span
-                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${
-                    showAll ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-              <span className="text-sm text-foreground">Ver todos los costos (incluyendo empresas)</span>
-            </label>
-
-            {showAll && (
-              <div className="relative">
-                <button
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent border border-border rounded-md text-xs font-medium text-foreground hover:bg-muted transition-colors"
-                  aria-haspopup="menu"
-                  aria-expanded={isFilterOpen}
-                >
-                  <Filter className="size-3.5" strokeWidth={2} />
-                  <span>Filtrar por empresa ({selectedCompanies.length})</span>
-                  <ChevronDown
-                    className={`size-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}
-                    strokeWidth={2}
-                  />
-                </button>
-
-                {isFilterOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-30"
-                      onClick={() => setIsFilterOpen(false)}
-                      aria-hidden
-                    />
-                    <div
-                      role="menu"
-                      className="absolute right-0 mt-1.5 w-64 bg-popover border border-border rounded-md shadow-lg overflow-hidden z-40"
-                    >
-                      <div className="px-3 py-2 border-b border-border bg-accent/40 flex justify-between items-center">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Empresas
-                        </span>
-                        {selectedCompanies.length > 0 && (
-                          <button
-                            onClick={() => setSelectedCompanies([])}
-                            className="text-[10px] font-medium text-primary hover:underline"
-                          >
-                            Limpiar
-                          </button>
-                        )}
-                      </div>
-                      <div className="max-h-60 overflow-y-auto p-1">
-                        {empresas?.map((e) => (
-                          <button
-                            type="button"
-                            key={e.id}
-                            onClick={() => toggleCompanySelection(e.id)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${
-                              selectedCompanies.includes(e.id)
-                                ? 'bg-primary-soft text-primary font-medium'
-                                : 'text-foreground hover:bg-accent'
-                            }`}
-                          >
-                            <span className="truncate">{e.nombre}</span>
-                            {selectedCompanies.includes(e.id) && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                {label}
+              </button>
+            ))}
           </div>
-
-          {selectedCompanies?.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border">
-              {selectedCompanies?.map((id) => {
-                const emp = empresas?.find((e) => e.id === id)
-                return (
-                  <span
-                    key={id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground"
-                  >
-                    {emp?.nombre}
-                    <button
-                      type="button"
-                      onClick={() => toggleCompanySelection(id)}
-                      className="ml-0.5 hover:text-destructive"
-                      aria-label={`Quitar ${emp?.nombre}`}
-                    >
-                      <X className="size-3" strokeWidth={2} />
-                    </button>
-                  </span>
-                )
-              })}
-            </div>
+          {scope === 'empresa' && scopeEmpresas.length > 0 && (
+            <select
+              aria-label="Empresa"
+              value={scopeEmpresaId ?? ''}
+              onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+              className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              <option value="">Seleccionar empresa</option>
+              {scopeEmpresas.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          )}
+          {scope === 'empresa' && !scopeEmpresaId && (
+            <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus costos.</span>
           )}
         </div>
-
-      ) : (
-        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alcance</span>
-            <div className="flex items-center rounded-md border border-border overflow-hidden">
-              {([
-                ['todas', 'Todas'],
-                ['global', 'Global'],
-                ['empresa', 'Por empresa'],
-              ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setScope(key)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    scope === key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-accent text-foreground hover:bg-muted'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {scope === 'empresa' && userEmpresas.length > 0 && (
-              <select
-                value={scopeEmpresaId ?? ''}
-                onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-                className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Seleccionar empresa</option>
-                {empresas
-                  .filter((e) => userEmpresas.includes(e.id))
-                  .map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nombre}
-                    </option>
-                  ))}
-              </select>
-            )}
-            {scope === 'empresa' && !scopeEmpresaId && (
-              <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus costos.</span>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className="bg-card/60 border border-border rounded-lg p-3">
         <div className="relative group">
