@@ -12,6 +12,9 @@ import Lotes from './pages/Lotes'
 import Productores from './pages/Productores'
 import Campanias from './pages/Campanias'
 import CampaniaDetalle from './pages/CampaniaDetalle'
+import Prescripciones from './pages/Prescripciones'
+import PrescripcionNueva from './pages/PrescripcionNueva'
+import PrescripcionDetalle from './pages/PrescripcionDetalle'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -47,6 +50,9 @@ function App() {
               <Route path="/campanias" element={<Campanias />} />
               <Route path="/campanias/nueva" element={<CampaniaDetalle />} />
               <Route path="/campanias/:id" element={<CampaniaDetalle />} />
+              <Route path="/prescripciones" element={<Prescripciones />} />
+              <Route path="/prescripciones/nueva" element={<PrescripcionNueva />} />
+              <Route path="/prescripciones/:id" element={<PrescripcionDetalle />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

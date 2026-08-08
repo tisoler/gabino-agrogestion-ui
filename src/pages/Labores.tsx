@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import useSWR from 'swr'
 import {
-  Plus, Search, Filter, Pencil, Activity,
+  Plus, Search, Filter, Pencil, Activity, Pickaxe,
   Lock, AlertCircle, Globe, ChevronDown, Check, X, Shield, ToggleLeft, ToggleRight, Loader2, Package
 } from 'lucide-react'
 import api from '../lib/api'
@@ -12,6 +12,7 @@ interface Labor {
   nombre: string
   descripcion: string | null
   idEmpresa: number | null
+  precioUnitario?: number | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
@@ -24,6 +25,10 @@ export default function Labores() {
   const [selectedCompanies, setSelectedCompanies] = useState<number[]>([])
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
+  // Alcance para asesor / productor: todas | global | por empresa
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingLabor, setEditingLabor] = useState<Labor | null>(null)
   const [formData, setFormData] = useState({
@@ -31,28 +36,45 @@ export default function Labores() {
     descripcion: '',
     idEmpresa: null as number | null
   })
+  const [precioUnitario, setPrecioUnitario] = useState('')
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
 
-  const { permisos, isSysAdmin, isAsesor, empresas, currentEmpresaId } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
+  const userEmpresas = (user?.idEmpresas || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
   const canWrite = permisos.includes('escritura:labor')
   const canRead = permisos.includes('lectura:labor')
 
-  const laboresFetcher = async ([url, currentEmpresaId, all, companyIds]: [string, number | null, boolean, string]) => {
+  const laboresFetcher = async ([url, all, third, fourth]: [string, boolean, string | number | boolean, string | number]) => {
     const params: any = {}
-    if (isSysAdmin) {
+    if (isAdmin) {
       if (all) params.all = true
-      if (companyIds) params.companyIds = companyIds
+      if (typeof third === 'string' && third) params.companyIds = third
+    } else if (fourth === 'global') {
+      params.scope = 'global'
+    } else if (fourth === 'empresa' && third) {
+      params.scope = 'empresa'
+      params.currentEmpresaId = Number(third)
+    } else {
+      params.all = true
     }
-    if (currentEmpresaId) params.currentEmpresaId = currentEmpresaId
 
     const res = await api.get(url, { params })
     return res.data
   }
 
+  const swrLaboresKey = canRead
+    ? isAdmin
+      ? ['labores', showAll, selectedCompanies.join(','), '']
+      : ['labores', false, scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+    : null
+
   const { data: labores = [], isLoading, mutate } = useSWR<Labor[]>(
-    canRead ? ['labores', currentEmpresaId, showAll, selectedCompanies.join(',')] : null,
-    laboresFetcher,
+    swrLaboresKey,
+    laboresFetcher as any,
     {
       revalidateOnFocus: true,
       revalidateOnMount: true,
@@ -85,24 +107,30 @@ export default function Labores() {
         descripcion: labor.descripcion || '',
         idEmpresa: labor.idEmpresa
       })
+      setPrecioUnitario(labor.precioUnitario != null ? String(labor.precioUnitario) : '')
     } else {
       setEditingLabor(null)
       setFormData({
         nombre: '',
         descripcion: '',
-        idEmpresa: isSysAdmin ? null : (currentEmpresaId || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
       })
+      setPrecioUnitario('')
     }
     setIsModalOpen(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      ...formData,
+      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
+    }
     try {
       if (editingLabor) {
-        await api.patch(`/labores/${editingLabor.id}`, formData)
+        await api.patch(`/labores/${editingLabor.id}`, payload)
       } else {
-        await api.post('/labores', formData)
+        await api.post('/labores', payload)
       }
       setIsModalOpen(false)
       mutate()
@@ -135,7 +163,7 @@ export default function Labores() {
 
   const isEditable = (labor: Labor) => {
     if (!canWrite) return false
-    if (isSysAdmin) return true
+    if (isAdmin) return true
     return labor.idEmpresa !== null
   }
 
@@ -156,10 +184,10 @@ export default function Labores() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Labores</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
@@ -178,7 +206,7 @@ export default function Labores() {
       </div>
 
       {/* Admin Controls */}
-      {isSysAdmin && (
+      {isAdmin ? (
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -193,14 +221,12 @@ export default function Labores() {
                   }
                 }}
                 tabIndex={0}
-                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${
-                  showAll ? 'bg-primary' : 'bg-muted-foreground/30'
-                }`}
+                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${showAll ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
               >
                 <span
-                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${
-                    showAll ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
+                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${showAll ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
                 />
               </span>
               <span className="text-sm text-foreground">Ver todas las labores (incluyendo empresas)</span>
@@ -252,11 +278,10 @@ export default function Labores() {
                             type="button"
                             key={e.id}
                             onClick={() => toggleCompanySelection(e.id)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${
-                              selectedCompanies.includes(e.id)
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${selectedCompanies.includes(e.id)
                                 ? 'bg-primary-soft text-primary font-medium'
                                 : 'text-foreground hover:bg-accent'
-                            }`}
+                              }`}
                           >
                             <span className="truncate">{e.nombre}</span>
                             {selectedCompanies.includes(e.id) && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
@@ -294,6 +319,50 @@ export default function Labores() {
             </div>
           )}
         </div>
+      ) : (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alcance</span>
+            <div className="flex items-center rounded-md border border-border overflow-hidden">
+              {([
+                ['todas', 'Todas'],
+                ['global', 'Global'],
+                ['empresa', 'Por empresa'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setScope(key)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${scope === key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-accent text-foreground hover:bg-muted'
+                    }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {scope === 'empresa' && userEmpresas.length > 0 && (
+              <select
+                value={scopeEmpresaId ?? ''}
+                onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Seleccionar empresa</option>
+                {empresas
+                  .filter((e) => userEmpresas.includes(e.id))
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nombre}
+                    </option>
+                  ))}
+              </select>
+            )}
+            {scope === 'empresa' && !scopeEmpresaId && (
+              <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus labores.</span>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Search */}
@@ -325,9 +394,8 @@ export default function Labores() {
               return (
                 <div
                   key={labor.id}
-                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${
-                    !labor.activo ? 'opacity-60' : ''
-                  }`}
+                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${!labor.activo ? 'opacity-60' : ''
+                    }`}
                 >
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
@@ -347,6 +415,11 @@ export default function Labores() {
                       {labor.descripcion && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{labor.descripcion}</p>
                       )}
+                      {labor.precioUnitario != null && (
+                        <p className="text-sm font-medium text-success mt-0.5">
+                          ${Number(labor.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {editable ? (
@@ -361,11 +434,10 @@ export default function Labores() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(labor)}
-                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                              labor.activo
+                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${labor.activo
                                 ? 'text-success hover:bg-success-soft'
                                 : 'text-muted-foreground hover:bg-muted'
-                            }`}
+                              }`}
                             title={labor.activo ? 'Desactivar' : 'Activar'}
                             disabled={updatingIds.has(labor.id)}
                             aria-label={labor.activo ? 'Desactivar' : 'Activar'}
@@ -390,7 +462,7 @@ export default function Labores() {
                     </div>
                   </div>
 
-                  {(isSysAdmin || isAsesor) && labor.idEmpresa !== null && (
+                  {(isAdmin || isAsesor) && labor.idEmpresa !== null && (
                     <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                       <Package className="size-3" strokeWidth={1.75} />
                       <span>Empresa: {empresas.find((e) => e.id === labor.idEmpresa)?.nombre || `ID: ${labor.idEmpresa}`}</span>
@@ -412,6 +484,9 @@ export default function Labores() {
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Descripción
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
+                      Precio unitario
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
@@ -441,6 +516,11 @@ export default function Labores() {
                           <span className="text-sm text-muted-foreground line-clamp-1">{labor.descripcion || '—'}</span>
                         </td>
                         <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground">
+                            {labor.precioUnitario != null ? `$${Number(labor.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
                           {labor.idEmpresa === null ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Globe className="size-3" strokeWidth={2} />
@@ -449,7 +529,7 @@ export default function Labores() {
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Package className="size-3" strokeWidth={2} />
-                              {isSysAdmin || isAsesor
+                              {isAdmin || isAsesor
                                 ? `${empresas.find((e) => e.id === labor.idEmpresa)?.nombre || 'Empresa'} · ${labor.idEmpresa}`
                                 : 'Mi Empresa'}
                             </span>
@@ -457,11 +537,10 @@ export default function Labores() {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
-                              labor.activo
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${labor.activo
                                 ? 'bg-success-soft text-success'
                                 : 'bg-destructive-soft text-destructive'
-                            }`}
+                              }`}
                           >
                             {labor.activo ? 'Activo' : 'Inactivo'}
                           </span>
@@ -480,11 +559,10 @@ export default function Labores() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(labor)}
-                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                                    labor.activo
+                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${labor.activo
                                       ? 'text-success hover:bg-success-soft'
                                       : 'text-muted-foreground hover:bg-muted'
-                                  }`}
+                                    }`}
                                   title={labor.activo ? 'Desactivar' : 'Activar'}
                                   disabled={updatingIds.has(labor.id)}
                                   aria-label={labor.activo ? 'Desactivar' : 'Activar'}
@@ -516,7 +594,7 @@ export default function Labores() {
             </div>
             {filteredLabores?.length === 0 && (
               <div className="p-12 text-center">
-                <Activity className="size-10 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1.5} />
+                <Pickaxe className="size-10 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1.5} />
                 <p className="text-sm text-muted-foreground">No se encontraron labores.</p>
               </div>
             )}
@@ -577,7 +655,23 @@ export default function Labores() {
                 />
               </div>
 
-              {isSysAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="labor-precio" className="text-xs font-medium text-foreground">
+                  Precio unitario (referencia)
+                </label>
+                <input
+                  id="labor-precio"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={precioUnitario}
+                  onChange={(e) => setPrecioUnitario(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+              </div>
+
+              {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
                     Empresa destino
@@ -598,6 +692,29 @@ export default function Labores() {
                   <p className="text-[11px] text-muted-foreground">
                     Solo como sys-admin puedes crear labores globales o asignarlas a otras empresas.
                   </p>
+                </div>
+              )}
+              {!isAdmin && !editingLabor && userEmpresas.length > 1 && (
+                <div className="space-y-1.5">
+                  <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
+                    Empresa destino
+                  </label>
+                  <select
+                    id="labor-empresa"
+                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    onChange={(e) =>
+                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    required
+                  >
+                    <option value="">Seleccionar empresa</option>
+                    {empresas
+                      .filter((e) => userEmpresas.includes(e.id))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                      ))}
+                  </select>
                 </div>
               )}
 

@@ -33,6 +33,7 @@ interface AuthContextType {
   currentEmpresa: string | null
   isSysAdmin: boolean
   isAsesor: boolean
+  isAsesorAdmin: boolean
   isProductor: boolean
   empresas: Empresa[]
   isLoadingEmpresas: boolean
@@ -63,9 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isSysAdmin = user?.roles?.includes(Roles.SYS_ADMIN) || false
   const isAsesor = user?.roles?.includes(Roles.ASESOR) || false
+  const isAsesorAdmin = user?.roles?.includes(Roles.ASESOR_ADMIN) || false
   const isProductor = user?.roles?.includes(Roles.PRODUCTOR) || false
+  const isAdmin = isSysAdmin || isAsesorAdmin
 
-  // Empresas visibles para el usuario (sys-admin: todas; resto: sus idEmpresas)
+  // Empresas visibles para el usuario (sys-admin y asesor-admin: todas;
+  // resto: sus idEmpresas)
   const { data: listadoEmpresas, isLoading: isLoadingEmpresas } = useSWR<Empresa[]>(
     user ? '/empresas' : null,
     fetcher
@@ -73,11 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const empresasVisibles = useMemo<number[]>(() => {
     if (!user) return []
-    if (isSysAdmin) {
+    if (isAdmin) {
       return (listadoEmpresas || []).map((e) => e.id)
     }
     return (user.idEmpresas || []).map((e) => Number(e)).filter((n) => Number.isFinite(n) && n > 0)
-  }, [user, isSysAdmin, listadoEmpresas])
+  }, [user, isAdmin, listadoEmpresas])
 
   // Sincroniza currentEmpresaId con la lista de empresas válidas del usuario.
   // - Si no hay ninguna en localStorage, toma la primera de idEmpresas (asesor/productor) o null (sys-admin).
@@ -88,8 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    if (isSysAdmin) {
-      // sys-admin no usa empresa actual: la UI trabaja con la admin-toggle.
+    if (isAdmin) {
+      // sys-admin y asesor-admin no usan empresa actual: la UI trabaja con la admin-toggle.
       setCurrentEmpresaIdState(null)
       try {
         window.localStorage.removeItem(STORAGE_KEY)
@@ -117,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setCurrentEmpresaIdState(visibles[0])
     }
-  }, [user, isSysAdmin, empresasVisibles])
+  }, [user, isAdmin, empresasVisibles])
 
   const currentEmpresa = useMemo(() => {
     if (currentEmpresaId && listadoEmpresas) {
@@ -218,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentEmpresa,
         isSysAdmin,
         isAsesor,
+        isAsesorAdmin,
         isProductor,
         empresas: listadoEmpresas || [],
         isLoadingEmpresas,

@@ -20,6 +20,7 @@ interface Cultivo {
   id: number
   nombre: string
   descripcion: string | null
+  tipoCosecha: 'fina' | 'gruesa' | null
   idEmpresa: number | null
   activo: boolean
   variedades: Variedad[]
@@ -33,11 +34,16 @@ export default function Cultivos() {
   const [selectedCompanies, setSelectedCompanies] = useState<number[]>([])
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
+  // Alcance para asesor / productor: todas | global | por empresa
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCultivo, setEditingCultivo] = useState<Cultivo | null>(null)
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
+    tipoCosecha: '' as '' | 'fina' | 'gruesa',
     idEmpresa: null as number | null
   })
 
@@ -50,25 +56,41 @@ export default function Cultivos() {
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
 
-  const { permisos, isSysAdmin, isAsesor, empresas, currentEmpresaId } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
+  const userEmpresas = (user?.idEmpresas || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
   const canWrite = permisos.includes('escritura:cultivo')
   const canRead = permisos.includes('lectura:cultivo')
 
-  const cultivosFetcher = async ([url, currentEmpresaId, all, companyIds]: [string, number | null, boolean, string]) => {
+  const cultivosFetcher = async ([url, all, third, fourth]: [string, boolean, string | number | boolean, string | number]) => {
     const params: any = {}
-    if (isSysAdmin) {
+    if (isAdmin) {
       if (all) params.all = true
-      if (companyIds) params.companyIds = companyIds
+      if (typeof third === 'string' && third) params.companyIds = third
+    } else if (fourth === 'global') {
+      params.scope = 'global'
+    } else if (fourth === 'empresa' && third) {
+      params.scope = 'empresa'
+      params.currentEmpresaId = Number(third)
+    } else {
+      params.all = true
     }
-    if (currentEmpresaId) params.currentEmpresaId = currentEmpresaId
 
     const res = await api.get(url, { params })
     return res.data
   }
 
+  const swrCultivosKey = canRead
+    ? isAdmin
+      ? ['cultivos', showAll, selectedCompanies.join(','), '']
+      : ['cultivos', false, scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+    : null
+
   const { data: cultivos = [], isLoading, mutate } = useSWR<Cultivo[]>(
-    canRead ? ['cultivos', currentEmpresaId, showAll, selectedCompanies.join(',')] : null,
-    cultivosFetcher,
+    swrCultivosKey,
+    cultivosFetcher as any,
     { revalidateOnFocus: true }
   )
 
@@ -95,6 +117,7 @@ export default function Cultivos() {
       setFormData({
         nombre: cultivo.nombre,
         descripcion: cultivo.descripcion || '',
+        tipoCosecha: cultivo.tipoCosecha || '',
         idEmpresa: cultivo.idEmpresa
       })
     } else {
@@ -102,7 +125,8 @@ export default function Cultivos() {
       setFormData({
         nombre: '',
         descripcion: '',
-        idEmpresa: isSysAdmin ? null : (currentEmpresaId || null)
+        tipoCosecha: '',
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
       })
     }
     setIsModalOpen(true)
@@ -111,10 +135,14 @@ export default function Cultivos() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const payload = {
+        ...formData,
+        tipoCosecha: formData.tipoCosecha || null
+      }
       if (editingCultivo) {
-        await api.patch(`/cultivos/${editingCultivo.id}`, formData)
+        await api.patch(`/cultivos/${editingCultivo.id}`, payload)
       } else {
-        await api.post('/cultivos', formData)
+        await api.post('/cultivos', payload)
       }
       setIsModalOpen(false)
       mutate()
@@ -177,7 +205,7 @@ export default function Cultivos() {
 
   const isEditable = (item: { idEmpresa: number | null }) => {
     if (!canWrite) return false
-    if (isSysAdmin) return true
+    if (isAdmin) return true
     return item.idEmpresa !== null
   }
 
@@ -203,10 +231,10 @@ export default function Cultivos() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cultivos</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
@@ -224,7 +252,7 @@ export default function Cultivos() {
         )}
       </div>
 
-      {isSysAdmin && (
+{isAdmin && (
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -318,6 +346,53 @@ export default function Cultivos() {
         </div>
       )}
 
+      {!isAdmin && (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alcance</span>
+            <div className="flex items-center rounded-md border border-border overflow-hidden">
+              {([
+                ['todas', 'Todas'],
+                ['global', 'Global'],
+                ['empresa', 'Por empresa'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setScope(key)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    scope === key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {scope === 'empresa' && userEmpresas.length > 0 && (
+              <select
+                value={scopeEmpresaId ?? ''}
+                onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Seleccionar empresa</option>
+                {empresas
+                  .filter((e) => userEmpresas.includes(e.id))
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nombre}
+                    </option>
+                  ))}
+              </select>
+            )}
+            {scope === 'empresa' && !scopeEmpresaId && (
+              <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus cultivos.</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-card/60 border border-border rounded-lg p-3">
         <div className="relative group">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
@@ -345,6 +420,9 @@ export default function Cultivos() {
                   <th className="px-3 py-3 w-10" aria-label="Expandir" />
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Nombre
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tipo Cosecha
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Variedades
@@ -383,6 +461,19 @@ export default function Cultivos() {
                       </td>
                       <td className="px-4 py-3 font-medium text-foreground">{cultivo.nombre}</td>
                       <td className="px-4 py-3">
+                        {cultivo.tipoCosecha ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
+                            cultivo.tipoCosecha === 'fina'
+                              ? 'bg-info-soft text-info'
+                              : 'bg-warning-soft text-warning-foreground'
+                          }`}>
+                            {cultivo.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
                           {cultivo.variedades.length} {cultivo.variedades.length === 1 ? 'variedad' : 'variedades'}
                         </span>
@@ -396,7 +487,7 @@ export default function Cultivos() {
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                             <Sprout className="size-3" strokeWidth={2} />
-                            {isSysAdmin || isAsesor
+                            {isAdmin || isAsesor
                               ? `${empresas.find((e) => e.id === cultivo.idEmpresa)?.nombre || 'Empresa'} · ${cultivo.idEmpresa}`
                               : 'Mi Empresa'}
                           </span>
@@ -462,7 +553,7 @@ export default function Cultivos() {
                     </tr>
                     {expandedCrops.has(cultivo.id) && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 bg-muted/30">
+                        <td colSpan={7} className="px-6 py-4 bg-muted/30">
                           <div className="space-y-2 border-l-2 border-primary/30 pl-4 py-1">
                             <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               Variedades de {cultivo.nombre}
@@ -575,7 +666,22 @@ export default function Cultivos() {
                   className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors resize-none"
                 />
               </div>
-              {isSysAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="cultivo-tipo-cosecha" className="text-xs font-medium text-foreground">Tipo de cosecha</label>
+                <select
+                  id="cultivo-tipo-cosecha"
+                  value={formData.tipoCosecha}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tipoCosecha: e.target.value as '' | 'fina' | 'gruesa' })
+                  }
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                >
+                  <option value="">Sin especificar</option>
+                  <option value="fina">Fina</option>
+                  <option value="gruesa">Gruesa</option>
+                </select>
+              </div>
+              {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Empresa destino</label>
                   <select
@@ -588,6 +694,25 @@ export default function Cultivos() {
                   >
                     <option value="">Global (todas las empresas)</option>
                     {empresas?.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                </div>
+              )}
+              {!isAdmin && !editingCultivo && userEmpresas.length > 1 && (
+                <div className="space-y-1.5">
+                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Empresa destino</label>
+                  <select
+                    id="cultivo-empresa"
+                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    onChange={(e) =>
+                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    required
+                  >
+                    <option value="">Seleccionar empresa</option>
+                    {empresas
+                      .filter((e) => userEmpresas.includes(e.id))
+                      .map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                   </select>
                 </div>
               )}

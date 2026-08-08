@@ -66,16 +66,19 @@ export default function Lotes() {
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
 
-  const { user, permisos, isSysAdmin, empresas, currentEmpresaId } = useAuth()
+  const { user, permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:lote')
   const canRead = permisos.includes('lectura:lote')
+  const userEmpresas = (user?.idEmpresas || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
+  const listEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
 
   // Empresa objetivo del modal (independiente del filtro de la tabla):
-  // - sys-admin: la del formData (o la primera disponible)
-  // - asesor / productor: la currentEmpresaId
-  const modalEmpresaId = isSysAdmin
-    ? (formData.idEmpresa ?? (currentEmpresaId || empresas[0]?.id || null))
-    : (currentEmpresaId || null)
+  // - admins: la del formData (o la primera disponible)
+  // - asesor / productor: la del formData (o la currentEmpresaId)
+  const modalEmpresaId = (formData.idEmpresa ?? currentEmpresaId ?? (isAdmin ? empresas[0]?.id || null : null))
 
   // Usuarios (dueños) según la empresa objetivo
   const {
@@ -97,8 +100,12 @@ export default function Lotes() {
     return res.data
   }
 
+  // Para cualquier usuario, la empresa filtrada es la del selector de la tabla
+  // (null = todas / todas sus empresas).
+  const effectiveEmpresaId = filterEmpresaId
+
   const { data: lotes = [], isLoading, mutate } = useSWR<Lote[]>(
-    canRead ? ['lotes', filterEmpresaId] : null,
+    canRead ? ['lotes', effectiveEmpresaId] : null,
     lotesFetcher,
     {
       revalidateOnFocus: true,
@@ -126,12 +133,12 @@ export default function Lotes() {
     [usuariosPorEmpresa]
   )
 
-  // Al crear como sys-admin: si no hay idEmpresa seleccionado, usar el primero
+  // Al crear como admin: si no hay idEmpresa seleccionado, usar el primero
   useEffect(() => {
-    if (isSysAdmin && isModalOpen && !editingLote && !formData.idEmpresa && empresas[0]?.id) {
+    if (isAdmin && isModalOpen && !editingLote && !formData.idEmpresa && empresas[0]?.id) {
       setFormData((prev) => ({ ...prev, idEmpresa: empresas[0].id }))
     }
-  }, [isSysAdmin, isModalOpen, editingLote, empresas, formData.idEmpresa])
+  }, [isAdmin, isModalOpen, editingLote, empresas, formData.idEmpresa])
 
   const filteredLotes = useMemo(() => {
     return lotes
@@ -157,7 +164,7 @@ export default function Lotes() {
     setEditingLote(null)
     setFormData({
       ...emptyForm,
-      idEmpresa: isSysAdmin ? (empresas[0]?.id || null) : (currentEmpresaId || null),
+      idEmpresa: isAdmin ? (empresas[0]?.id || null) : (currentEmpresaId || null),
     })
     setIsModalOpen(true)
   }
@@ -188,7 +195,7 @@ export default function Lotes() {
       lat: formData.lat === '' ? null : Number(formData.lat),
       long: formData.long === '' ? null : Number(formData.long),
     }
-    if (isSysAdmin) {
+    if (formData.idEmpresa) {
       payload.idEmpresa = formData.idEmpresa
     }
     try {
@@ -222,7 +229,7 @@ export default function Lotes() {
 
   const isEditable = (lote: Lote) => {
     if (!canWrite) return false
-    if (isSysAdmin) return true
+    if (isAdmin) return true
     const authorizedEmpresas = (user?.idEmpresas || []).map((e) => Number(e))
     return authorizedEmpresas.includes(lote.idEmpresa)
   }
@@ -245,10 +252,10 @@ export default function Lotes() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Lotes</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
@@ -279,7 +286,7 @@ export default function Lotes() {
               className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             />
           </div>
-          {empresas.length > 0 && (
+          {(listEmpresas.length > 0 && (isAdmin || userEmpresas.length > 1)) && (
             <select
               aria-label="Filtrar por empresa"
               value={filterEmpresaId ?? 'all'}
@@ -287,13 +294,13 @@ export default function Lotes() {
               className="sm:w-64 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="all">
-                {isSysAdmin
+                {isAdmin
                   ? 'Todas las empresas'
-                  : (user?.idEmpresas || []).length > 1
+                  : userEmpresas.length > 1
                   ? 'Todas mis empresas'
                   : 'Mi empresa'}
               </option>
-              {empresas.map((e) => (
+              {listEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
             </select>
@@ -552,7 +559,7 @@ export default function Lotes() {
             </div>
 
             <form className="p-5 space-y-4" onSubmit={handleSubmit}>
-              {isSysAdmin && (
+              {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="lote-empresa" className="text-xs font-medium text-foreground">
                     Empresa destino
@@ -580,6 +587,32 @@ export default function Lotes() {
                       empresas.map((e) => (
                         <option key={e.id} value={e.id}>{e.nombre}</option>
                       ))}
+                  </select>
+                </div>
+              )}
+
+              {!isAdmin && !editingLote && userEmpresas.length > 1 && (
+                <div className="space-y-1.5">
+                  <label htmlFor="lote-empresa-nuevo" className="text-xs font-medium text-foreground">
+                    Empresa destino
+                  </label>
+                  <select
+                    id="lote-empresa-nue"
+                    value={formData.idEmpresa ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        idEmpresa: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        idUsuario: '',
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    required
+                  >
+                    <option value="">Seleccionar empresa</option>
+                    {listEmpresas.map((e) => (
+                      <option key={e.id} value={e.id}>{e.nombre}</option>
+                    ))}
                   </select>
                 </div>
               )}

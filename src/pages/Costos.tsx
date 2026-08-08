@@ -12,6 +12,7 @@ interface Costo {
   nombre: string
   descripcion: string | null
   idEmpresa: number | null
+  precioUnitario?: number | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
@@ -24,6 +25,10 @@ export default function Costos() {
   const [selectedCompanies, setSelectedCompanies] = useState<number[]>([])
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
+  // Alcance para asesor / productor: total / global / por empresa
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCosto, setEditingCosto] = useState<Costo | null>(null)
   const [formData, setFormData] = useState({
@@ -31,28 +36,45 @@ export default function Costos() {
     descripcion: '',
     idEmpresa: null as number | null
   })
+  const [precioUnitario, setPrecioUnitario] = useState('')
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
 
-  const { permisos, isSysAdmin, isAsesor, empresas, currentEmpresaId } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
+  const userEmpresas = (user?.idEmpresas || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
   const canWrite = permisos.includes('escritura:costo')
   const canRead = permisos.includes('lectura:costo')
 
-  const costosFetcher = async ([url, currentEmpresaId, all, companyIds]: [string, number | null, boolean, string]) => {
+  const costosFetcher = async ([url, all, third, fourth]: [string, boolean, string | number | boolean, string | number]) => {
     const params: any = {}
-    if (isSysAdmin) {
+    if (isAdmin) {
       if (all) params.all = true
-      if (companyIds) params.companyIds = companyIds
+      if (typeof third === 'string' && third) params.companyIds = third
+    } else if (fourth === 'global') {
+      params.scope = 'global'
+    } else if (fourth === 'empresa' && third) {
+      params.scope = 'empresa'
+      params.currentEmpresaId = Number(third)
+    } else {
+      params.all = true
     }
-    if (currentEmpresaId) params.currentEmpresaId = currentEmpresaId
 
     const res = await api.get(url, { params })
     return res.data
   }
 
+  const swrCostosKey = canRead
+    ? isAdmin
+      ? ['costos', showAll, selectedCompanies.join(','), '']
+      : ['costos', false, scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+    : null
+
   const { data: costos = [], isLoading, mutate } = useSWR<Costo[]>(
-    canRead ? ['costos', currentEmpresaId, showAll, selectedCompanies.join(',')] : null,
-    costosFetcher,
+    swrCostosKey,
+    costosFetcher as any,
     {
       revalidateOnFocus: true,
       revalidateOnMount: true,
@@ -85,24 +107,30 @@ export default function Costos() {
         descripcion: costo.descripcion || '',
         idEmpresa: costo.idEmpresa
       })
+      setPrecioUnitario(costo.precioUnitario != null ? String(costo.precioUnitario) : '')
     } else {
       setEditingCosto(null)
       setFormData({
         nombre: '',
         descripcion: '',
-        idEmpresa: isSysAdmin ? null : (currentEmpresaId || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
       })
+      setPrecioUnitario('')
     }
     setIsModalOpen(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = {
+      ...formData,
+      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
+    }
     try {
       if (editingCosto) {
-        await api.patch(`/costos/${editingCosto.id}`, formData)
+        await api.patch(`/costos/${editingCosto.id}`, payload)
       } else {
-        await api.post('/costos', formData)
+        await api.post('/costos', payload)
       }
       setIsModalOpen(false)
       mutate()
@@ -135,7 +163,7 @@ export default function Costos() {
 
   const isEditable = (costo: Costo) => {
     if (!canWrite) return false
-    if (isSysAdmin) return true
+    if (isAdmin) return true
     return costo.idEmpresa !== null
   }
 
@@ -155,10 +183,10 @@ export default function Costos() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Costos</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
@@ -176,7 +204,7 @@ export default function Costos() {
         )}
       </div>
 
-      {isSysAdmin && (
+      {isAdmin ? (
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -292,6 +320,52 @@ export default function Costos() {
             </div>
           )}
         </div>
+
+      ) : (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alcance</span>
+            <div className="flex items-center rounded-md border border-border overflow-hidden">
+              {([
+                ['todas', 'Todas'],
+                ['global', 'Global'],
+                ['empresa', 'Por empresa'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setScope(key)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    scope === key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {scope === 'empresa' && userEmpresas.length > 0 && (
+              <select
+                value={scopeEmpresaId ?? ''}
+                onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Seleccionar empresa</option>
+                {empresas
+                  .filter((e) => userEmpresas.includes(e.id))
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nombre}
+                    </option>
+                  ))}
+              </select>
+            )}
+            {scope === 'empresa' && !scopeEmpresaId && (
+              <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus costos.</span>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="bg-card/60 border border-border rounded-lg p-3">
@@ -342,6 +416,11 @@ export default function Costos() {
                       {costo.descripcion && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{costo.descripcion}</p>
                       )}
+                      {costo.precioUnitario != null && (
+                        <p className="text-sm font-medium text-success mt-0.5">
+                          ${Number(costo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {editable ? (
@@ -385,7 +464,7 @@ export default function Costos() {
                     </div>
                   </div>
 
-                  {(isSysAdmin || isAsesor) && costo.idEmpresa !== null && (
+                  {(isAdmin || isAsesor) && costo.idEmpresa !== null && (
                     <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                       <Package className="size-3" strokeWidth={1.75} />
                       <span>Empresa: {empresas.find((e) => e.id === costo.idEmpresa)?.nombre || `ID: ${costo.idEmpresa}`}</span>
@@ -406,6 +485,9 @@ export default function Costos() {
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Descripción
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
+                      Precio unitario
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
@@ -435,6 +517,11 @@ export default function Costos() {
                           <span className="text-sm text-muted-foreground line-clamp-1">{costo.descripcion || '—'}</span>
                         </td>
                         <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground">
+                            {costo.precioUnitario != null ? `$${Number(costo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
                           {costo.idEmpresa === null ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Globe className="size-3" strokeWidth={2} />
@@ -443,7 +530,7 @@ export default function Costos() {
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Package className="size-3" strokeWidth={2} />
-                              {isSysAdmin || isAsesor
+                              {isAdmin || isAsesor
                                 ? `${empresas.find((e) => e.id === costo.idEmpresa)?.nombre || 'Empresa'} · ${costo.idEmpresa}`
                                 : 'Mi Empresa'}
                             </span>
@@ -570,7 +657,23 @@ export default function Costos() {
                 />
               </div>
 
-              {isSysAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="costo-precio" className="text-xs font-medium text-foreground">
+                  Precio unitario (referencia)
+                </label>
+                <input
+                  id="costo-precio"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={precioUnitario}
+                  onChange={(e) => setPrecioUnitario(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+              </div>
+
+{isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
                     Empresa destino
@@ -591,6 +694,29 @@ export default function Costos() {
                   <p className="text-[11px] text-muted-foreground">
                     Solo como sys-admin puedes crear costos globales o asignarlos a otras empresas.
                   </p>
+                </div>
+              )}
+              {!isAdmin && !editingCosto && userEmpresas.length > 1 && (
+                <div className="space-y-1.5">
+                  <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
+                    Empresa destino
+                  </label>
+                  <select
+                    id="costo-empresa"
+                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    onChange={(e) =>
+                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    required
+                  >
+                    <option value="">Seleccionar empresa</option>
+                    {empresas
+                      .filter((e) => userEmpresas.includes(e.id))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                      ))}
+                  </select>
                 </div>
               )}
 

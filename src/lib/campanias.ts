@@ -10,6 +10,7 @@ export interface Lote {
 export interface Cultivo {
   id: number
   nombre: string
+  tipoCosecha?: 'fina' | 'gruesa' | null
 }
 
 export interface Variedad {
@@ -22,18 +23,28 @@ export interface LaborItem {
   id: number
   nombre: string
   idEmpresa: number | null
+  precioUnitario?: number | null
+}
+
+export interface CategoriaInsumoItem {
+  id: number
+  nombre: string
+  descripcion: string | null
+  activo?: boolean
 }
 
 export interface InsumoItem {
   id: number
   nombre: string
   idEmpresa: number | null
+  precioUnitario?: number | null
 }
 
 export interface CostoItem {
   id: number
   nombre: string
   idEmpresa: number | null
+  precioUnitario?: number | null
 }
 
 export interface CampaniaLaborDetalle {

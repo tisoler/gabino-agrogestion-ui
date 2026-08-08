@@ -3,11 +3,11 @@ import useSWR from 'swr'
 import {
   Plus, Building2, ChevronDown, ChevronRight, Mail,
   UserCog, Tractor, AlertCircle, Activity, X, Shield,
-  UserPlus, UserMinus, Search,
+  UserPlus, UserMinus, Search, Check,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
-import { Roles } from '../constantes'
+import { Roles, getRoleLabel } from '../constantes'
 
 interface UsuarioBasico {
   uid: string
@@ -39,12 +39,21 @@ function getInitials(name: string | null | undefined) {
     .join('')
 }
 
+function getRoleBadge(roles: string[]) {
+  if (roles.includes(Roles.ASESOR)) return { label: 'Asesor', cls: 'bg-info-soft text-info' }
+  if (roles.includes(Roles.ASESOR_ADMIN)) return { label: 'Asesor admin', cls: 'bg-warning-soft text-warning-foreground' }
+  if (roles.includes(Roles.PRODUCTOR)) return { label: 'Productor', cls: 'bg-primary-soft text-primary' }
+  return { label: getRoleLabel(roles) || '—', cls: 'bg-muted text-muted-foreground' }
+}
+
 export default function Productores() {
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [createSearch, setCreateSearch] = useState('')
+  const [createSelectedUids, setCreateSelectedUids] = useState<string[]>([])
 
   // Modal de "agregar usuario a empresa"
   const [addModalEmpresaId, setAddModalEmpresaId] = useState<number | null>(null)
@@ -52,7 +61,8 @@ export default function Productores() {
   const [pendingUid, setPendingUid] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const { permisos, isSysAdmin, currentEmpresa } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresa, user } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
   const canRead = permisos.includes('lectura:productor')
   const canWrite = permisos.includes('escritura:empresa')
 
@@ -61,22 +71,21 @@ export default function Productores() {
     fetcher
   )
 
-  // Catálogo global de usuarios (deduplicado por uid) a partir de la respuesta
-  // agrupada. Sirve como fuente para los candidatos del modal de "agregar".
+  // Catálogo de usuarios candidatos: TODOS los usuarios de Firebase con
+  // cualquier rol excepto sys-admin, sin importar si tienen idEmpresas.
+  const { data: candidatos } = useSWR<UsuarioBasico[]>(
+    canWrite ? '/usuarios/candidatos' : null,
+    fetcher
+  )
+
   const allUsers = useMemo<UsuarioBasico[]>(() => {
-    if (!data) return []
-    const map = new Map<string, UsuarioBasico>()
-    for (const empresa of data) {
-      for (const user of empresa.usuarios) {
-        if (!map.has(user.uid)) map.set(user.uid, user)
-      }
-    }
-    return Array.from(map.values()).sort((a, b) =>
+    const list = candidatos || []
+    return [...list].sort((a, b) =>
       (a.nombreUsuario || a.email || a.uid).localeCompare(
         b.nombreUsuario || b.email || b.uid,
       ),
     )
-  }, [data])
+  }, [candidatos])
 
   const filtered = useMemo(() => {
     if (!data) return []
@@ -106,7 +115,10 @@ export default function Productores() {
   }, [data, searchTerm])
 
   const totalAsesores = useMemo(
-    () => (data || []).reduce((acc, e) => acc + e.usuarios.filter((u) => u.roles.includes(Roles.ASESOR)).length, 0),
+    () => (data || []).reduce(
+      (acc, e) => acc + e.usuarios.filter((u) => u.roles.includes(Roles.ASESOR) || u.roles.includes(Roles.ASESOR_ADMIN)).length,
+      0,
+    ),
     [data],
   )
   const totalProductores = useMemo(
@@ -128,8 +140,16 @@ export default function Productores() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      await api.post('/empresas', { nombre: newName.trim() })
+      const res = await api.post('/empresas', { nombre: newName.trim() })
+      const nuevaEmpresaId = Number(res.data?.id)
+      if (nuevaEmpresaId > 0 && createSelectedUids.length > 0) {
+        for (const uid of createSelectedUids) {
+          await api.patch(`/usuarios/${uid}/empresas`, { add: [nuevaEmpresaId] })
+        }
+      }
       setNewName('')
+      setCreateSearch('')
+      setCreateSelectedUids([])
       setIsCreateOpen(false)
       mutate()
     } catch (err) {
@@ -182,6 +202,15 @@ export default function Productores() {
     updateUserEmpresas(uid, { add: [addModalEmpresaId] })
   }
 
+  const matchesSearch = (u: UsuarioBasico, term: string) => {
+    if (!term) return true
+    return (
+      (u.nombreUsuario?.toLowerCase() || '').includes(term) ||
+      (u.email?.toLowerCase() || '').includes(term) ||
+      u.uid.toLowerCase().includes(term)
+    )
+  }
+
   const candidatesForModal = useMemo(() => {
     if (addModalEmpresaId == null) return []
     const inEmpresa = new Set(
@@ -189,18 +218,25 @@ export default function Productores() {
     )
     const term = addSearch.trim().toLowerCase()
     return allUsers
+      .filter((u) => u.uid !== user?.id)
       .filter((u) => !inEmpresa.has(u.uid))
-      .filter((u) => {
-        if (!term) return true
-        return (
-          (u.nombreUsuario?.toLowerCase() || '').includes(term) ||
-          (u.email?.toLowerCase() || '').includes(term) ||
-          u.uid.toLowerCase().includes(term)
-        )
-      })
-  }, [allUsers, data, addModalEmpresaId, addSearch])
+      .filter((u) => matchesSearch(u, term))
+  }, [allUsers, data, addModalEmpresaId, addSearch, user])
 
   const addModalEmpresa = data?.find((e) => e.id === addModalEmpresaId)
+
+  const createCandidates = useMemo(() => {
+    const term = createSearch.trim().toLowerCase()
+    return allUsers
+      .filter((u) => u.uid !== user?.id)
+      .filter((u) => matchesSearch(u, term))
+  }, [allUsers, createSearch, user])
+
+  const toggleCreateUser = (uid: string) => {
+    setCreateSelectedUids((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid],
+    )
+  }
 
   if (!canRead) {
     return (
@@ -220,17 +256,17 @@ export default function Productores() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Productores</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             Empresas y sus usuarios (asesores y productores)
           </p>
-          {currentEmpresa && !isSysAdmin && (
+          {currentEmpresa && !isAdmin && (
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Empresa actual: <span className="font-medium text-foreground">{currentEmpresa}</span>
             </p>
@@ -313,7 +349,9 @@ export default function Productores() {
           {filtered.map((empresa) => {
             const isOpen = expanded.has(empresa.id)
             const asesores = empresa.usuarios.filter((u) => u.roles.includes(Roles.ASESOR))
+            const asesoresAdmin = empresa.usuarios.filter((u) => u.roles.includes(Roles.ASESOR_ADMIN))
             const productores = empresa.usuarios.filter((u) => u.roles.includes(Roles.PRODUCTOR))
+            const totalAsesoresEmpresa = asesores.length + asesoresAdmin.length
             return (
               <div key={empresa.id} className="bg-card border border-border rounded-lg overflow-hidden">
                 <button
@@ -337,7 +375,7 @@ export default function Productores() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {asesores.length} {asesores.length === 1 ? 'asesor' : 'asesores'} ·{' '}
+                      {totalAsesoresEmpresa} {totalAsesoresEmpresa === 1 ? 'asesor' : 'asesores'} ·{' '}
                       {productores.length} {productores.length === 1 ? 'productor' : 'productores'}
                     </p>
                   </div>
@@ -345,7 +383,7 @@ export default function Productores() {
                     <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
                         <UserCog className="size-3" strokeWidth={1.75} />
-                        {asesores.length}
+                        {totalAsesoresEmpresa}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
                         <Tractor className="size-3" strokeWidth={1.75} />
@@ -369,6 +407,25 @@ export default function Productores() {
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {asesores.map((u) => (
+                            <UsuarioCard
+                              key={u.uid}
+                              usuario={u}
+                              empresaId={empresa.id}
+                              onRemove={canWrite ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              isPending={pendingUid === u.uid}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {asesoresAdmin.length > 0 && (
+                      <div>
+                        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                          Asesores admin ({asesoresAdmin.length})
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {asesoresAdmin.map((u) => (
                             <UsuarioCard
                               key={u.uid}
                               usuario={u}
@@ -434,8 +491,8 @@ export default function Productores() {
             onClick={() => !creating && setIsCreateOpen(false)}
             aria-hidden
           />
-          <div className="relative w-full max-w-md bg-card border border-border rounded-lg shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
+          <div className="relative w-full max-w-lg bg-card border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center shrink-0">
               <h2 className="text-base font-semibold text-foreground">Nueva Empresa</h2>
               <button
                 onClick={() => setIsCreateOpen(false)}
@@ -447,7 +504,7 @@ export default function Productores() {
               </button>
             </div>
 
-            <form className="p-5 space-y-4" onSubmit={handleCreate}>
+            <form className="p-5 space-y-4 overflow-y-auto" onSubmit={handleCreate}>
               <div className="space-y-1.5">
                 <label htmlFor="empresa-nombre" className="text-xs font-medium text-foreground">
                   Nombre
@@ -463,8 +520,81 @@ export default function Productores() {
                   autoFocus
                   className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-foreground">
+                    Usuarios a asociar
+                  </label>
+                  <span className="text-[11px] text-muted-foreground">
+                    {createSelectedUids.length} seleccionado{createSelectedUids.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="relative group">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
+                  <input
+                    type="text"
+                    value={createSearch}
+                    onChange={(e) => setCreateSearch(e.target.value)}
+                    placeholder="Buscar por nombre, email o UID..."
+                    className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto border border-border rounded-md divide-y divide-border bg-background">
+                  {createCandidates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6 px-4">
+                      {createSearch
+                        ? 'No hay coincidencias.'
+                        : 'No hay usuarios disponibles para asociar.'}
+                    </p>
+                  ) : (
+                    createCandidates.map((u) => {
+                      const selected = createSelectedUids.includes(u.uid)
+                      const badge = getRoleBadge(u.roles)
+                      return (
+                        <button
+                          key={u.uid}
+                          type="button"
+                          onClick={() => toggleCreateUser(u.uid)}
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/30 transition-colors ${
+                            selected ? 'bg-primary-soft/40' : ''
+                          }`}
+                        >
+                          <div
+                            className={`size-7 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
+                          >
+                            {getInitials(u.nombreUsuario || u.email)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {u.nombreUsuario || u.email || u.uid}
+                            </p>
+                            {u.email && (
+                              <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                            )}
+                          </div>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
+                          >
+                            {badge.label}
+                          </span>
+                          <div
+                            className={`size-5 rounded border flex items-center justify-center shrink-0 ${
+                              selected
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'border-border'
+                            }`}
+                          >
+                            {selected && <Check className="size-3.5" strokeWidth={2.5} />}
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground">
-                  La asignación de usuarios a esta empresa se realiza desde el sistema de identidad.
+                  {createCandidates.length} usuario{createCandidates.length === 1 ? '' : 's'} disponible{createCandidates.length === 1 ? '' : 's'} (sin sys-admins)
                 </p>
               </div>
 
@@ -536,17 +666,15 @@ export default function Productores() {
                     : 'Todos los usuarios disponibles ya están asociados a esta empresa.'}
                 </p>
               ) : (
-                candidatesForModal.map((u) => (
+                candidatesForModal.map((u) => {
+                  const badge = getRoleBadge(u.roles)
+                  return (
                   <div
                     key={u.uid}
                     className="flex items-center gap-3 p-2.5 bg-card border border-border rounded-md"
                   >
                     <div
-                      className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${
-                        u.roles.includes(Roles.ASESOR)
-                          ? 'bg-info-soft text-info'
-                          : 'bg-primary-soft text-primary'
-                      }`}
+                      className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
                     >
                       {getInitials(u.nombreUsuario || u.email)}
                     </div>
@@ -556,13 +684,9 @@ export default function Productores() {
                           {u.nombreUsuario || u.email || u.uid}
                         </p>
                         <span
-                          className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                            u.roles.includes(Roles.ASESOR)
-                              ? 'bg-info-soft text-info'
-                              : 'bg-primary-soft text-primary'
-                          }`}
+                          className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
                         >
-                          {u.roles.includes(Roles.ASESOR) ? 'Asesor' : 'Productor'}
+                          {badge.label}
                         </span>
                       </div>
                       {u.email && (
@@ -586,7 +710,8 @@ export default function Productores() {
                       <span>Agregar</span>
                     </button>
                   </div>
-                ))
+                )
+              })
               )}
             </div>
 
@@ -610,18 +735,11 @@ interface UsuarioCardProps {
 }
 
 function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
-  const isAsesor = usuario.roles.includes(Roles.ASESOR)
-  const isProductor = usuario.roles.includes(Roles.PRODUCTOR)
+  const badge = getRoleBadge(usuario.roles)
   return (
     <div className="flex items-center gap-3 p-2.5 bg-card border border-border rounded-md">
       <div
-        className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${
-          isAsesor
-            ? 'bg-info-soft text-info'
-            : isProductor
-            ? 'bg-primary-soft text-primary'
-            : 'bg-muted text-muted-foreground'
-        }`}
+        className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
       >
         {getInitials(usuario.nombreUsuario || usuario.email)}
       </div>
@@ -631,11 +749,9 @@ function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
             {usuario.nombreUsuario || usuario.email || usuario.uid}
           </p>
           <span
-            className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-              isAsesor ? 'bg-info-soft text-info' : 'bg-primary-soft text-primary'
-            }`}
+            className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
           >
-            {isAsesor ? 'Asesor' : isProductor ? 'Productor' : '—'}
+            {badge.label}
           </span>
         </div>
         {usuario.email && (

@@ -5,13 +5,15 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../lib/firebase'
-import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2 } from 'lucide-react'
+import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2, KeyRound } from 'lucide-react'
 
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false)
+  const [isForgot, setIsForgot] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -19,6 +21,28 @@ export default function Login() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+
+    setLoading(true)
+    try {
+      await sendPasswordResetEmail(auth, email)
+      setSuccess('Te hemos enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.')
+      setIsForgot(false)
+    } catch (err: any) {
+      console.error(err)
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+        setError('No encontramos una cuenta con ese correo electrónico.')
+      } else {
+        setError('Error al enviar el correo de recuperación. Inténtalo de nuevo.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,7 +115,7 @@ export default function Login() {
         style={{ backgroundImage: 'url("fondoLogin.png")', filter: 'blur(2px)' }}
         aria-hidden
       />
-      <div className="absolute inset-0 z-0 bg-background/70 dark:bg-background/80" aria-hidden />
+      <div className="absolute inset-0 z-0 bg-background/30 dark:bg-background/80" aria-hidden />
 
       <div className="relative z-10 w-full max-w-[420px]">
         <div className="bg-card/90 border border-border shadow-xl rounded-lg overflow-hidden backdrop-blur-md">
@@ -101,12 +125,16 @@ export default function Login() {
             </div>
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Gabino Agrogestión</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {isRegister ? 'Crea tu cuenta' : 'Gestión inteligente para el campo'}
+              {isForgot
+                ? 'Recupera el acceso a tu cuenta'
+                : isRegister
+                  ? 'Crea tu cuenta'
+                  : 'Gestión inteligente para el campo'}
             </p>
           </div>
 
           <div className="p-8 pt-4">
-            <form onSubmit={handleAuth} className="space-y-4">
+            <form onSubmit={isForgot ? handleForgotPassword : handleAuth} className="space-y-4">
               {error && (
                 <div
                   role="alert"
@@ -124,6 +152,12 @@ export default function Login() {
                   <CheckCircle2 className="size-4 shrink-0" strokeWidth={2} />
                   <span>{success}</span>
                 </div>
+              )}
+
+              {isForgot && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+                </p>
               )}
 
               <div className="space-y-1.5">
@@ -145,24 +179,26 @@ export default function Login() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</label>
-                <div className="relative group">
-                  <Lock
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
-                    strokeWidth={1.75}
-                  />
-                  <input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  />
+              {!isForgot && (
+                <div className="space-y-1.5">
+                  <label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</label>
+                  <div className="relative group">
+                    <Lock
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
+                      strokeWidth={1.75}
+                    />
+                    <input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {isRegister && (
                 <div className="space-y-1.5">
@@ -187,11 +223,15 @@ export default function Login() {
 
               <button
                 type="submit"
-                className="w-full py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
                 disabled={loading}
               >
                 {loading ? (
                   <Loader2 className="size-4 animate-spin" />
+                ) : isForgot ? (
+                  <>
+                    <Mail className="size-4" strokeWidth={2} /> Enviar correo de recuperación
+                  </>
                 ) : isRegister ? (
                   <>
                     <UserPlus className="size-4" strokeWidth={2} /> Registrarse
@@ -203,17 +243,56 @@ export default function Login() {
                 )}
               </button>
 
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => setIsRegister(!isRegister)}
-                  className="text-sm font-medium text-primary hover:underline transition-colors"
-                >
-                  {isRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
-                </button>
-              </div>
+              {!isForgot && !isRegister && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgot(true)
+                      setError('')
+                      setSuccess('')
+                    }}
+                    className="text-sm font-medium text-primary hover:underline transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <KeyRound className="size-3.5" strokeWidth={2} />
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              )}
 
-              {!isRegister && (
+              {isForgot && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgot(false)
+                      setError('')
+                      setSuccess('')
+                    }}
+                    className="text-sm font-medium text-primary hover:underline transition-colors cursor-pointer"
+                  >
+                    Volver a iniciar sesión
+                  </button>
+                </div>
+              )}
+
+              {!isForgot && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegister(!isRegister)
+                      setError('')
+                      setSuccess('')
+                    }}
+                    className="text-sm font-medium text-primary hover:underline transition-colors cursor-pointer"
+                  >
+                    {isRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
+                  </button>
+                </div>
+              )}
+
+              {!isRegister && !isForgot && (
                 <>
                   <div className="relative my-5 text-center">
                     <div className="absolute inset-0 flex items-center">
@@ -227,7 +306,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={handleGoogleAuth}
-                    className="w-full py-2 bg-card border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors flex items-center justify-center gap-2.5"
+                    className="w-full py-2 bg-card border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
                     disabled={loading}
                   >
                     <svg className="size-4" viewBox="0 0 24 24" aria-hidden>

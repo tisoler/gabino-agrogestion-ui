@@ -53,15 +53,16 @@ export default function Campanias() {
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
 
-  const { permisos, isSysAdmin, empresas, currentEmpresaId } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
 
   // Filtros
-  // Para no-sys-admin, la empresa es forzada a la actual; el estado sólo se
-  // usa para sys-admin (que puede elegir entre todas).
+  // Para no-admin, la empresa es forzada a la actual; el estado sólo se
+  // usa para admins (que puede elegir entre todas).
   const [adminFilterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
-  const filterEmpresaId = isSysAdmin ? adminFilterEmpresaId : currentEmpresaId
+  const filterEmpresaId = isAdmin ? adminFilterEmpresaId : currentEmpresaId
   const [filterAnioDesde, setFilterAnioDesde] = useState<number | ''>('')
   const [filterAnioHasta, setFilterAnioHasta] = useState<number | ''>('')
   const [filterIdCultivo, setFilterIdCultivo] = useState<number | null>(null)
@@ -84,14 +85,14 @@ export default function Campanias() {
   }, [cultivos, filterIdCultivo])
 
   // Lotes filtrados por empresa (para asesor/productor ya viene filtrado del backend;
-  // para sys-admin usamos el filtro de empresa seleccionado)
+  // para admins usamos el filtro de empresa seleccionado)
   const lotesFiltrados = useMemo(() => {
     if (!lotes) return []
-    if (isSysAdmin && filterEmpresaId) {
+    if (isAdmin && filterEmpresaId) {
       return lotes.filter((l) => l.idEmpresa === filterEmpresaId)
     }
     return lotes
-  }, [lotes, isSysAdmin, filterEmpresaId])
+  }, [lotes, isAdmin, filterEmpresaId])
 
   const campaniasFetcher = async ([
     ,
@@ -185,10 +186,10 @@ export default function Campanias() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Campañas</h1>
-            {isSysAdmin && (
+            {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
-                Global Admin
+                Admin
               </span>
             )}
           </div>
@@ -235,7 +236,7 @@ export default function Campanias() {
       </div>
 
       {/* Filtros */}
-      {isSysAdmin && (
+      {isAdmin && (
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">

@@ -3,7 +3,7 @@ import useSWR from 'swr'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X,
-  Sprout, MapPin, Calendar, Package, Pickaxe, DollarSign, FileDown,
+  Sprout, MapPin, Calendar, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,6 +13,7 @@ import {
   calcularResultados, formatInputNumber, round2,
   type Campania, type CampaniaLaborDetalle, type CampaniaInsumoDetalle,
   type CampaniaCostoDetalle, type LaborItem, type InsumoItem, type CostoItem,
+  type CategoriaInsumoItem,
 } from '../lib/campanias'
 
 // ---------------------------------------------------------------------------
@@ -251,12 +252,14 @@ export default function CampaniaDetalle() {
   const params = useParams<{ id: string }>()
   const isNew = !params.id || params.id === 'nueva'
 
-  const { permisos, isSysAdmin, currentEmpresaId, empresas } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresaId, empresas } = useAuth()
+  const isAdmin = isSysAdmin || isAsesorAdmin
+  const canManageCategorias = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
 
   const [empresaDestinoId, setEmpresaDestinoId] = useState<number | null>(
-    isNew ? (isSysAdmin ? null : currentEmpresaId) : null
+    isNew ? (isAdmin ? null : currentEmpresaId) : null
   )
 
   const [cabecera, setCabecera] = useState<Cabecera>(emptyCabecera)
@@ -291,13 +294,29 @@ export default function CampaniaDetalle() {
   const newTempId = () => -++tempIdCounter.current
 
   // Catálogos
+  // - sys-admin / asesor-admin: cultivos con all=true (globales + empresas),
+  //   lotes de todas las empresas (se filtran por empresa destino abajo).
+  // - asesor / productor: cultivos globales + empresa seleccionada, y lotes
+  //   de la empresa seleccionada.
   const { data: lotes = [], isLoading: loadingLotes } = useSWR<Lote[]>(
-    canRead ? '/lotes' : null, fetcher
+    canRead ? ['/lotes', isAdmin ? null : currentEmpresaId] : null,
+    ([url, empresaId]: [string, number | null]) =>
+      api.get(url, { params: empresaId ? { currentEmpresaId: empresaId } : undefined }).then((r) => r.data)
   )
-  const { data: cultivos = [] } = useSWR<Cultivo[]>(canRead ? '/cultivos' : null, fetcher)
+  const { data: cultivos = [] } = useSWR<Cultivo[]>(
+    canRead ? ['/cultivos', isAdmin, isAdmin ? null : currentEmpresaId] : null,
+    ([url, all, empresaId]: [string, boolean, number | null]) => {
+      const params: Record<string, unknown> = {}
+      if (all) params.all = true
+      else if (empresaId) params.currentEmpresaId = empresaId
+      return api.get(url, { params }).then((r) => r.data)
+    }
+  )
 
   const catalogParams = useMemo(() => {
-    const p: Record<string, unknown> = {}
+    const p: Record<string, unknown> = {
+      soloActivos: true,
+    }
     if (empresaDestinoId) p.currentEmpresaId = empresaDestinoId
     return p
   }, [empresaDestinoId])
@@ -317,6 +336,10 @@ export default function CampaniaDetalle() {
   const { data: catalogCostos = [], mutate: refetchCostos } = useSWR<CostoItem[]>(
     canRead && campaniaId !== null ? ['/costos', catalogParams] : null,
     () => catalogFetcher('/costos')
+  )
+  const { data: catalogCategorias = [], mutate: refetchCategorias } = useSWR<CategoriaInsumoItem[]>(
+    canRead && campaniaId !== null ? '/categorias' : null,
+    fetcher
   )
 
   // Campaña existente
@@ -406,10 +429,16 @@ export default function CampaniaDetalle() {
   const [creatingItem, setCreatingItem] = useState<{
     kind: 'labor' | 'insumo' | 'costo'
     nombre: string
+    categoriaId: number | null
+    precioUnitario: string
     onCreated: (id: number) => void
   } | null>(null)
   const [creatingItemError, setCreatingItemError] = useState<string | null>(null)
   const [creatingItemBusy, setCreatingItemBusy] = useState(false)
+  const [creatingCategoriaOpen, setCreatingCategoriaOpen] = useState(false)
+  const [creatingCategoriaNombre, setCreatingCategoriaNombre] = useState('')
+  const [creatingCategoriaBusy, setCreatingCategoriaBusy] = useState(false)
+  const [creatingCategoriaError, setCreatingCategoriaError] = useState<string | null>(null)
 
   // -------------------------------------------------------------------------
   // Crear campaña (al click inicial cuando es nueva)
@@ -476,7 +505,7 @@ export default function CampaniaDetalle() {
       idLabor: first.id,
       fecha: todayLocalISO(),
       superficieLaboreada: 0,
-      costoLaborHa: 0,
+      costoLaborHa: first.precioUnitario ?? 0,
       labor: first,
     }
     setLabores((arr) => [...arr, newRow])
@@ -513,7 +542,7 @@ export default function CampaniaDetalle() {
       idCampania: campaniaId,
       idInsumo: first.id,
       unidadesHa: 0,
-      costoUnidad: 0,
+      costoUnidad: first.precioUnitario ?? 0,
       insumo: first,
     }
     setInsumos((arr) => [...arr, newRow])
@@ -548,7 +577,7 @@ export default function CampaniaDetalle() {
       idCampania: campaniaId,
       idCosto: first.id,
       unidadesHa: 0,
-      costoUnidad: 0,
+      costoUnidad: first.precioUnitario ?? 0,
       costo: first,
     }
     setCostos((arr) => [...arr, newRow])
@@ -720,15 +749,19 @@ export default function CampaniaDetalle() {
 
   const handleCreateCatalogItem = async () => {
     if (!creatingItem || !creatingItem.nombre.trim() || !empresaDestinoId) return
+    if (creatingItem.kind === 'insumo' && !creatingItem.categoriaId) return
     const endpoint = creatingItem.kind === 'labor' ? '/labores'
       : creatingItem.kind === 'insumo' ? '/insumos' : '/costos'
     setCreatingItemBusy(true)
     setCreatingItemError(null)
     try {
-      const { data } = await api.post(endpoint, {
+      const payload: Record<string, unknown> = {
         nombre: creatingItem.nombre.trim(),
         idEmpresa: empresaDestinoId,
-      })
+      }
+      if (creatingItem.precioUnitario.trim() !== '') payload.precioUnitario = parseFloat(creatingItem.precioUnitario)
+      if (creatingItem.kind === 'insumo') payload.idCategoria = creatingItem.categoriaId
+      const { data } = await api.post(endpoint, payload)
       const refetcher = creatingItem.kind === 'labor' ? refetchLabores
         : creatingItem.kind === 'insumo' ? refetchInsumos : refetchCostos
       refetcher()
@@ -744,6 +777,31 @@ export default function CampaniaDetalle() {
       )
     } finally {
       setCreatingItemBusy(false)
+    }
+  }
+
+  const handleCreateCategoria = async () => {
+    if (!creatingCategoriaNombre.trim() || creatingCategoriaBusy) return
+    setCreatingCategoriaBusy(true)
+    setCreatingCategoriaError(null)
+    try {
+      const { data } = await api.post('/categorias', {
+        nombre: creatingCategoriaNombre.trim(),
+      })
+      setCreatingItem({ ...creatingItem!, categoriaId: data.id })
+      setCreatingCategoriaNombre('')
+      setCreatingCategoriaOpen(false)
+      refetchCategorias()
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } } }
+      const msg = err?.response?.data?.message
+      setCreatingCategoriaError(
+        Array.isArray(msg) ? msg.join(', ') :
+          typeof msg === 'string' ? msg :
+            'No se pudo crear la categoría.'
+      )
+    } finally {
+      setCreatingCategoriaBusy(false)
     }
   }
 
@@ -830,7 +888,7 @@ export default function CampaniaDetalle() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(isNew && isSysAdmin) && (
+          {(isNew && isAdmin) && (
             <Field label="Empresa destino">
               <select
                 value={empresaDestinoId ?? ''}
@@ -987,7 +1045,7 @@ export default function CampaniaDetalle() {
             title="Labores"
             icon={Pickaxe}
             columns={[
-              { key: 'idLabor', label: 'Tipo', kind: 'select-with-create' },
+              { key: 'idLabor', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoLaborHa' },
               { key: 'fecha', label: 'Fecha', kind: 'date' },
               { key: 'superficieLaboreada', label: 'Sup. laboreada (ha)', kind: 'number', align: 'right' },
               { key: 'costoLaborHa', label: 'Costo labor/ha', kind: 'number', align: 'right' },
@@ -1000,7 +1058,7 @@ export default function CampaniaDetalle() {
             onAdd={addLabor}
             onChange={updateLabor}
             onRemove={removeLabor}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'labor', nombre: '', onCreated })}
+            onCreateNew={(onCreated) => setCreatingItem({ kind: 'labor', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
             computedRow={(l) => costoPonderadoHa(l, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de labores"
             totalValue={resultados.costoTotalLaboresHa}
@@ -1011,7 +1069,7 @@ export default function CampaniaDetalle() {
             title="Insumos"
             icon={Package}
             columns={[
-              { key: 'idInsumo', label: 'Tipo', kind: 'select-with-create' },
+              { key: 'idInsumo', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoUnidad' },
               { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
               { key: '__total', label: 'Costo total', kind: 'readonly-money', align: 'right' },
@@ -1023,7 +1081,7 @@ export default function CampaniaDetalle() {
             onAdd={addInsumo}
             onChange={updateInsumo}
             onRemove={removeInsumo}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'insumo', nombre: '', onCreated })}
+            onCreateNew={(onCreated) => setCreatingItem({ kind: 'insumo', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
             computedRow={(i) => costoTotalInsumoRowHa(i)}
             totalLabel="Costo total de insumos"
             totalValue={resultados.costoTotalInsumosHa}
@@ -1034,7 +1092,7 @@ export default function CampaniaDetalle() {
             title="Costos varios"
             icon={DollarSign}
             columns={[
-              { key: 'idCosto', label: 'Tipo', kind: 'select-with-create' },
+              { key: 'idCosto', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoUnidad' },
               { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
               { key: '__total', label: 'Costo total', kind: 'readonly-money', align: 'right' },
@@ -1046,7 +1104,7 @@ export default function CampaniaDetalle() {
             onAdd={addCosto}
             onChange={updateCosto}
             onRemove={removeCosto}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'costo', nombre: '', onCreated })}
+            onCreateNew={(onCreated) => setCreatingItem({ kind: 'costo', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
             computedRow={(c) => costoTotalCostoRowHa(c)}
             totalLabel="Costo total de costos varios"
             totalValue={resultados.costoTotalCostosHa}
@@ -1147,6 +1205,86 @@ export default function CampaniaDetalle() {
                     {empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'actual'}
                   </span>.
                 </p>
+                <div className="pt-1 space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Precio unitario (referencia)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={creatingItem.precioUnitario}
+                    onChange={(e) => { setCreatingItem({ ...creatingItem, precioUnitario: e.target.value }); setCreatingItemError(null) }}
+                    placeholder="0.00"
+                    className={inputCls}
+                  />
+                </div>
+                {creatingItem.kind === 'insumo' && (
+                  <div className="pt-1 space-y-2 border border-dashed border-border rounded-sm p-2">
+                    <label className="text-xs font-medium text-foreground">Categoría</label>
+                    {!creatingCategoriaOpen ? (
+                      <div className="flex gap-2">
+                        <select
+                          value={creatingItem.categoriaId ?? ''}
+                          onChange={(e) => { setCreatingItem({ ...creatingItem, categoriaId: e.target.value ? Number(e.target.value) : null }); setCreatingItemError(null) }}
+                          required
+                          className={inputCls}
+                        >
+                          <option value="">Seleccionar categoría...</option>
+                          {catalogCategorias
+                            .filter((c) => c.activo !== false)
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>{c.nombre}</option>
+                            ))}
+                        </select>
+                        {canManageCategorias && !creatingItem.categoriaId && (
+                          <button
+                            type="button"
+                            onClick={() => { setCreatingCategoriaError(null); setCreatingCategoriaOpen(true) }}
+                            className="px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0"
+                            title="Crear nueva categoría"
+                            aria-label="Crear nueva categoría"
+                          >
+                            <FolderPlus className="size-4" strokeWidth={1.75} />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={creatingCategoriaNombre}
+                          onChange={(e) => { setCreatingCategoriaNombre(e.target.value); setCreatingCategoriaError(null) }}
+                          placeholder="Nombre de la categoría"
+                          className={inputCls}
+                        />
+                        {creatingCategoriaError && (
+                          <p className="text-[11px] text-destructive inline-flex items-center gap-1">
+                            <AlertCircle className="size-3" strokeWidth={1.75} />
+                            {creatingCategoriaError}
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setCreatingCategoriaOpen(false); setCreatingCategoriaError(null) }}
+                            className="flex-1 px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateCategoria}
+                            disabled={!creatingCategoriaNombre.trim() || creatingCategoriaBusy}
+                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                          >
+                            {creatingCategoriaBusy && <Loader2 className="size-3 animate-spin" />}
+                            Crear categoría
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {creatingItemError && (
                   <p className="text-[11px] text-destructive inline-flex items-center gap-1">
                     <AlertCircle className="size-3" strokeWidth={1.75} />
@@ -1158,7 +1296,7 @@ export default function CampaniaDetalle() {
                 <button type="button" onClick={() => { setCreatingItem(null); setCreatingItemError(null) }} className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent">
                   Cancelar
                 </button>
-                <button type="submit" disabled={!creatingItem.nombre.trim() || creatingItemBusy} className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                <button type="submit" disabled={!creatingItem.nombre.trim() || creatingItemBusy || (creatingItem.kind === 'insumo' && !creatingItem.categoriaId)} className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2">
                   {creatingItemBusy && <Loader2 className="size-4 animate-spin" />}
                   {creatingItemBusy ? 'Creando…' : 'Crear'}
                 </button>
@@ -1244,6 +1382,13 @@ function NumberInput2({
   className?: string
 }) {
   const [display, setDisplay] = useState<string>(formatInputNumber(value))
+  const focusedRef = useRef(false)
+  // Refleja cambios externos del value (por ej. la precarga del precio de
+  // referencia al seleccionar un ítem) sólo cuando el input no está enfocado,
+  // para no pisar lo que el usuario está escribiendo.
+  useEffect(() => {
+    if (!focusedRef.current) setDisplay(formatInputNumber(value))
+  }, [value])
   return (
     <input
       type="number"
@@ -1251,8 +1396,10 @@ function NumberInput2({
       min={min}
       max={max}
       value={display}
-      onChange={(e) => setDisplay(e.target.value)}
+      onChange={(e) => { focusedRef.current = true; setDisplay(e.target.value) }}
+      onFocus={() => { focusedRef.current = true }}
       onBlur={() => {
+        focusedRef.current = false
         const n = round2(parseFloat(display) || 0)
         setDisplay(formatInputNumber(n))
         onCommit(n)
@@ -1350,17 +1497,19 @@ function FilaRes({
 // Tabla de detalle genérica
 // ---------------------------------------------------------------------------
 type ColumnDef =
-  | { key: string; label: string; kind: 'select-with-create'; align?: 'right' }
+  | { key: string; label: string; kind: 'select-with-create'; align?: 'right'; preloadField?: string }
   | { key: string; label: string; kind: 'date'; align?: 'right' }
   | { key: string; label: string; kind: 'number'; align?: 'right' }
   | { key: string; label: string; kind: 'readonly-money'; align?: 'right' }
+
+type CatalogOption = { id: number; nombre: string; precioUnitario?: number | null }
 
 interface DetalleTableProps<T extends { id: number }> {
   title: string
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   columns: ColumnDef[]
   rows: T[]
-  catalogOptions: { id: number; nombre: string }[]
+  catalogOptions: CatalogOption[]
   addLabel: string
   canAdd: boolean
   onAdd: () => void | Promise<void>
@@ -1377,6 +1526,22 @@ function DetalleTable<T extends { id: number }>({
   title, icon: Icon, columns, rows, catalogOptions, addLabel, canAdd,
   onAdd, onChange, onRemove, onCreateNew, computedRow, totalLabel, totalValue, emptyHint,
 }: DetalleTableProps<T>) {
+  // Fusiona las opciones activas del catálogo con los ítems ya referenciados
+  // por filas guardadas (que pueden estar inactivos) para no perder su nombre
+  // en el <select>.
+  const catalogWithSaved = useMemo(() => {
+    const map = new Map<number, CatalogOption>()
+    for (const o of catalogOptions) map.set(o.id, o)
+    for (const r of rows as Array<Record<string, unknown>>) {
+      const rel = (r.labor || r.insumo || r.costo) as { id?: number; nombre?: string; precioUnitario?: number | null } | undefined
+      if (rel?.id && rel.nombre) {
+        const prev = map.get(rel.id)
+        map.set(rel.id, { id: rel.id, nombre: rel.nombre, precioUnitario: prev?.precioUnitario ?? rel.precioUnitario })
+      }
+    }
+    return Array.from(map.values())
+  }, [catalogOptions, rows])
+
   return (
     <section className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
@@ -1428,7 +1593,7 @@ function DetalleTable<T extends { id: number }>({
                         key={c.key}
                         className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}
                       >
-                        {renderCell(c, row, { catalogOptions, onChange, onCreateNew, computedRow })}
+                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow })}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right">
@@ -1469,7 +1634,7 @@ function DetalleTable<T extends { id: number }>({
 }
 
 interface CellCtx<T> {
-  catalogOptions: { id: number; nombre: string }[]
+  catalogOptions: CatalogOption[]
   onChange: (id: number, patch: Partial<T>) => void | Promise<void>
   onCreateNew: (onCreated: (id: number) => void) => void
   computedRow: (row: T) => number
@@ -1493,6 +1658,13 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
           onChange={(e) => {
             const nv = e.target.value === '' ? null : Number(e.target.value)
             ctx.onChange(row.id, { [col.key]: nv } as Partial<T>)
+            // Precarga el precio de referencia del ítem seleccionado en el
+            // campo de costo unitario (editable después). Se asigna siempre:
+            // 0 si el ítem no tiene precio de referencia.
+            if (col.preloadField && nv != null) {
+              const opt = ctx.catalogOptions.find((o) => o.id === nv)
+              ctx.onChange(row.id, { [col.preloadField]: opt?.precioUnitario ?? 0 } as Partial<T>)
+            }
           }}
           className="flex-1 min-w-0 px-2 py-1 bg-background border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
         >

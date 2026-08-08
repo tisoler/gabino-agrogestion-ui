@@ -17,10 +17,12 @@ import {
   Sun,
   Moon,
   Monitor,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme, type ThemeMode } from '../contexts/ThemeContext'
+import { getRoleLabel } from '../constantes'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -43,6 +45,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: LucideIcon }[] = [
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/campanias', label: 'Campañas', icon: Calendar, permission: 'lectura:campania' },
+  { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
   { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
   { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },
   { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo' },
@@ -57,8 +60,10 @@ interface SidebarContentProps extends SidebarProps {
 
 function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarContentProps) {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
-  const { user, logout, permisos, currentEmpresa, isSysAdmin } = useAuth()
+  const { user, logout, permisos } = useAuth()
   const { mode, setMode } = useTheme()
+
+  const roleLabel = getRoleLabel(user?.roles)
 
   const hasPermission = (permission: string) => permisos.includes(permission)
 
@@ -180,9 +185,11 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
           {!isCollapsed && (
             <div className="flex flex-col overflow-hidden leading-tight min-w-0">
               <span className="text-sm font-medium truncate">{user?.nombreUsuario?.split('@')[0]}</span>
-              <span className="text-[11px] text-muted-foreground truncate">
-                {isSysAdmin ? 'Sys-admin · todas las empresas' : currentEmpresa || 'Sin empresa'}
-              </span>
+              {roleLabel && (
+                <span className="mt-1 inline-flex self-start text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary-soft rounded-full px-2 py-0.5">
+                  {roleLabel}
+                </span>
+              )}
             </div>
           )}
         </div>
