@@ -63,6 +63,7 @@ export interface CampaniaInsumoDetalle {
   idInsumo: number
   unidadesHa: number
   costoUnidad: number
+  superficieAplicada: number
   insumo?: InsumoItem
 }
 
@@ -78,8 +79,7 @@ export interface CampaniaCostoDetalle {
 export interface Campania {
   id: number
   nombre: string
-  anioDesde: number
-  anioHasta: number
+  campania: string
   idLote: number
   idCultivo: number
   idVariedad: number | null
@@ -132,6 +132,21 @@ export interface ResultadosCampania {
 const num = (v: number | null | undefined): number => (v === null || v === undefined || Number.isNaN(v) ? 0 : Number(v))
 
 /**
+ * Períodos válidos de campaña ("YY/YY"), precargados. Arranca en 25/26 y llega
+ * hasta el período actual (año en curso / año siguiente). A partir del 1 de
+ * enero de cada año se habilita el período del año en curso. Orden: más reciente
+ * primero.
+ */
+export function periodosCampania(): string[] {
+  const currentYear = new Date().getFullYear()
+  const periods: string[] = []
+  for (let y = 2025; y <= currentYear; y++) {
+    periods.push(`${String(y % 100).padStart(2, '0')}/${String((y + 1) % 100).padStart(2, '0')}`)
+  }
+  return periods.reverse()
+}
+
+/**
  * Costo ponderado por ha de una labor individual.
  *  ponderado = (costo/ha × sup. laboreada) / sup. sembrada del lote
  *  Si no hay sup. sembrada definida, devuelve 0 para evitar NaN.
@@ -146,6 +161,16 @@ export function costoPonderadoHa(labor: CampaniaLaborDetalle, supSembrada: numbe
  */
 export function costoTotalInsumoRowHa(item: CampaniaInsumoDetalle): number {
   return num(item.unidadesHa) * num(item.costoUnidad)
+}
+
+/**
+ * Costo ponderado por ha de un insumo individual.
+ *  ponderado = (unidades/ha × costo/unidad × sup. aplicada) / sup. sembrada
+ *  Misma lógica que el ponderado de labores. Si no hay sup. sembrada, 0.
+ */
+export function costoPonderadoInsumoRowHa(item: CampaniaInsumoDetalle, supSembrada: number): number {
+  if (supSembrada <= 0) return 0
+  return (num(item.unidadesHa) * num(item.costoUnidad) * num(item.superficieAplicada)) / supSembrada
 }
 
 /**
@@ -187,7 +212,7 @@ export function calcularResultados(c: Pick<Campania,
     (acc, l) => acc + costoPonderadoHa(l, supSembrada), 0
   )
   const costoTotalInsumosHa = (c.insumos || []).reduce(
-    (acc, i) => acc + costoTotalInsumoRowHa(i), 0
+    (acc, i) => acc + costoPonderadoInsumoRowHa(i, supSembrada), 0
   )
   const costoTotalCostosHa = (c.costos || []).reduce(
     (acc, k) => acc + costoTotalCostoRowHa(k), 0

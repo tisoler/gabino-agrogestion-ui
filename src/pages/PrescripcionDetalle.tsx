@@ -53,7 +53,7 @@ export default function PrescripcionDetalle() {
   }
 
   const empresa = prescripcion.campania?.lote
-    ? { id: prescripcion.campania.lote.idEmpresa, nombre: `Empresa #${prescripcion.campania.lote.idEmpresa}` }
+    ? { id: prescripcion.campania.lote.idEmpresa, nombre: `Productor #${prescripcion.campania.lote.idEmpresa}` }
     : null
 
   return (
@@ -93,7 +93,16 @@ export default function PrescripcionDetalle() {
           <div className="flex items-center gap-2">
             <Calendar className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
             <div>
-              <p className="text-sm font-medium text-foreground">{prescripcion.campania?.nombre || '—'}</p>
+              {prescripcion.campania ? (
+                <Link
+                  to={`/campanias/${prescripcion.campania.id}`}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {prescripcion.campania.nombre || `Campaña #${prescripcion.campania.id}`}
+                </Link>
+              ) : (
+                <p className="text-sm font-medium text-foreground">—</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -148,6 +157,9 @@ export default function PrescripcionDetalle() {
                   <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-left">
                     Insumo
                   </th>
+                  <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-left">
+                    Unidad
+                  </th>
                   <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
                     Cantidad / ha
                   </th>
@@ -162,6 +174,7 @@ export default function PrescripcionDetalle() {
                     <td className="px-4 py-3 font-medium text-foreground">
                       {i.insumo?.nombre || `Insumo #${i.idInsumo}`}
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground">{i.insumo?.unidad || '—'}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadPorHa)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadTotal)}</td>
                   </tr>

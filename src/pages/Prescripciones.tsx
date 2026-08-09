@@ -162,7 +162,7 @@ export default function Prescripciones() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Empresa
+              Productor
             </label>
             <select
               value={filterEmpresaId ?? ''}
@@ -173,7 +173,7 @@ export default function Prescripciones() {
               }}
               className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
-              <option value="">Todas</option>
+              <option value="">Todos</option>
               {empresasVisibles.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}

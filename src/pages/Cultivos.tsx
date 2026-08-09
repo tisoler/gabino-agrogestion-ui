@@ -51,6 +51,8 @@ export default function Cultivos() {
   })
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -103,6 +105,7 @@ export default function Cultivos() {
   }, [cultivos, searchTerm])
 
   const handleOpenModal = (cultivo: Cultivo | null = null) => {
+    setFormError(null)
     if (cultivo) {
       setEditingCultivo(cultivo)
       setFormData({
@@ -125,6 +128,8 @@ export default function Cultivos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    setSaving(true)
     try {
       const payload = {
         ...formData,
@@ -137,8 +142,11 @@ export default function Cultivos() {
       }
       setIsModalOpen(false)
       mutate()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al guardar cultivo', err)
+      setFormError(err?.response?.data?.message || err?.message || 'No se pudo guardar el cultivo')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -244,17 +252,16 @@ export default function Cultivos() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
-              ['empresa', 'Por empresa'],
+              ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setScope(key)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  scope === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-accent text-foreground hover:bg-muted'
-                }`}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${scope === key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
               >
                 {label}
               </button>
@@ -262,12 +269,12 @@ export default function Cultivos() {
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
             <select
-              aria-label="Empresa"
+              aria-label="Productor"
               value={scopeEmpresaId ?? ''}
               onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
               className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="">Seleccionar empresa</option>
+              <option value="">Seleccionar productor</option>
               {scopeEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
@@ -276,7 +283,7 @@ export default function Cultivos() {
             </select>
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
-            <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus cultivos.</span>
+            <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus cultivos.</span>
           )}
         </div>
       </div>
@@ -350,11 +357,10 @@ export default function Cultivos() {
                       <td className="px-4 py-3 font-medium text-foreground">{cultivo.nombre}</td>
                       <td className="px-4 py-3">
                         {cultivo.tipoCosecha ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
-                            cultivo.tipoCosecha === 'fina'
-                              ? 'bg-info-soft text-info'
-                              : 'bg-warning-soft text-warning-foreground'
-                          }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${cultivo.tipoCosecha === 'fina'
+                            ? 'bg-info-soft text-info'
+                            : 'bg-warning-soft text-warning-foreground'
+                            }`}>
                             {cultivo.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
                           </span>
                         ) : (
@@ -376,18 +382,17 @@ export default function Cultivos() {
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                             <Sprout className="size-3" strokeWidth={2} />
                             {isAdmin || isAsesor
-                              ? `${empresas.find((e) => e.id === cultivo.idEmpresa)?.nombre || 'Empresa'} · ${cultivo.idEmpresa}`
-                              : 'Mi Empresa'}
+                              ? `${empresas.find((e) => e.id === cultivo.idEmpresa)?.nombre || 'Productor'} · ${cultivo.idEmpresa}`
+                              : 'Mi productor'}
                           </span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
-                            cultivo.activo
-                              ? 'bg-success-soft text-success'
-                              : 'bg-destructive-soft text-destructive'
-                          }`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${cultivo.activo
+                            ? 'bg-success-soft text-success'
+                            : 'bg-destructive-soft text-destructive'
+                            }`}
                         >
                           {cultivo.activo ? 'Activo' : 'Inactivo'}
                         </span>
@@ -414,11 +419,10 @@ export default function Cultivos() {
                               </button>
                               <button
                                 onClick={() => handleToggleActivo(cultivo, 'cultivo')}
-                                className={`p-1.5 rounded-md transition-colors ${
-                                  cultivo.activo
-                                    ? 'text-success hover:bg-success-soft'
-                                    : 'text-muted-foreground hover:bg-muted'
-                                }`}
+                                className={`p-1.5 rounded-md transition-colors ${cultivo.activo
+                                  ? 'text-success hover:bg-success-soft'
+                                  : 'text-muted-foreground hover:bg-muted'
+                                  }`}
                                 title={cultivo.activo ? 'Desactivar' : 'Activar'}
                                 aria-label={cultivo.activo ? 'Desactivar' : 'Activar'}
                               >
@@ -450,9 +454,8 @@ export default function Cultivos() {
                               {cultivo.variedades.map((v) => (
                                 <div
                                   key={v.id}
-                                  className={`flex items-center justify-between p-2.5 bg-card border border-border rounded-md ${
-                                    !v.activo ? 'opacity-60' : ''
-                                  }`}
+                                  className={`flex items-center justify-between p-2.5 bg-card border border-border rounded-md ${!v.activo ? 'opacity-60' : ''
+                                    }`}
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
                                     <Layers className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
@@ -475,11 +478,10 @@ export default function Cultivos() {
                                       </button>
                                       <button
                                         onClick={() => handleToggleActivo(v, 'variedad')}
-                                        className={`p-1 rounded transition-colors ${
-                                          v.activo
-                                            ? 'text-success hover:bg-success-soft'
-                                            : 'text-muted-foreground hover:bg-muted'
-                                        }`}
+                                        className={`p-1 rounded transition-colors ${v.activo
+                                          ? 'text-success hover:bg-success-soft'
+                                          : 'text-muted-foreground hover:bg-muted'
+                                          }`}
                                         title={v.activo ? 'Desactivar' : 'Activar'}
                                         aria-label={v.activo ? 'Desactivar' : 'Activar'}
                                       >
@@ -571,38 +573,52 @@ export default function Cultivos() {
               </div>
               {isAdmin && (
                 <div className="space-y-1.5">
-                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Empresa destino</label>
+                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
                   <select
                     id="cultivo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
-                    <option value="">Global (todas las empresas)</option>
-                    {empresas?.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                    <option value="">Global (todos los productores)</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
+                    {empresas?.map((e) => <option key={e.id} value={String(e.id)}>{e.nombre}</option>)}
                   </select>
                 </div>
               )}
-              {!isAdmin && !editingCultivo && userEmpresas.length > 1 && (
+              {!isAdmin && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
-                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Empresa destino</label>
+                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
                   <select
                     id="cultivo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     required
                   >
-                    <option value="">Seleccionar empresa</option>
+                    <option value="">Seleccionar productor</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas
                       .filter((e) => userEmpresas.includes(e.id))
-                      .map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                      .map((e) => <option key={e.id} value={String(e.id)}>{e.nombre}</option>)}
                   </select>
                 </div>
+              )}
+              {formError && (
+                <p className="text-xs text-destructive inline-flex items-center gap-1.5 bg-destructive-soft border border-destructive/20 rounded-md px-3 py-2">
+                  <AlertCircle className="size-3.5 shrink-0" strokeWidth={1.75} />
+                  {formError}
+                </p>
               )}
               <div className="flex gap-2 pt-3">
                 <button
@@ -614,9 +630,17 @@ export default function Cultivos() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {editingCultivo ? 'Guardar cambios' : 'Crear Cultivo'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {editingCultivo ? 'Guardando…' : 'Creando…'}
+                    </>
+                  ) : (
+                    editingCultivo ? 'Guardar cambios' : 'Crear Cultivo'
+                  )}
                 </button>
               </div>
             </form>

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { UNIDADES_PRECIO } from '../constantes'
 
 interface Costo {
   id: number
@@ -13,6 +14,7 @@ interface Costo {
   descripcion: string | null
   idEmpresa: number | null
   precioUnitario?: number | null
+  unidad?: string | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
@@ -30,11 +32,13 @@ export default function Costos() {
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    idEmpresa: null as number | null
+    idEmpresa: null as number | null,
+    unidad: '' as string
   })
   const [precioUnitario, setPrecioUnitario] = useState('')
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
 
   const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -96,7 +100,8 @@ export default function Costos() {
       setFormData({
         nombre: costo.nombre,
         descripcion: costo.descripcion || '',
-        idEmpresa: costo.idEmpresa
+        idEmpresa: costo.idEmpresa,
+        unidad: costo.unidad || ''
       })
       setPrecioUnitario(costo.precioUnitario != null ? String(costo.precioUnitario) : '')
     } else {
@@ -104,7 +109,8 @@ export default function Costos() {
       setFormData({
         nombre: '',
         descripcion: '',
-        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null),
+        unidad: ''
       })
       setPrecioUnitario('')
     }
@@ -113,9 +119,12 @@ export default function Costos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    setSaving(true)
     const payload = {
       ...formData,
-      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
+      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario),
+      unidad: formData.unidad || null
     }
     try {
       if (editingCosto) {
@@ -127,6 +136,8 @@ export default function Costos() {
       mutate()
     } catch (err) {
       console.error('Error al guardar costo', err)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -196,17 +207,16 @@ export default function Costos() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
-              ['empresa', 'Por empresa'],
+              ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setScope(key)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  scope === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-accent text-foreground hover:bg-muted'
-                }`}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${scope === key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
               >
                 {label}
               </button>
@@ -214,12 +224,12 @@ export default function Costos() {
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
             <select
-              aria-label="Empresa"
+              aria-label="Productor"
               value={scopeEmpresaId ?? ''}
               onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
               className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="">Seleccionar empresa</option>
+              <option value="">Seleccionar productor</option>
               {scopeEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
@@ -228,7 +238,7 @@ export default function Costos() {
             </select>
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
-            <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus costos.</span>
+            <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus costos.</span>
           )}
         </div>
       </div>
@@ -259,9 +269,8 @@ export default function Costos() {
               return (
                 <div
                   key={costo.id}
-                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${
-                    !costo.activo ? 'opacity-60' : ''
-                  }`}
+                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${!costo.activo ? 'opacity-60' : ''
+                    }`}
                 >
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
@@ -284,6 +293,7 @@ export default function Costos() {
                       {costo.precioUnitario != null && (
                         <p className="text-sm font-medium text-success mt-0.5">
                           ${Number(costo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {costo.unidad ? ` / ${costo.unidad}` : ''}
                         </p>
                       )}
                     </div>
@@ -300,11 +310,10 @@ export default function Costos() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(costo)}
-                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                              costo.activo
-                                ? 'text-success hover:bg-success-soft'
-                                : 'text-muted-foreground hover:bg-muted'
-                            }`}
+                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${costo.activo
+                              ? 'text-success hover:bg-success-soft'
+                              : 'text-muted-foreground hover:bg-muted'
+                              }`}
                             title={costo.activo ? 'Desactivar' : 'Activar'}
                             disabled={updatingIds.has(costo.id)}
                             aria-label={costo.activo ? 'Desactivar' : 'Activar'}
@@ -332,7 +341,7 @@ export default function Costos() {
                   {(isAdmin || isAsesor) && costo.idEmpresa !== null && (
                     <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                       <Package className="size-3" strokeWidth={1.75} />
-                      <span>Empresa: {empresas.find((e) => e.id === costo.idEmpresa)?.nombre || `ID: ${costo.idEmpresa}`}</span>
+                      <span>Productor: {empresas.find((e) => e.id === costo.idEmpresa)?.nombre || `ID: ${costo.idEmpresa}`}</span>
                     </div>
                   )}
                 </div>
@@ -352,7 +361,10 @@ export default function Costos() {
                       Descripción
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
-                      Precio unitario
+                      Precio
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Unidad
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
@@ -383,8 +395,13 @@ export default function Costos() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground">
-                            {costo.precioUnitario != null ? `$${Number(costo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            {costo.precioUnitario != null
+                              ? `$${Number(costo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${costo.unidad ? ` / ${costo.unidad}` : ''}`
+                              : '—'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-muted-foreground">{costo.unidad || '—'}</span>
                         </td>
                         <td className="px-4 py-3">
                           {costo.idEmpresa === null ? (
@@ -396,18 +413,17 @@ export default function Costos() {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Package className="size-3" strokeWidth={2} />
                               {isAdmin || isAsesor
-                                ? `${empresas.find((e) => e.id === costo.idEmpresa)?.nombre || 'Empresa'} · ${costo.idEmpresa}`
-                                : 'Mi Empresa'}
+                                ? `${empresas.find((e) => e.id === costo.idEmpresa)?.nombre || 'Productor'} · ${costo.idEmpresa}`
+                                : 'Mi productor'}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
-                              costo.activo
-                                ? 'bg-success-soft text-success'
-                                : 'bg-destructive-soft text-destructive'
-                            }`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${costo.activo
+                              ? 'bg-success-soft text-success'
+                              : 'bg-destructive-soft text-destructive'
+                              }`}
                           >
                             {costo.activo ? 'Activo' : 'Inactivo'}
                           </span>
@@ -426,11 +442,10 @@ export default function Costos() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(costo)}
-                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                                    costo.activo
-                                      ? 'text-success hover:bg-success-soft'
-                                      : 'text-muted-foreground hover:bg-muted'
-                                  }`}
+                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${costo.activo
+                                    ? 'text-success hover:bg-success-soft'
+                                    : 'text-muted-foreground hover:bg-muted'
+                                    }`}
                                   title={costo.activo ? 'Desactivar' : 'Activar'}
                                   disabled={updatingIds.has(costo.id)}
                                   aria-label={costo.activo ? 'Desactivar' : 'Activar'}
@@ -524,7 +539,7 @@ export default function Costos() {
 
               <div className="space-y-1.5">
                 <label htmlFor="costo-precio" className="text-xs font-medium text-foreground">
-                  Precio unitario (referencia)
+                  Precio referencia
                 </label>
                 <input
                   id="costo-precio"
@@ -538,48 +553,73 @@ export default function Costos() {
                 />
               </div>
 
-{isAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="costo-unidad" className="text-xs font-medium text-foreground">
+                  Unidad
+                </label>
+                <select
+                  id="costo-unidad"
+                  value={formData.unidad}
+                  onChange={(e) => setFormData({ ...formData, unidad: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
+                >
+                  <option value="">Sin unidad</option>
+                  {UNIDADES_PRECIO.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+
+              {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="costo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
-                    <option value="">Global (todas las empresas)</option>
+                    <option value="">Global (todos los productores)</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas?.map((e) => (
-                      <option key={e.id} value={e.id}>{e.nombre}</option>
+                      <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                     ))}
                   </select>
                   <p className="text-[11px] text-muted-foreground">
-                    Solo como sys-admin puedes crear costos globales o asignarlos a otras empresas.
+                    Solo como sys-admin puedes crear costos globales o asignarlos a otros productores.
                   </p>
                 </div>
               )}
-              {!isAdmin && !editingCosto && userEmpresas.length > 1 && (
+              {!isAdmin && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
                   <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="costo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     required
                   >
-                    <option value="">Seleccionar empresa</option>
+                    <option value="">Seleccionar productor</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas
                       .filter((e) => userEmpresas.includes(e.id))
                       .map((e) => (
-                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                        <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                       ))}
                   </select>
                 </div>
@@ -595,9 +635,17 @@ export default function Costos() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {editingCosto ? 'Guardar cambios' : 'Crear Costo'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {editingCosto ? 'Guardando…' : 'Creando…'}
+                    </>
+                  ) : (
+                    editingCosto ? 'Guardar cambios' : 'Crear Costo'
+                  )}
                 </button>
               </div>
             </form>

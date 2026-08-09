@@ -19,3 +19,6 @@ export function getRoleLabel(roles: string[] | undefined): string {
   }
   return ''
 }
+
+/** Unidades de medida admitidas para el precio de insumos y costos. */
+export const UNIDADES_PRECIO = ['ton', 'kg', 'lt', 'unidad', 'ha', 'hr'] as const

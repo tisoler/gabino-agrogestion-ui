@@ -106,10 +106,10 @@ export default function Productores() {
           usuarios: matchesEmpresa
             ? empresa.usuarios
             : empresa.usuarios.filter(
-                (u) =>
-                  (u.nombreUsuario?.toLowerCase() || '').includes(term) ||
-                  (u.email?.toLowerCase() || '').includes(term),
-              ),
+              (u) =>
+                (u.nombreUsuario?.toLowerCase() || '').includes(term) ||
+                (u.email?.toLowerCase() || '').includes(term),
+            ),
         }
       })
       .filter((x): x is EmpresaConUsuarios => x !== null)
@@ -154,7 +154,7 @@ export default function Productores() {
       setIsCreateOpen(false)
       mutate()
     } catch (err) {
-      console.error('Error al crear empresa', err)
+      console.error('Error al crear productor', err)
     } finally {
       setCreating(false)
     }
@@ -182,10 +182,10 @@ export default function Productores() {
 
   const handleRemove = (uid: string, empresaId: number, nombre: string) => {
     if (!isAdmin && uid === user?.id) {
-      setActionError('No podés desasociarte a vos mismo de una empresa.')
+      setActionError('No podés desasociarte a vos mismo de un productor.')
       return
     }
-    if (typeof window !== 'undefined' && !window.confirm(`¿Desasociar a ${nombre} de esta empresa?`)) {
+    if (typeof window !== 'undefined' && !window.confirm(`¿Desasociar a ${nombre} de este productor?`)) {
       return
     }
     updateUserEmpresas(uid, { remove: [empresaId] })
@@ -272,11 +272,11 @@ export default function Productores() {
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Empresas y sus usuarios (asesores y productores)
+            Productores y sus usuarios (asesores y productores)
           </p>
           {currentEmpresa && !isAdmin && (
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Empresa actual: <span className="font-medium text-foreground">{currentEmpresa}</span>
+              Productor actual: <span className="font-medium text-foreground">{currentEmpresa}</span>
             </p>
           )}
         </div>
@@ -287,7 +287,7 @@ export default function Productores() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
           >
             <Plus className="size-4" strokeWidth={2} />
-            <span>Nueva Empresa</span>
+            <span>Nuevo Productor</span>
           </button>
         )}
       </div>
@@ -312,16 +312,16 @@ export default function Productores() {
 
       {!isLoading && data && data.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-card border border-border rounded-lg p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Empresas</p>
-            <p className="text-2xl font-semibold text-foreground mt-1">{data.length}</p>
+          <div className="bg-primary-soft border border-primary/30 rounded-lg p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">Productores (unidades de negocio)</p>
+            <p className="text-2xl font-semibold text-primary mt-1">{data.length}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Asesores</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Usuarios asesores</p>
             <p className="text-2xl font-semibold text-foreground mt-1">{totalAsesores}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Productores</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Usuarios productores</p>
             <p className="text-2xl font-semibold text-foreground mt-1">{totalProductores}</p>
           </div>
         </div>
@@ -332,7 +332,7 @@ export default function Productores() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
           <input
             type="text"
-            placeholder="Buscar por empresa, asesor o productor..."
+            placeholder="Buscar por productor, asesor o usuario..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
@@ -343,13 +343,13 @@ export default function Productores() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center p-12 bg-card rounded-lg border border-border border-dashed">
           <Activity className="size-8 text-primary mb-3 animate-pulse" strokeWidth={1.75} />
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando empresas y usuarios...</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando productores y usuarios...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 bg-card rounded-lg border border-border">
           <Building2 className="size-10 text-muted-foreground/40 mb-3" strokeWidth={1.5} />
           <p className="text-sm text-muted-foreground">
-            {searchTerm ? 'No se encontraron empresas con esos criterios.' : 'No hay empresas asignadas a tu usuario.'}
+            {searchTerm ? 'No se encontraron productores con esos criterios.' : 'No hay productores asignados a tu usuario.'}
           </p>
         </div>
       ) : (
@@ -467,7 +467,7 @@ export default function Productores() {
 
                     {empresa.usuarios.length === 0 && (
                       <p className="text-sm text-muted-foreground px-1">
-                        Aún no hay usuarios vinculados a esta empresa.
+                        Aún no hay usuarios vinculados a este productor.
                       </p>
                     )}
 
@@ -501,7 +501,7 @@ export default function Productores() {
           />
           <div className="relative w-full max-w-lg bg-card border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
             <div className="px-5 py-4 border-b border-border flex justify-between items-center shrink-0">
-              <h2 className="text-base font-semibold text-foreground">Nueva Empresa</h2>
+              <h2 className="text-base font-semibold text-foreground">Nuevo Productor</h2>
               <button
                 onClick={() => setIsCreateOpen(false)}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -565,9 +565,8 @@ export default function Productores() {
                           key={u.uid}
                           type="button"
                           onClick={() => toggleCreateUser(u.uid)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/30 transition-colors ${
-                            selected ? 'bg-primary-soft/40' : ''
-                          }`}
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/30 transition-colors ${selected ? 'bg-primary-soft/40' : ''
+                            }`}
                         >
                           <div
                             className={`size-7 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
@@ -588,11 +587,10 @@ export default function Productores() {
                             {badge.label}
                           </span>
                           <div
-                            className={`size-5 rounded border flex items-center justify-center shrink-0 ${
-                              selected
-                                ? 'bg-primary border-primary text-primary-foreground'
-                                : 'border-border'
-                            }`}
+                            className={`size-5 rounded border flex items-center justify-center shrink-0 ${selected
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'border-border'
+                              }`}
                           >
                             {selected && <Check className="size-3.5" strokeWidth={2.5} />}
                           </div>
@@ -620,7 +618,7 @@ export default function Productores() {
                   className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={creating || !newName.trim()}
                 >
-                  {creating ? 'Creando…' : 'Crear empresa'}
+                  {creating ? 'Creando…' : 'Crear productor'}
                 </button>
               </div>
             </form>
@@ -641,7 +639,7 @@ export default function Productores() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">Agregar usuario</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Empresa destino: <span className="font-medium text-foreground">{addModalEmpresa.nombre}</span>
+                  Productor: <span className="font-medium text-foreground">{addModalEmpresa.nombre}</span>
                 </p>
               </div>
               <button
@@ -671,55 +669,55 @@ export default function Productores() {
                 <p className="text-sm text-muted-foreground text-center py-6">
                   {addSearch
                     ? 'No hay coincidencias.'
-                    : 'Todos los usuarios disponibles ya están asociados a esta empresa.'}
+                    : 'Todos los usuarios disponibles ya están asociados a este productor.'}
                 </p>
               ) : (
                 candidatesForModal.map((u) => {
                   const badge = getRoleBadge(u.roles)
                   return (
-                  <div
-                    key={u.uid}
-                    className="flex items-center gap-3 p-2.5 bg-card border border-border rounded-md"
-                  >
                     <div
-                      className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
+                      key={u.uid}
+                      className="flex items-center gap-3 p-2.5 bg-card border border-border rounded-md"
                     >
-                      {getInitials(u.nombreUsuario || u.email)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {u.nombreUsuario || u.email || u.uid}
-                        </p>
-                        <span
-                          className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
-                        >
-                          {badge.label}
-                        </span>
+                      <div
+                        className={`size-8 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 ${badge.cls}`}
+                      >
+                        {getInitials(u.nombreUsuario || u.email)}
                       </div>
-                      {u.email && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                          <Mail className="size-3 shrink-0" strokeWidth={1.75} />
-                          <span className="truncate">{u.email}</span>
-                        </p>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {u.nombreUsuario || u.email || u.uid}
+                          </p>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
+                        {u.email && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                            <Mail className="size-3 shrink-0" strokeWidth={1.75} />
+                            <span className="truncate">{u.email}</span>
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAdd(u.uid)}
+                        disabled={pendingUid === u.uid}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+                      >
+                        {pendingUid === u.uid ? (
+                          <Activity className="size-3 animate-spin" />
+                        ) : (
+                          <UserPlus className="size-3" strokeWidth={2} />
+                        )}
+                        <span>Agregar</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleAdd(u.uid)}
-                      disabled={pendingUid === u.uid}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
-                    >
-                      {pendingUid === u.uid ? (
-                        <Activity className="size-3 animate-spin" />
-                      ) : (
-                        <UserPlus className="size-3" strokeWidth={2} />
-                      )}
-                      <span>Agregar</span>
-                    </button>
-                  </div>
-                )
-              })
+                  )
+                })
               )}
             </div>
 
@@ -775,8 +773,8 @@ function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
           onClick={onRemove}
           disabled={isPending}
           className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive-soft hover:text-destructive transition-colors disabled:opacity-50 shrink-0"
-          title="Desasociar de esta empresa"
-          aria-label="Desasociar de esta empresa"
+          title="Desasociar de este productor"
+          aria-label="Desasociar de este productor"
         >
           {isPending ? (
             <Activity className="size-3.5 animate-spin" />

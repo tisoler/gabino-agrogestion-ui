@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Calendar, Building2,
@@ -7,9 +7,9 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { periodosCampania } from '../lib/campanias'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
-const currentYear = new Date().getFullYear()
 const todayLocalISO = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -18,12 +18,13 @@ const todayLocalISO = () => {
 interface CampaniaOption {
   id: number
   nombre: string
+  campania: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
 }
 interface Lote { id: number; idEmpresa: number; descripcion: string | null }
 interface Cultivo { id: number; nombre: string; variedades: { id: number; nombre: string }[] }
 interface Labor { id: number; nombre: string }
-interface Insumo { id: number; nombre: string }
+interface Insumo { id: number; nombre: string; unidad?: string | null }
 interface Categoria { id: number; nombre: string }
 
 interface InsumoRow {
@@ -34,15 +35,24 @@ interface InsumoRow {
   lastEdited: 'porHa' | 'total' | null
 }
 
-const num = (s: string): number => (s.trim() === '' ? 0 : Number(s))
+const num = (s: string): number => {
+  const t = s.trim()
+  if (t === '') return 0
+  const n = Number(t.replace(/,/g, '.'))
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Normaliza el separador decimal a coma (acepta punto o coma al tipear). */
+const fmtInputDecimal = (s: string): string => s.replace(/\./g, ',')
 
 function fmtNumValue(n: number): string {
   if (!Number.isFinite(n) || n === 0) return n === 0 ? '0' : ''
-  return n.toLocaleString('es-AR', { maximumFractionDigits: 4 })
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 2 })
 }
 
 export default function PrescripcionNueva() {
   const navigate = useNavigate()
+  const { mutate } = useSWRConfig()
   const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:prescripcion')
@@ -80,6 +90,11 @@ export default function PrescripcionNueva() {
     [lotes, idEmpresa]
   )
 
+  const campaniaSel = useMemo(
+    () => (idCampania === '' ? undefined : campanias.find((c) => c.id === Number(idCampania))),
+    [campanias, idCampania]
+  )
+
   // Paso 2: labor + total ha
   const [idLabor, setLabor] = useState<number | ''>('')
   const [totalHa, setTotalHa] = useState('')
@@ -91,7 +106,7 @@ export default function PrescripcionNueva() {
   // Modales
   const [showCampaniaModal, setShowCampaniaModal] = useState(false)
   const [campaniaForm, setCampaniaForm] = useState({
-    nombre: '', anioDesde: currentYear, anioHasta: currentYear,
+    nombre: '', campania: periodosCampania()[0] || '',
     idLote: '' as number | '', idCultivo: '' as number | '', idVariedad: '' as number | '',
   })
   const [showInsumoModal, setShowInsumoModal] = useState(false)
@@ -122,25 +137,27 @@ export default function PrescripcionNueva() {
 
   // Edición de cantidad con recálculo del otro campo: total = cant_ha * total_ha
   const updatePorHa = (tempId: number, value: string) => {
+    const clean = fmtInputDecimal(value)
     setInsumoRows((rows) =>
       rows.map((r) =>
         r.tempId === tempId
-          ? { ...r, cantidadPorHa: value, lastEdited: 'porHa', cantidadTotal: fmtNumValue(num(value) * totalHaNum) }
+          ? { ...r, cantidadPorHa: clean, lastEdited: 'porHa', cantidadTotal: fmtNumValue(num(clean) * totalHaNum) }
           : r
       )
     )
   }
 
   const updateTotal = (tempId: number, value: string) => {
+    const clean = fmtInputDecimal(value)
     setInsumoRows((rows) =>
       rows.map((r) =>
         r.tempId === tempId
           ? {
-              ...r,
-              cantidadTotal: value,
-              lastEdited: 'total',
-              cantidadPorHa: totalHaNum > 0 ? fmtNumValue(num(value) / totalHaNum) : r.cantidadPorHa,
-            }
+            ...r,
+            cantidadTotal: clean,
+            lastEdited: 'total',
+            cantidadPorHa: totalHaNum > 0 ? fmtNumValue(num(clean) / totalHaNum) : r.cantidadPorHa,
+          }
           : r
       )
     )
@@ -159,8 +176,9 @@ export default function PrescripcionNueva() {
   }, [])
 
   const handleTotalHaChange = (value: string) => {
-    setTotalHa(value)
-    const n = num(value)
+    const clean = fmtInputDecimal(value)
+    setTotalHa(clean)
+    const n = num(clean)
     setInsumoRows((rows) => recomputeByTotalHa(rows, n))
   }
 
@@ -170,8 +188,7 @@ export default function PrescripcionNueva() {
     try {
       const payload: Record<string, unknown> = {
         nombre: campaniaForm.nombre.trim(),
-        anioDesde: Number(campaniaForm.anioDesde),
-        anioHasta: Number(campaniaForm.anioHasta),
+        campania: campaniaForm.campania,
         idLote: Number(campaniaForm.idLote),
         idCultivo: Number(campaniaForm.idCultivo),
       }
@@ -181,7 +198,7 @@ export default function PrescripcionNueva() {
       setCampania(data.id)
       setShowCampaniaModal(false)
       setCampaniaForm({
-        nombre: '', anioDesde: currentYear, anioHasta: currentYear,
+        nombre: '', campania: periodosCampania()[0] || '',
         idLote: '', idCultivo: '', idVariedad: '',
       })
     } catch (e) {
@@ -238,6 +255,21 @@ export default function PrescripcionNueva() {
           })),
       }
       const { data } = await api.post('/prescripciones', payload)
+      // La prescripción asigna labor/insumos a la campaña: invalidá el cache
+      // de campañas (detalle y listado) y de prescripciones para que reflejen
+      // los datos sin tener que refrescar la app.
+      const keyBase = (key: unknown): string =>
+        typeof key === 'string' ? key : Array.isArray(key) && typeof key[0] === 'string' ? key[0] : ''
+      await mutate(
+        (key) => keyBase(key).startsWith('/campanias'),
+        undefined,
+        { revalidate: true },
+      )
+      await mutate(
+        (key) => keyBase(key).startsWith('/prescripciones'),
+        undefined,
+        { revalidate: true },
+      )
       navigate(`/prescripciones/${data.id}`)
     } catch (e) {
       const err = e as { response?: { data?: { message?: string | string[] } } }
@@ -300,7 +332,7 @@ export default function PrescripcionNueva() {
             <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
           </div>
           <div className="space-y-1.5">
-            <label className={labelCls}>Empresa</label>
+            <label className={labelCls}>Productor</label>
             <select
               value={idEmpresa}
               onChange={(e) => {
@@ -310,7 +342,7 @@ export default function PrescripcionNueva() {
               }}
               className={inputCls}
             >
-              <option value="">Seleccionar empresa...</option>
+              <option value="">Seleccionar productor...</option>
               {empresasVisibles.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
@@ -322,7 +354,7 @@ export default function PrescripcionNueva() {
         <div className="space-y-1.5">
           <label className={labelCls}>Campaña</label>
           {idEmpresa === '' ? (
-            <p className="text-sm text-muted-foreground">Elegí primero la empresa.</p>
+            <p className="text-sm text-muted-foreground">Elegí primero el productor.</p>
           ) : (
             <>
               <select
@@ -335,9 +367,19 @@ export default function PrescripcionNueva() {
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
+              {campaniaSel && (
+                <p className="text-[12px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
+                  <span>
+                    Lote: <span className="font-medium text-foreground">{campaniaSel.lote?.descripcion || `Lote #${campaniaSel.lote?.id ?? '—'}`}</span>
+                  </span>
+                  <span>
+                    Campaña: <span className="font-medium text-foreground">{campaniaSel.campania}</span>
+                  </span>
+                </p>
+              )}
               {campanias.length === 0 && (
                 <p className="text-[12px] text-muted-foreground">
-                  Esta empresa aún no tiene campañas. Creá una para continuar.
+                  Este productor aún no tiene campañas. Creá una para continuar.
                 </p>
               )}
               <button
@@ -376,9 +418,8 @@ export default function PrescripcionNueva() {
           <div className="space-y-1.5">
             <label className={labelCls}>Total ha para aplicación</label>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={totalHa}
               onChange={(e) => handleTotalHaChange(e.target.value)}
               placeholder="0.00"
@@ -415,7 +456,7 @@ export default function PrescripcionNueva() {
         ) : (
           <div className="space-y-3">
             {insumoRows.map((row) => (
-              <div key={row.tempId} className="grid grid-cols-1 sm:grid-cols-[minmax(140px,1fr)_120px_120px_auto] gap-2 items-end">
+              <div key={row.tempId} className="grid grid-cols-1 sm:grid-cols-[minmax(140px,1fr)_80px_120px_120px_auto] gap-2 items-end">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
                     Insumo
@@ -448,12 +489,21 @@ export default function PrescripcionNueva() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+                    Unidad
+                  </label>
+                  <p className="text-sm text-foreground py-2">
+                    {row.idInsumo !== ''
+                      ? insumos.find((i) => i.id === Number(row.idInsumo))?.unidad || '—'
+                      : '—'}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
                     Cantidad / ha
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={row.cantidadPorHa}
                     onChange={(e) => updatePorHa(row.tempId, e.target.value)}
                     placeholder="0"
@@ -465,9 +515,8 @@ export default function PrescripcionNueva() {
                     Cantidad total
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={row.cantidadTotal}
                     onChange={(e) => updateTotal(row.tempId, e.target.value)}
                     placeholder="0"
@@ -536,25 +585,18 @@ export default function PrescripcionNueva() {
                   className={inputCls}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className={labelCls}>Año desde</label>
-                  <input
-                    type="number" min={1900} max={2200}
-                    value={campaniaForm.anioDesde}
-                    onChange={(e) => setCampaniaForm({ ...campaniaForm, anioDesde: Number(e.target.value) })}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className={labelCls}>Año hasta</label>
-                  <input
-                    type="number" min={1900} max={2200}
-                    value={campaniaForm.anioHasta}
-                    onChange={(e) => setCampaniaForm({ ...campaniaForm, anioHasta: Number(e.target.value) })}
-                    className={inputCls}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <label className={labelCls}>Campaña</label>
+                <select
+                  value={campaniaForm.campania}
+                  onChange={(e) => setCampaniaForm({ ...campaniaForm, campania: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="" disabled>Seleccionar período...</option>
+                  {periodosCampania().map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <label className={labelCls}>Lote</label>

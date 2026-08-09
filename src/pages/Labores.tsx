@@ -35,6 +35,7 @@ export default function Labores() {
   const [precioUnitario, setPrecioUnitario] = useState('')
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
 
   const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -113,6 +114,8 @@ export default function Labores() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    setSaving(true)
     const payload = {
       ...formData,
       precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
@@ -127,6 +130,8 @@ export default function Labores() {
       mutate()
     } catch (err) {
       console.error('Error al guardar labor', err)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -197,17 +202,16 @@ export default function Labores() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
-              ['empresa', 'Por empresa'],
+              ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setScope(key)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  scope === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-accent text-foreground hover:bg-muted'
-                }`}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${scope === key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
               >
                 {label}
               </button>
@@ -215,12 +219,12 @@ export default function Labores() {
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
             <select
-              aria-label="Empresa"
+              aria-label="Productor"
               value={scopeEmpresaId ?? ''}
               onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
               className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="">Seleccionar empresa</option>
+              <option value="">Seleccionar productor</option>
               {scopeEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
@@ -229,7 +233,7 @@ export default function Labores() {
             </select>
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
-            <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus labores.</span>
+            <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus labores.</span>
           )}
         </div>
       </div>
@@ -304,8 +308,8 @@ export default function Labores() {
                           <button
                             onClick={() => handleToggleActivo(labor)}
                             className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${labor.activo
-                                ? 'text-success hover:bg-success-soft'
-                                : 'text-muted-foreground hover:bg-muted'
+                              ? 'text-success hover:bg-success-soft'
+                              : 'text-muted-foreground hover:bg-muted'
                               }`}
                             title={labor.activo ? 'Desactivar' : 'Activar'}
                             disabled={updatingIds.has(labor.id)}
@@ -334,7 +338,7 @@ export default function Labores() {
                   {(isAdmin || isAsesor) && labor.idEmpresa !== null && (
                     <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                       <Package className="size-3" strokeWidth={1.75} />
-                      <span>Empresa: {empresas.find((e) => e.id === labor.idEmpresa)?.nombre || `ID: ${labor.idEmpresa}`}</span>
+                      <span>Productor: {empresas.find((e) => e.id === labor.idEmpresa)?.nombre || `ID: ${labor.idEmpresa}`}</span>
                     </div>
                   )}
                 </div>
@@ -355,7 +359,7 @@ export default function Labores() {
                       Descripción
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
-                      Precio unitario
+                      Precio / ha
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
@@ -399,16 +403,16 @@ export default function Labores() {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Package className="size-3" strokeWidth={2} />
                               {isAdmin || isAsesor
-                                ? `${empresas.find((e) => e.id === labor.idEmpresa)?.nombre || 'Empresa'} · ${labor.idEmpresa}`
-                                : 'Mi Empresa'}
+                                ? `${empresas.find((e) => e.id === labor.idEmpresa)?.nombre || 'Productor'} · ${labor.idEmpresa}`
+                                : 'Yo como Productor'}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${labor.activo
-                                ? 'bg-success-soft text-success'
-                                : 'bg-destructive-soft text-destructive'
+                              ? 'bg-success-soft text-success'
+                              : 'bg-destructive-soft text-destructive'
                               }`}
                           >
                             {labor.activo ? 'Activo' : 'Inactivo'}
@@ -429,8 +433,8 @@ export default function Labores() {
                                 <button
                                   onClick={() => handleToggleActivo(labor)}
                                   className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${labor.activo
-                                      ? 'text-success hover:bg-success-soft'
-                                      : 'text-muted-foreground hover:bg-muted'
+                                    ? 'text-success hover:bg-success-soft'
+                                    : 'text-muted-foreground hover:bg-muted'
                                     }`}
                                   title={labor.activo ? 'Desactivar' : 'Activar'}
                                   disabled={updatingIds.has(labor.id)}
@@ -526,7 +530,7 @@ export default function Labores() {
 
               <div className="space-y-1.5">
                 <label htmlFor="labor-precio" className="text-xs font-medium text-foreground">
-                  Precio unitario (referencia)
+                  Precio / ha (referencia)
                 </label>
                 <input
                   id="labor-precio"
@@ -543,45 +547,53 @@ export default function Labores() {
               {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="labor-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
-                    <option value="">Global (todas las empresas)</option>
+                    <option value="">Global (todos los productores)</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas?.map((e) => (
-                      <option key={e.id} value={e.id}>{e.nombre}</option>
+                      <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                     ))}
                   </select>
                   <p className="text-[11px] text-muted-foreground">
-                    Solo como sys-admin puedes crear labores globales o asignarlas a otras empresas.
+                    Solo como sys-admin puedes crear labores globales o asignarlas a otros productores.
                   </p>
                 </div>
               )}
-              {!isAdmin && !editingLabor && userEmpresas.length > 1 && (
+              {!isAdmin && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
                   <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="labor-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     required
                   >
-                    <option value="">Seleccionar empresa</option>
+                    <option value="">Seleccionar productor</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas
                       .filter((e) => userEmpresas.includes(e.id))
                       .map((e) => (
-                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                        <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                       ))}
                   </select>
                 </div>
@@ -597,9 +609,17 @@ export default function Labores() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {editingLabor ? 'Guardar cambios' : 'Crear Labor'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {editingLabor ? 'Guardando…' : 'Creando…'}
+                    </>
+                  ) : (
+                    editingLabor ? 'Guardar cambios' : 'Crear Labor'
+                  )}
                 </button>
               </div>
             </form>

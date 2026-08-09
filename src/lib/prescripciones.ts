@@ -22,7 +22,7 @@ export interface PrescripcionInsumo {
   idInsumo: number
   cantidadPorHa: number
   cantidadTotal: number
-  insumo?: { id: number; nombre: string } | null
+  insumo?: { id: number; nombre: string; unidad?: string | null } | null
 }
 
 export interface Prescripcion extends Omit<PrescripcionListItem, 'insumoCount'> {

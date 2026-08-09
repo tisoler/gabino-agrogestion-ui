@@ -16,11 +16,21 @@ interface UsuarioBasico {
   idEmpresas: number[]
 }
 
+interface Campo {
+  id: number
+  nombre: string
+  idEmpresa: number | null
+  activo: boolean
+}
+
 interface Lote {
   id: number
   descripcion: string | null
-  campo: string
+  idCampo: number | null
+  campo?: Campo | null
   idUsuario: string
+  nombreUsuario: string | null
+  emailUsuario: string | null
   idEmpresa: number
   lat: number | null
   long: number | null
@@ -31,7 +41,7 @@ interface Lote {
 
 interface LoteFormData {
   descripcion: string
-  campo: string
+  idCampo: number | null
   idUsuario: string
   lat: string
   long: string
@@ -40,7 +50,7 @@ interface LoteFormData {
 
 const emptyForm: LoteFormData = {
   descripcion: '',
-  campo: '',
+  idCampo: null,
   idUsuario: '',
   lat: '',
   long: '',
@@ -120,11 +130,10 @@ function CampoFiltro({
                 className="cursor-pointer w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
               >
                 <span
-                  className={`size-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                    value.includes(c)
-                      ? 'bg-primary border-primary text-primary-foreground'
-                      : 'border-border bg-background'
-                  }`}
+                  className={`size-4 rounded border flex items-center justify-center shrink-0 transition-colors ${value.includes(c)
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'border-border bg-background'
+                    }`}
                 >
                   {value.includes(c) && <Check className="size-3" strokeWidth={2.5} />}
                 </span>
@@ -164,6 +173,12 @@ export default function Lotes() {
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
+  // Modal: crear un campo nuevo desde el formulario de lote
+  const [isCampoModalOpen, setIsCampoModalOpen] = useState(false)
+  const [campoNombre, setCampoNombre] = useState('')
+  const [campoBusy, setCampoBusy] = useState(false)
+  const [campoError, setCampoError] = useState<string | null>(null)
+
   const { user, permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:lote')
@@ -185,6 +200,12 @@ export default function Lotes() {
     isLoading: loadingUsuarios,
   } = useSWR<UsuarioBasico[]>(
     isModalOpen && modalEmpresaId ? `/empresas/${modalEmpresaId}/usuarios` : null,
+    usuariosFetcher,
+  )
+
+  // Catálogo de campos
+  const { data: campos = [], mutate: mutateCampos } = useSWR<Campo[]>(
+    canRead ? '/campos' : null,
     usuariosFetcher,
   )
 
@@ -238,9 +259,9 @@ export default function Lotes() {
     }
   }, [isAdmin, isModalOpen, editingLote, empresas, formData.idEmpresa])
 
-  const campos = useMemo(
+  const campoNombres = useMemo(
     () =>
-      Array.from(new Set(lotes.map((l) => l.campo).filter((c) => c && c.trim())))
+      Array.from(new Set(lotes.map((l) => l.campo?.nombre).filter((c): c is string => !!c && c.trim() !== '')))
         .sort((a, b) => a.localeCompare(b, 'es')),
     [lotes]
   )
@@ -248,13 +269,15 @@ export default function Lotes() {
   const filteredLotes = useMemo(() => {
     return lotes
       ?.filter((l) => {
-        if (filterCampos.length > 0 && !filterCampos.includes(l.campo)) return false
+        if (filterCampos.length > 0 && !filterCampos.includes(l.campo?.nombre ?? '')) return false
         const term = searchTerm.toLowerCase()
         if (!term) return true
         const dueno = findUsuario(l.idUsuario, l.idEmpresa)
         return (
           (l.descripcion?.toLowerCase() || '').includes(term) ||
-          (l.campo?.toLowerCase() || '').includes(term) ||
+          (l.campo?.nombre || '').toLowerCase().includes(term) ||
+          (l.nombreUsuario || '').toLowerCase().includes(term) ||
+          (l.emailUsuario || '').toLowerCase().includes(term) ||
           (dueno?.nombreUsuario?.toLowerCase() || '').includes(term) ||
           (dueno?.email?.toLowerCase() || '').includes(term) ||
           l.idUsuario.toLowerCase().includes(term)
@@ -280,7 +303,7 @@ export default function Lotes() {
     setEditingLote(lote)
     setFormData({
       descripcion: lote.descripcion || '',
-      campo: lote.campo || '',
+      idCampo: lote.idCampo,
       idUsuario: lote.idUsuario,
       lat: lote.lat?.toString() ?? '',
       long: lote.long?.toString() ?? '',
@@ -295,14 +318,43 @@ export default function Lotes() {
     setFormData(emptyForm)
   }
 
+  const handleCreateCampo = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!campoNombre.trim() || campoBusy) return
+    setCampoBusy(true)
+    setCampoError(null)
+    try {
+      const { data } = await api.post('/campos', { nombre: campoNombre.trim(), idEmpresa: modalEmpresaId })
+      setFormData((prev) => ({ ...prev, idCampo: data.id }))
+      setCampoNombre('')
+      setIsCampoModalOpen(false)
+      await mutateCampos()
+    } catch (err: any) {
+      setCampoError(
+        err?.response?.data?.message ||
+        err?.message ||
+        'No se pudo crear el campo',
+      )
+    } finally {
+      setCampoBusy(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (saving) return
     setSaving(true)
+    const duenoSel = usuarios.find((u) => u.uid === formData.idUsuario)
     const payload: any = {
       descripcion: formData.descripcion || null,
-      campo: formData.campo.trim(),
+      idCampo: formData.idCampo,
       idUsuario: formData.idUsuario,
+      nombreUsuario:
+        duenoSel?.nombreUsuario ||
+        duenoSel?.email ||
+        editingLote?.nombreUsuario ||
+        '',
+      emailUsuario: duenoSel?.email || editingLote?.emailUsuario || '',
       lat: formData.lat === '' ? null : Number(formData.lat),
       long: formData.long === '' ? null : Number(formData.long),
     }
@@ -401,27 +453,27 @@ export default function Lotes() {
           </div>
           {(listEmpresas.length > 0 && (isAdmin || userEmpresas.length > 1)) && (
             <select
-              aria-label="Filtrar por empresa"
+              aria-label="Filtrar por productor"
               value={filterEmpresaId ?? 'all'}
               onChange={(e) => setFilterEmpresaId(e.target.value === 'all' ? null : Number(e.target.value))}
               className="sm:w-64 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
             >
               <option value="all">
                 {isAdmin
-                  ? 'Todas las empresas'
+                  ? 'Todos los productores'
                   : userEmpresas.length > 1
-                  ? 'Todas mis empresas'
-                  : 'Mi empresa'}
+                    ? 'Todos mis productores'
+                    : 'Mi productor'}
               </option>
               {listEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
             </select>
           )}
-          {campos.length > 0 && (
+          {campoNombres.length > 0 && (
             <CampoFiltro
               value={filterCampos}
-              opciones={campos}
+              opciones={campoNombres}
               onChange={setFilterCampos}
             />
           )}
@@ -452,9 +504,8 @@ export default function Lotes() {
               return (
                 <div
                   key={lote.id}
-                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${
-                    !lote.activo ? 'opacity-60' : ''
-                  }`}
+                  className={`bg-card border border-border rounded-lg p-4 space-y-3 transition-opacity ${!lote.activo ? 'opacity-60' : ''
+                    }`}
                 >
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
@@ -471,14 +522,14 @@ export default function Lotes() {
                       <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                         <User className="size-3" strokeWidth={1.75} />
                         <span className="truncate">
-                          {dueno?.nombreUsuario || dueno?.email || `UID: ${lote.idUsuario}`}
+                          {lote.nombreUsuario || dueno?.nombreUsuario || dueno?.email || `UID: ${lote.idUsuario}`}
                         </span>
                       </p>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
                         {formatCoords(lote.lat, lote.long)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Campo: <span className="text-foreground font-medium">{lote.campo || '—'}</span>
+                        Campo: <span className="text-foreground font-medium">{lote.campo?.nombre || '—'}</span>
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -494,11 +545,10 @@ export default function Lotes() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(lote)}
-                            className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                              lote.activo
-                                ? 'text-success hover:bg-success-soft'
-                                : 'text-muted-foreground hover:bg-muted'
-                            }`}
+                            className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${lote.activo
+                              ? 'text-success hover:bg-success-soft'
+                              : 'text-muted-foreground hover:bg-muted'
+                              }`}
                             title={lote.activo ? 'Desactivar' : 'Activar'}
                             disabled={updatingIds.has(lote.id)}
                             aria-label={lote.activo ? 'Desactivar' : 'Activar'}
@@ -525,7 +575,7 @@ export default function Lotes() {
 
                   <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                     <MapPin className="size-3" strokeWidth={1.75} />
-                    <span>Empresa: {empresas.find((e) => e.id === lote.idEmpresa)?.nombre || `ID: ${lote.idEmpresa}`}</span>
+                    <span>Productor: {empresas.find((e) => e.id === lote.idEmpresa)?.nombre || `ID: ${lote.idEmpresa}`}</span>
                   </div>
                 </div>
               )
@@ -538,7 +588,7 @@ export default function Lotes() {
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Descripción
+                      Nombre del lote
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Campo
@@ -547,10 +597,7 @@ export default function Lotes() {
                       Dueño
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Coordenadas
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Empresa
+                      Productor
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Estado
@@ -576,23 +623,18 @@ export default function Lotes() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
-                            {lote.campo || '—'}
+                            {lote.campo?.nombre || '—'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col min-w-0">
                             <span className="text-sm text-foreground truncate">
-                              {dueno?.nombreUsuario || dueno?.email || lote.idUsuario}
+                              {lote.nombreUsuario || dueno?.nombreUsuario || dueno?.email || lote.idUsuario}
                             </span>
-                            {dueno?.email && (
-                              <span className="text-xs text-muted-foreground truncate">{dueno.email}</span>
+                            {lote.emailUsuario && (
+                              <span className="text-xs text-muted-foreground truncate">{lote.emailUsuario}</span>
                             )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {formatCoords(lote.lat, lote.long)}
-                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
@@ -602,11 +644,10 @@ export default function Lotes() {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${
-                              lote.activo
-                                ? 'bg-success-soft text-success'
-                                : 'bg-destructive-soft text-destructive'
-                            }`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${lote.activo
+                              ? 'bg-success-soft text-success'
+                              : 'bg-destructive-soft text-destructive'
+                              }`}
                           >
                             {lote.activo ? 'Activo' : 'Inactivo'}
                           </span>
@@ -625,11 +666,10 @@ export default function Lotes() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(lote)}
-                                  className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${
-                                    lote.activo
-                                      ? 'text-success hover:bg-success-soft'
-                                      : 'text-muted-foreground hover:bg-muted'
-                                  }`}
+                                  className={`cursor-pointer p-1.5 rounded-md transition-colors disabled:opacity-50 ${lote.activo
+                                    ? 'text-success hover:bg-success-soft'
+                                    : 'text-muted-foreground hover:bg-muted'
+                                    }`}
                                   title={lote.activo ? 'Desactivar' : 'Activar'}
                                   disabled={updatingIds.has(lote.id)}
                                   aria-label={lote.activo ? 'Desactivar' : 'Activar'}
@@ -698,7 +738,7 @@ export default function Lotes() {
               {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="lote-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="lote-empresa"
@@ -715,10 +755,10 @@ export default function Lotes() {
                   >
                     {editingLote && formData.idEmpresa && (
                       <option value={formData.idEmpresa}>
-                        {empresas.find((e) => e.id === formData.idEmpresa)?.nombre || 'Empresa'} (no editable)
+                        {empresas.find((e) => e.id === formData.idEmpresa)?.nombre || 'Productor'} (no editable)
                       </option>
                     )}
-                    {!editingLote && empresas.length === 0 && <option value="">Sin empresas</option>}
+                    {!editingLote && empresas.length === 0 && <option value="">Sin productores</option>}
                     {!editingLote &&
                       empresas.map((e) => (
                         <option key={e.id} value={e.id}>{e.nombre}</option>
@@ -730,7 +770,7 @@ export default function Lotes() {
               {!isAdmin && !editingLote && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
                   <label htmlFor="lote-empresa-nuevo" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="lote-empresa-nue"
@@ -745,7 +785,7 @@ export default function Lotes() {
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
                     required
                   >
-                    <option value="">Seleccionar empresa</option>
+                    <option value="">Seleccionar productor</option>
                     {listEmpresas.map((e) => (
                       <option key={e.id} value={e.id}>{e.nombre}</option>
                     ))}
@@ -769,8 +809,8 @@ export default function Lotes() {
                     {loadingUsuarios
                       ? 'Cargando usuarios…'
                       : usuariosError
-                      ? 'No se pudieron cargar los usuarios'
-                      : 'Seleccionar usuario'}
+                        ? 'No se pudieron cargar los usuarios'
+                        : 'Seleccionar usuario'}
                   </option>
                   {usuarios.map((u) => (
                     <option key={u.uid} value={u.uid}>
@@ -783,11 +823,11 @@ export default function Lotes() {
 
                 {usuariosError ? (
                   <p className="text-[11px] text-destructive">
-                    Error al cargar usuarios: {usuariosError.message || 'sin acceso o sin permisos'}. Verificá que el usuario autenticado tenga la empresa en su <code>idEmpresas</code> y que la asignación de usuarios a empresas esté completa en Firestore.
+                    Error al cargar usuarios: {usuariosError.message || 'sin acceso o sin permisos'}. Verificá que el usuario autenticado tenga al productor en su <code>idEmpresas</code> y que la asignación de usuarios a productores esté completa en Firestore.
                   </p>
                 ) : !loadingUsuarios && usuarios.length === 0 ? (
                   <p className="text-[11px] text-muted-foreground">
-                    No hay usuarios con rol <em>asesor</em> o <em>productor</em> asignados a esta empresa. La asignación se gestiona desde el sistema de identidad (Firestore).
+                    No hay usuarios con rol <em>asesor</em> o <em>productor</em> asignados a este productor. La asignación se gestiona desde el sistema de identidad (Firestore).
                   </p>
                 ) : null}
               </div>
@@ -796,21 +836,43 @@ export default function Lotes() {
                 <label htmlFor="lote-campo" className="text-xs font-medium text-foreground">
                   Campo <span className="text-destructive">*</span>
                 </label>
-                <input
-                  id="lote-campo"
-                  type="text"
-                  value={formData.campo}
-                  onChange={(e) => setFormData({ ...formData, campo: e.target.value })}
-                  placeholder="Ej: El Este, Jácurame, Lote 5"
-                  required
-                  maxLength={200}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                />
+                <div className="flex gap-2">
+                  <select
+                    id="lote-campo"
+                    value={formData.idCampo ?? ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, idCampo: e.target.value === '' ? null : parseInt(e.target.value) })
+                    }
+                    required
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
+                  >
+                    <option value="" disabled>
+                      {campos.filter((c) => c.idEmpresa === modalEmpresaId).length === 0
+                        ? 'Sin campos para este productor'
+                        : 'Seleccionar campo...'}
+                    </option>
+                    {campos
+                      .filter((c) => c.idEmpresa === modalEmpresaId && (c.activo || c.id === formData.idCampo))
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.nombre}</option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => { setCampoError(null); setCampoNombre(''); setIsCampoModalOpen(true) }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
+                    title="Crear nuevo campo"
+                    aria-label="Crear nuevo campo"
+                  >
+                    <Plus className="size-4" strokeWidth={1.75} />
+                    <span className="hidden sm:inline">Nuevo</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="lote-descripcion" className="text-xs font-medium text-foreground">
-                  Descripción
+                  Nombre del lote
                 </label>
                 <textarea
                   id="lote-descripcion"
@@ -870,7 +932,7 @@ export default function Lotes() {
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center gap-2"
-                  disabled={!formData.idUsuario || !formData.campo.trim() || saving}
+                  disabled={!formData.idUsuario || !formData.idCampo || saving}
                 >
                   {saving ? (
                     <>
@@ -880,6 +942,67 @@ export default function Lotes() {
                   ) : (
                     editingLote ? 'Guardar cambios' : 'Crear Lote'
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isCampoModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+            onClick={() => { if (!campoBusy) setIsCampoModalOpen(false) }}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
+              <h2 className="text-base font-semibold text-foreground">Nuevo Campo</h2>
+              <button
+                onClick={() => setIsCampoModalOpen(false)}
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                aria-label="Cerrar"
+              >
+                <X className="size-4" strokeWidth={1.75} />
+              </button>
+            </div>
+            <form className="p-5 space-y-4" onSubmit={handleCreateCampo}>
+              <div className="space-y-1.5">
+                <label htmlFor="campo-nombre" className="text-xs font-medium text-foreground">Nombre</label>
+                <input
+                  id="campo-nombre"
+                  type="text"
+                  value={campoNombre}
+                  onChange={(e) => { setCampoNombre(e.target.value); setCampoError(null) }}
+                  placeholder="Ej: El Este, Jácurame, Lote 5"
+                  required
+                  autoFocus
+                  maxLength={200}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+              </div>
+              {campoError && (
+                <p className="text-[11px] text-destructive inline-flex items-center gap-1">
+                  <AlertCircle className="size-3" strokeWidth={1.75} />
+                  {campoError}
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsCampoModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!campoNombre.trim() || campoBusy}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center gap-2"
+                >
+                  {campoBusy && <Loader2 className="size-4 animate-spin" />}
+                  {campoBusy ? 'Creando...' : 'Crear campo'}
                 </button>
               </div>
             </form>

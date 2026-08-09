@@ -9,8 +9,8 @@ import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
-  costoPonderadoHa, costoTotalInsumoRowHa, costoTotalCostoRowHa,
-  calcularResultados, formatInputNumber, round2,
+  costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
+  calcularResultados, formatInputNumber, round2, periodosCampania,
   type Campania, type CampaniaLaborDetalle, type CampaniaInsumoDetalle,
   type CampaniaCostoDetalle, type LaborItem, type InsumoItem, type CostoItem,
   type CategoriaInsumoItem,
@@ -31,12 +31,10 @@ interface Cultivo {
 }
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
-const currentYear = new Date().getFullYear()
 
 type Cabecera = {
   nombre: string
-  anioDesde: number
-  anioHasta: number
+  campania: string
   idLote: number | null
   idCultivo: number | null
   idVariedad: number | null
@@ -51,8 +49,7 @@ type Cabecera = {
 
 const emptyCabecera = (): Cabecera => ({
   nombre: '',
-  anioDesde: currentYear,
-  anioHasta: currentYear,
+  campania: periodosCampania()[0] || '',
   idLote: null,
   idCultivo: null,
   idVariedad: null,
@@ -73,8 +70,7 @@ const numericFields: (keyof Cabecera)[] = [
 function buildPatchPayload(next: Cabecera, saved: Cabecera): Record<string, unknown> {
   const payload: Record<string, unknown> = {}
   if (next.nombre !== saved.nombre) payload.nombre = next.nombre
-  if (next.anioDesde !== saved.anioDesde) payload.anioDesde = next.anioDesde
-  if (next.anioHasta !== saved.anioHasta) payload.anioHasta = next.anioHasta
+  if (next.campania !== saved.campania) payload.campania = next.campania
   if (next.idLote !== saved.idLote) payload.idLote = next.idLote
   if (next.idCultivo !== saved.idCultivo) payload.idCultivo = next.idCultivo
   if (next.idVariedad !== saved.idVariedad) payload.idVariedad = next.idVariedad
@@ -137,6 +133,7 @@ function buildInsumoOrCostoPayload(row: {
   idCosto?: number | null
   unidadesHa?: number | null
   costoUnidad?: number | null
+  superficieAplicada?: number | null
 }) {
   return {
     idInsumo: (row as any).idInsumo ?? 0,
@@ -146,6 +143,9 @@ function buildInsumoOrCostoPayload(row: {
       : 0,
     costoUnidad: typeof row.costoUnidad === 'number' && !Number.isNaN(row.costoUnidad)
       ? row.costoUnidad
+      : 0,
+    superficieAplicada: typeof row.superficieAplicada === 'number' && !Number.isNaN(row.superficieAplicada)
+      ? row.superficieAplicada
       : 0,
   }
 }
@@ -300,12 +300,12 @@ export default function CampaniaDetalle() {
   // - asesor / productor: cultivos globales + empresa seleccionada, y lotes
   //   de la empresa seleccionada.
   const { data: lotes = [], isLoading: loadingLotes } = useSWR<Lote[]>(
-    canRead ? ['/lotes', isAdmin ? null : currentEmpresaId] : null,
+    canRead ? ['/lotes', empresaDestinoId] : null,
     ([url, empresaId]: [string, number | null]) =>
       api.get(url, { params: empresaId ? { currentEmpresaId: empresaId } : undefined }).then((r) => r.data)
   )
   const { data: cultivos = [] } = useSWR<Cultivo[]>(
-    canRead ? ['/cultivos', isAdmin, isAdmin ? null : currentEmpresaId] : null,
+    canRead ? ['/cultivos', isAdmin, empresaDestinoId] : null,
     ([url, all, empresaId]: [string, boolean, number | null]) => {
       const params: Record<string, unknown> = {}
       if (all) params.all = true
@@ -374,8 +374,7 @@ export default function CampaniaDetalle() {
     setCampaniaId(campania.id)
     const next: Cabecera = {
       nombre: campania.nombre ?? '',
-      anioDesde: campania.anioDesde,
-      anioHasta: campania.anioHasta,
+      campania: campania.campania,
       idLote: campania.idLote,
       idCultivo: campania.idCultivo,
       idVariedad: campania.idVariedad ?? null,
@@ -449,8 +448,7 @@ export default function CampaniaDetalle() {
       cabecera.idLote !== null &&
       cabecera.idCultivo !== null &&
       cabecera.nombre.trim() !== '' &&
-      cabecera.anioDesde > 0 &&
-      cabecera.anioHasta >= cabecera.anioDesde
+      cabecera.campania !== ''
     )
   }, [cabecera])
 
@@ -461,11 +459,11 @@ export default function CampaniaDetalle() {
     try {
       const payload: Record<string, unknown> = {
         nombre: cabecera.nombre.trim(),
-        anioDesde: cabecera.anioDesde,
-        anioHasta: cabecera.anioHasta,
+        campania: cabecera.campania,
         idLote: cabecera.idLote,
         idCultivo: cabecera.idCultivo,
       }
+      if (empresaDestinoId) payload.idEmpresa = empresaDestinoId
       if (cabecera.idVariedad) payload.idVariedad = cabecera.idVariedad
       for (const k of numericFields) {
         const v = cabecera[k] as string
@@ -544,6 +542,7 @@ export default function CampaniaDetalle() {
       idInsumo: first.id,
       unidadesHa: 0,
       costoUnidad: first.precioUnitario ?? 0,
+      superficieAplicada: 0,
       insumo: first,
     }
     setInsumos((arr) => [...arr, newRow])
@@ -614,8 +613,7 @@ export default function CampaniaDetalle() {
       if (a !== b) return true
     }
     if (cabecera.nombre !== cabeceraSaved.nombre) return true
-    if (cabecera.anioDesde !== cabeceraSaved.anioDesde) return true
-    if (cabecera.anioHasta !== cabeceraSaved.anioHasta) return true
+    if (cabecera.campania !== cabeceraSaved.campania) return true
     if (cabecera.idLote !== cabeceraSaved.idLote) return true
     if (cabecera.idCultivo !== cabeceraSaved.idCultivo) return true
     if (cabecera.idVariedad !== cabeceraSaved.idVariedad) return true
@@ -919,8 +917,8 @@ export default function CampaniaDetalle() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(isNew && isAdmin) && (
-            <Field label="Empresa destino">
+          {isNew && (
+            <Field label="Productor destino">
               <select
                 value={empresaDestinoId ?? ''}
                 onChange={(e) => {
@@ -930,16 +928,16 @@ export default function CampaniaDetalle() {
                 }}
                 className={inputCls}
               >
-                <option value="">Elegí empresa</option>
+                <option value="">Elegí productor</option>
                 {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
             </Field>
           )}
           {(!isNew && campania?.lote) && (
-            <Field label="Empresa" icon={MapPin}>
+            <Field label="Productor" icon={MapPin}>
               <div className="px-3 py-2 bg-muted/50 border border-border rounded-md text-sm text-foreground">
                 {empresas.find((e) => e.id === campania.lote?.idEmpresa)?.nombre
-                  || `Empresa #${campania.lote.idEmpresa}`}
+                  || `Productor #${campania.lote.idEmpresa}`}
               </div>
             </Field>
           )}
@@ -970,27 +968,18 @@ export default function CampaniaDetalle() {
             />
           </Field>
 
-          <Field label="Año desde">
-            <input
-              type="number"
-              min={1900}
-              max={2200}
-              value={cabecera.anioDesde}
-              onChange={(e) => setCab('anioDesde', Number(e.target.value))}
+          <Field label="Campaña">
+            <select
+              value={cabecera.campania}
+              onChange={(e) => setCab('campania', e.target.value)}
               className={inputCls}
-            />
+            >
+              <option value="" disabled>Seleccionar período...</option>
+              {periodosCampania().map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
           </Field>
-          <Field label="Año hasta">
-            <input
-              type="number"
-              min={1900}
-              max={2200}
-              value={cabecera.anioHasta}
-              onChange={(e) => setCab('anioHasta', Number(e.target.value))}
-              className={inputCls}
-            />
-          </Field>
-
           <Field label="Cultivo" icon={Sprout}>
             <select
               value={cabecera.idCultivo ?? ''}
@@ -1093,7 +1082,7 @@ export default function CampaniaDetalle() {
             computedRow={(l) => costoPonderadoHa(l, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de labores"
             totalValue={resultados.costoTotalLaboresHa}
-            emptyHint={catalogLabores.length === 0 ? 'No hay labores disponibles para esta empresa. Creá una primero desde la sección Labores.' : undefined}
+            emptyHint={catalogLabores.length === 0 ? 'No hay labores disponibles para este productor. Creá una primero desde la sección Labores.' : undefined}
           />
 
           <DetalleTable
@@ -1101,9 +1090,10 @@ export default function CampaniaDetalle() {
             icon={Package}
             columns={[
               { key: 'idInsumo', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoUnidad' },
+              { key: 'superficieAplicada', label: 'Sup. aplicada (ha)', kind: 'number', align: 'right' },
               { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
-              { key: '__total', label: 'Costo total', kind: 'readonly-money', align: 'right' },
+              { key: '__ponderado', label: 'Costo ponderado/ha', kind: 'readonly-money', align: 'right' },
             ]}
             rows={insumos}
             catalogOptions={catalogInsumos}
@@ -1113,10 +1103,10 @@ export default function CampaniaDetalle() {
             onChange={updateInsumo}
             onRemove={removeInsumo}
             onCreateNew={(onCreated) => setCreatingItem({ kind: 'insumo', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
-            computedRow={(i) => costoTotalInsumoRowHa(i)}
+            computedRow={(i) => costoPonderadoInsumoRowHa(i, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de insumos"
             totalValue={resultados.costoTotalInsumosHa}
-            emptyHint={catalogInsumos.length === 0 ? 'No hay insumos disponibles para esta empresa. Creá uno primero desde la sección Insumos.' : undefined}
+            emptyHint={catalogInsumos.length === 0 ? 'No hay insumos disponibles para este productor. Creá uno primero desde la sección Insumos.' : undefined}
           />
 
           <DetalleTable
@@ -1139,7 +1129,7 @@ export default function CampaniaDetalle() {
             computedRow={(c) => costoTotalCostoRowHa(c)}
             totalLabel="Costo total de costos varios"
             totalValue={resultados.costoTotalCostosHa}
-            emptyHint={catalogCostos.length === 0 ? 'No hay costos disponibles para esta empresa. Creá uno primero desde la sección Costos.' : undefined}
+            emptyHint={catalogCostos.length === 0 ? 'No hay costos disponibles para este productor. Creá uno primero desde la sección Costos.' : undefined}
           />
 
           {/* RESULTADOS ECONÓMICOS */}
@@ -1231,7 +1221,7 @@ export default function CampaniaDetalle() {
                   className={inputCls}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Se asignará a la empresa{' '}
+                  Se asignará al productor{' '}
                   <span className="font-medium text-foreground">
                     {empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'actual'}
                   </span>.
@@ -1514,10 +1504,10 @@ function FilaRes({
   const tone = negative
     ? 'text-destructive'
     : positive
-    ? 'text-success'
-    : subtract
-    ? 'text-muted-foreground'
-    : 'text-foreground'
+      ? 'text-success'
+      : subtract
+        ? 'text-muted-foreground'
+        : 'text-foreground'
 
   return (
     <tr className={bold ? 'bg-muted/10' : ''}>

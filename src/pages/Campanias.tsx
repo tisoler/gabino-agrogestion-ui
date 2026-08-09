@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
-import { fmtMoneda, fmtNumero, fmtQQHa } from '../lib/campanias'
+import { fmtMoneda, fmtNumero, fmtQQHa, periodosCampania } from '../lib/campanias'
 
 interface CampaniaListTotales {
   rendimientoQqHa: number
@@ -20,8 +20,7 @@ interface CampaniaListTotales {
 interface CampaniaListItem {
   id: number
   nombre: string
-  anioDesde: number
-  anioHasta: number
+  campania: string
   idLote: number
   idCultivo: number
   idVariedad: number | null
@@ -45,26 +44,24 @@ interface Cultivo {
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
-function getCurrentYear(): number {
-  return new Date().getFullYear()
-}
-
 export default function Campanias() {
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
 
-  const { permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
+  const userEmpresas = (user?.idEmpresas || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
 
   // Filtros
-  // Para no-admin, la empresa es forzada a la actual; el estado sólo se
-  // usa para admins (que puede elegir entre todas).
-  const [adminFilterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
-  const filterEmpresaId = isAdmin ? adminFilterEmpresaId : currentEmpresaId
-  const [filterAnioDesde, setFilterAnioDesde] = useState<number | ''>('')
-  const [filterAnioHasta, setFilterAnioHasta] = useState<number | ''>('')
+  // Sin filtro por defecto: admins ven todas las empresas y asesor/productor
+  // todas las que tienen vinculadas (el backend filtra por idEmpresas).
+  const [filterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
+  const filterEmpresasVisibles = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
+  const [filterCampanias, setFilterCampanias] = useState<string[]>([])
   const [filterIdCultivo, setFilterIdCultivo] = useState<number | null>(null)
   const [filterIdVariedad, setFilterIdVariedad] = useState<number | null>(null)
   const [filterIdLote, setFilterIdLote] = useState<number | null>(null)
@@ -72,6 +69,7 @@ export default function Campanias() {
   // UI
   const [showAll, setShowAll] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [campaniasMenuOpen, setCampaniasMenuOpen] = useState(false)
 
   // Catálogos para los selects de filtro y para la creación
   const { data: cultivos = [] } = useSWR<Cultivo[]>(canRead ? '/cultivos' : null, fetcher)
@@ -97,26 +95,23 @@ export default function Campanias() {
   const campaniasFetcher = async ([
     ,
     empresaId,
-    anioDesde,
-    anioHasta,
+    campanias,
     nombre,
     idCultivo,
     idVariedad,
     idLote,
   ]: [
-    string,
-    number | null,
-    number | '',
-    number | '',
-    string,
-    number | null,
-    number | null,
-    number | null
-  ]) => {
+      string,
+      number | null,
+      string,
+      string,
+      number | null,
+      number | null,
+      number | null
+    ]) => {
     const params: Record<string, unknown> = {}
     if (empresaId) params.currentEmpresaId = empresaId
-    if (anioDesde !== '') params.anioDesde = anioDesde
-    if (anioHasta !== '') params.anioHasta = anioHasta
+    if (campanias) params.campanias = campanias
     if (nombre) params.nombre = nombre
     if (idCultivo) params.idCultivo = idCultivo
     if (idVariedad) params.idVariedad = idVariedad
@@ -128,15 +123,14 @@ export default function Campanias() {
   const { data: campanias = [], isLoading } = useSWR<CampaniaListItem[]>(
     canRead
       ? [
-          'campanias',
-          filterEmpresaId,
-          filterAnioDesde,
-          filterAnioHasta,
-          searchTerm,
-          filterIdCultivo,
-          filterIdVariedad,
-          filterIdLote,
-        ]
+        'campanias',
+        filterEmpresaId,
+        filterCampanias.join(','),
+        searchTerm,
+        filterIdCultivo,
+        filterIdVariedad,
+        filterIdLote,
+      ]
       : null,
     campaniasFetcher,
     { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 0 }
@@ -150,16 +144,16 @@ export default function Campanias() {
   }, [campanias])
 
   const clearFilters = () => {
-    setFilterAnioDesde('')
-    setFilterAnioHasta('')
+    setFilterEmpresaId(null)
+    setFilterCampanias([])
     setFilterIdCultivo(null)
     setFilterIdVariedad(null)
     setFilterIdLote(null)
   }
 
   const hasActiveFilters =
-    filterAnioDesde !== '' ||
-    filterAnioHasta !== '' ||
+    filterEmpresaId !== null ||
+    filterCampanias.length > 0 ||
     filterIdCultivo !== null ||
     filterIdVariedad !== null ||
     filterIdLote !== null
@@ -251,17 +245,15 @@ export default function Campanias() {
                   }
                 }}
                 tabIndex={0}
-                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${
-                  showAll ? 'bg-primary' : 'bg-muted-foreground/30'
-                }`}
+                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${showAll ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
               >
                 <span
-                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${
-                    showAll ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
+                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${showAll ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
                 />
               </span>
-              <span className="text-sm text-foreground">Ver todas las empresas</span>
+              <span className="text-sm text-foreground">Ver todos los productores</span>
             </label>
 
             {showAll && (
@@ -273,7 +265,7 @@ export default function Campanias() {
                   aria-expanded={isFilterOpen}
                 >
                   <Filter className="size-3.5" strokeWidth={2} />
-                  <span>Empresa</span>
+                  <span>Productor</span>
                   <ChevronDown
                     className={`size-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}
                     strokeWidth={2}
@@ -293,7 +285,7 @@ export default function Campanias() {
                     >
                       <div className="px-3 py-2 border-b border-border bg-accent/40">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Empresas
+                          Productores
                         </span>
                       </div>
                       <div className="max-h-60 overflow-y-auto p-1">
@@ -303,13 +295,12 @@ export default function Campanias() {
                             setFilterEmpresaId(null)
                             setIsFilterOpen(false)
                           }}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${
-                            filterEmpresaId === null
-                              ? 'bg-primary-soft text-primary font-medium'
-                              : 'text-foreground hover:bg-accent'
-                          }`}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${filterEmpresaId === null
+                            ? 'bg-primary-soft text-primary font-medium'
+                            : 'text-foreground hover:bg-accent'
+                            }`}
                         >
-                          <span className="truncate">Todas</span>
+                          <span className="truncate">Todos</span>
                           {filterEmpresaId === null && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
                         </button>
                         {empresas?.map((e) => (
@@ -320,11 +311,10 @@ export default function Campanias() {
                               setFilterEmpresaId(e.id)
                               setIsFilterOpen(false)
                             }}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${
-                              filterEmpresaId === e.id
-                                ? 'bg-primary-soft text-primary font-medium'
-                                : 'text-foreground hover:bg-accent'
-                            }`}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${filterEmpresaId === e.id
+                              ? 'bg-primary-soft text-primary font-medium'
+                              : 'text-foreground hover:bg-accent'
+                              }`}
                           >
                             <span className="truncate">{e.nombre}</span>
                             {filterEmpresaId === e.id && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
@@ -359,34 +349,77 @@ export default function Campanias() {
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          {!isAdmin && filterEmpresasVisibles.length > 0 && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+                Productor
+              </label>
+              <select
+                value={filterEmpresaId ?? ''}
+                onChange={(e) => setFilterEmpresaId(e.target.value === '' ? null : Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              >
+                <option value="">Todos</option>
+                {filterEmpresasVisibles.map((e) => (
+                  <option key={e.id} value={e.id}>{e.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Año desde
+              Campaña
             </label>
-            <input
-              type="number"
-              min={1900}
-              max={2200}
-              value={filterAnioDesde}
-              onChange={(e) => setFilterAnioDesde(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder={String(getCurrentYear())}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Año hasta
-            </label>
-            <input
-              type="number"
-              min={1900}
-              max={2200}
-              value={filterAnioHasta}
-              onChange={(e) => setFilterAnioHasta(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder={String(getCurrentYear())}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCampaniasMenuOpen((o) => !o)}
+                className="w-full inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground hover:border-primary transition-colors"
+                aria-haspopup="menu"
+                aria-expanded={campaniasMenuOpen}
+              >
+                <span className={`truncate ${filterCampanias.length ? '' : 'text-muted-foreground'}`}>
+                  {filterCampanias.length === 0
+                    ? 'Todas'
+                    : filterCampanias.length === 1
+                      ? filterCampanias[0]
+                      : `${filterCampanias.length} períodos`}
+                </span>
+                <ChevronDown
+                  className={`size-3.5 shrink-0 transition-transform ${campaniasMenuOpen ? 'rotate-180' : ''}`}
+                  strokeWidth={2}
+                />
+              </button>
+              {campaniasMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setCampaniasMenuOpen(false)} aria-hidden />
+                  <div role="menu" className="absolute z-40 mt-1 w-44 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+                    <div className="max-h-60 overflow-y-auto p-1">
+                      {periodosCampania().map((p) => (
+                        <button
+                          type="button"
+                          key={p}
+                          onClick={() =>
+                            setFilterCampanias((prev) =>
+                              prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+                            )
+                          }
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-xs transition-colors ${
+                            filterCampanias.includes(p)
+                              ? 'bg-primary-soft text-primary font-medium'
+                              : 'text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          <span>{p}</span>
+                          {filterCampanias.includes(p) && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
@@ -487,6 +520,9 @@ export default function Campanias() {
                     Lote
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Productor
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Cultivo / Variedad
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -530,6 +566,12 @@ export default function Campanias() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
+                        <span className="text-sm text-foreground">
+                          {empresas.find((e) => e.id === c.lote?.idEmpresa)?.nombre
+                            || `Productor #${c.lote?.idEmpresa ?? '—'}`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex flex-col">
                           <span className="inline-flex items-center gap-1 text-sm text-foreground">
                             <Sprout className="size-3 text-muted-foreground" strokeWidth={1.75} />
@@ -544,7 +586,7 @@ export default function Campanias() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                        {c.anioDesde}–{c.anioHasta}
+                        {c.campania}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {fmtNumero(c.totales.supCosechada, 2)}

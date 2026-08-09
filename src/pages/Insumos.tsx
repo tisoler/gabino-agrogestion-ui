@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { UNIDADES_PRECIO } from '../constantes'
 
 interface Categoria {
   id: number
@@ -22,6 +23,7 @@ interface Insumo {
   categoria?: Categoria | null
   idEmpresa: number | null
   precioUnitario?: number | null
+  unidad?: string | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
@@ -40,7 +42,8 @@ export default function Insumos() {
     nombre: '',
     descripcion: '',
     idCategoria: null as number | null,
-    idEmpresa: null as number | null
+    idEmpresa: null as number | null,
+    unidad: '' as string
   })
   const [precioUnitario, setPrecioUnitario] = useState('')
 
@@ -53,6 +56,7 @@ export default function Insumos() {
   const [categoriaError, setCategoriaError] = useState<string | null>(null)
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
 
   const { permisos, isSysAdmin, isAsesor, isAsesorAdmin, isProductor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -121,7 +125,8 @@ export default function Insumos() {
         nombre: insumo.nombre,
         descripcion: insumo.descripcion || '',
         idCategoria: insumo.idCategoria ?? null,
-        idEmpresa: insumo.idEmpresa
+        idEmpresa: insumo.idEmpresa,
+        unidad: insumo.unidad || ''
       })
       setPrecioUnitario(insumo.precioUnitario != null ? String(insumo.precioUnitario) : '')
     } else {
@@ -130,7 +135,8 @@ export default function Insumos() {
         nombre: '',
         descripcion: '',
         idCategoria: null,
-        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null),
+        unidad: ''
       })
       setPrecioUnitario('')
     }
@@ -139,9 +145,12 @@ export default function Insumos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    setSaving(true)
     const payload = {
       ...formData,
-      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
+      precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario),
+      unidad: formData.unidad || null
     }
     try {
       if (editingInsumo) {
@@ -153,6 +162,8 @@ export default function Insumos() {
       mutate()
     } catch (err) {
       console.error('Error al guardar insumo', err)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -166,10 +177,22 @@ export default function Insumos() {
         nombre: categoriaFormData.nombre.trim(),
         descripcion: categoriaFormData.descripcion || undefined,
       })
-      setFormData((prev) => ({ ...prev, idCategoria: data.id }))
+      const nuevaCategoria = data as Categoria
+      setFormData((prev) => ({ ...prev, idCategoria: nuevaCategoria.id }))
       setCategoriaFormData({ nombre: '', descripcion: '' })
       setIsCategoriaModalOpen(false)
-      mutateCategorias()
+      // Actualiza el cache de categorías de forma síncrona para que la opción
+      // exista en el mismo render en que se fija el valor del select. Sin esto,
+      // el select controlado queda con un valor sin <option> hasta que el
+      // refetch termine y React rompe al insertar el option ("insertBefore").
+      await mutateCategorias(
+        (prev: Categoria[] | undefined): Categoria[] => {
+          const lista = Array.isArray(prev) ? prev : []
+          if (lista.some((c) => c.id === nuevaCategoria.id)) return lista
+          return [...lista, nuevaCategoria].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        },
+        { revalidate: false },
+      )
     } catch (err) {
       const e = err as { response?: { data?: { message?: string | string[] } } }
       const msg = e?.response?.data?.message
@@ -249,17 +272,16 @@ export default function Insumos() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
-              ['empresa', 'Por empresa'],
+              ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setScope(key)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  scope === key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-accent text-foreground hover:bg-muted'
-                }`}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${scope === key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-accent text-foreground hover:bg-muted'
+                  }`}
               >
                 {label}
               </button>
@@ -267,12 +289,12 @@ export default function Insumos() {
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
             <select
-              aria-label="Empresa"
+              aria-label="Productor"
               value={scopeEmpresaId ?? ''}
               onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
               className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="">Seleccionar empresa</option>
+              <option value="">Seleccionar productor</option>
               {scopeEmpresas.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.nombre}
@@ -281,7 +303,7 @@ export default function Insumos() {
             </select>
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
-            <span className="text-xs text-muted-foreground">Elegí una empresa para ver solo sus insumos.</span>
+            <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus insumos.</span>
           )}
         </div>
       </div>
@@ -336,6 +358,7 @@ export default function Insumos() {
                       {insumo.precioUnitario != null && (
                         <p className="text-sm font-medium text-success mt-0.5">
                           ${Number(insumo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {insumo.unidad ? ` / ${insumo.unidad}` : ''}
                         </p>
                       )}
                       {insumo.categoria && (
@@ -391,7 +414,7 @@ export default function Insumos() {
                   {(isAdmin || isAsesor) && insumo.idEmpresa !== null && (
                     <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex items-center gap-1.5">
                       <Package className="size-3" strokeWidth={1.75} />
-                      <span>Empresa: {empresas.find((e) => e.id === insumo.idEmpresa)?.nombre || `ID: ${insumo.idEmpresa}`}</span>
+                      <span>Productor: {empresas.find((e) => e.id === insumo.idEmpresa)?.nombre || `ID: ${insumo.idEmpresa}`}</span>
                     </div>
                   )}
                 </div>
@@ -414,7 +437,10 @@ export default function Insumos() {
                       Descripción
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
-                      Precio unitario
+                      Precio
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Unidad
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
@@ -455,8 +481,13 @@ export default function Insumos() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground">
-                            {insumo.precioUnitario != null ? `$${Number(insumo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            {insumo.precioUnitario != null
+                              ? `$${Number(insumo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${insumo.unidad ? ` / ${insumo.unidad}` : ''}`
+                              : '—'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-muted-foreground">{insumo.unidad || '—'}</span>
                         </td>
                         <td className="px-4 py-3">
                           {insumo.idEmpresa === null ? (
@@ -468,8 +499,8 @@ export default function Insumos() {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Package className="size-3" strokeWidth={2} />
                               {isAdmin || isAsesor
-                                ? `${empresas.find((e) => e.id === insumo.idEmpresa)?.nombre || 'Empresa'} · ${insumo.idEmpresa}`
-                                : 'Mi Empresa'}
+                                ? `${empresas.find((e) => e.id === insumo.idEmpresa)?.nombre || 'Productor'} · ${insumo.idEmpresa}`
+                                : 'Mi productor'}
                             </span>
                           )}
                         </td>
@@ -593,6 +624,10 @@ export default function Insumos() {
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
                     <option value="">Seleccionar categoría...</option>
+                    {formData.idCategoria != null &&
+                      !categorias.some((c) => c.id === formData.idCategoria) && (
+                        <option value={formData.idCategoria}>Categoría nueva</option>
+                      )}
                     {categorias
                       .filter((c) => c.activo || c.id === formData.idCategoria)
                       .map((c) => (
@@ -633,7 +668,7 @@ export default function Insumos() {
 
               <div className="space-y-1.5">
                 <label htmlFor="insumo-precio" className="text-xs font-medium text-foreground">
-                  Precio unitario (referencia)
+                  Precio referencia
                 </label>
                 <input
                   id="insumo-precio"
@@ -647,48 +682,73 @@ export default function Insumos() {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <label htmlFor="insumo-unidad" className="text-xs font-medium text-foreground">
+                  Unidad
+                </label>
+                <select
+                  id="insumo-unidad"
+                  value={formData.unidad}
+                  onChange={(e) => setFormData({ ...formData, unidad: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
+                >
+                  <option value="">Sin unidad</option>
+                  {UNIDADES_PRECIO.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+
               {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="insumo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
-                    <option value="">Global (todas las empresas)</option>
+                    <option value="">Global (todos los productores)</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas?.map((e) => (
-                      <option key={e.id} value={e.id}>{e.nombre}</option>
+                      <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                     ))}
                   </select>
                   <p className="text-[11px] text-muted-foreground">
-                    Solo como sys-admin puedes crear insumos globales o asignarlos a otras empresas.
+                    Solo como sys-admin puedes crear insumos globales o asignarlos a otros productores.
                   </p>
                 </div>
               )}
-              {!isAdmin && !editingInsumo && userEmpresas.length > 1 && (
+              {!isAdmin && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
                   <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
-                    Empresa destino
+                    Productor
                   </label>
                   <select
                     id="insumo-empresa"
-                    value={formData.idEmpresa === null ? '' : formData.idEmpresa}
+                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(e) =>
                       setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
                     }
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     required
                   >
-                    <option value="">Seleccionar empresa</option>
+                    <option value="">Seleccionar productor</option>
+                    {formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
+                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
+                      )}
                     {empresas
                       .filter((e) => userEmpresas.includes(e.id))
                       .map((e) => (
-                        <option key={e.id} value={e.id}>{e.nombre}</option>
+                        <option key={e.id} value={String(e.id)}>{e.nombre}</option>
                       ))}
                   </select>
                 </div>
@@ -704,9 +764,17 @@ export default function Insumos() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {editingInsumo ? 'Guardar cambios' : 'Crear Insumo'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {editingInsumo ? 'Guardando…' : 'Creando…'}
+                    </>
+                  ) : (
+                    editingInsumo ? 'Guardar cambios' : 'Crear Insumo'
+                  )}
                 </button>
               </div>
             </form>
