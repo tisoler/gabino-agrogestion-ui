@@ -36,6 +36,7 @@ interface Lote {
   idEmpresa: number
   geometria?: any
   centroide?: { lat: number; lng: number } | null
+  area?: number | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
@@ -47,6 +48,7 @@ interface LoteFormData {
   idUsuario: string
   geometria: any
   centroide: { lat: number; lng: number } | null
+  area: string
   idEmpresa: number | null
 }
 
@@ -56,6 +58,7 @@ const emptyForm: LoteFormData = {
   idUsuario: '',
   geometria: null,
   centroide: null,
+  area: '',
   idEmpresa: null,
 }
 
@@ -72,7 +75,6 @@ export default function Lotes() {
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
-  const [areaLote, setAreaLote] = useState(0)
   const [selectedLoteId, setSelectedLoteId] = useState<number | null>(null)
 
   // Modal: crear un campo nuevo desde el formulario de lote
@@ -214,6 +216,7 @@ export default function Lotes() {
       idUsuario: lote.idUsuario,
       geometria: lote.geometria ?? null,
       centroide: lote.centroide ?? null,
+      area: lote.area != null ? String(Number(lote.area)) : '',
       idEmpresa: lote.idEmpresa,
     })
     setIsModalOpen(true)
@@ -264,6 +267,7 @@ export default function Lotes() {
       emailUsuario: duenoSel?.email || editingLote?.emailUsuario || '',
       geometria: formData.geometria ?? null,
       centroide: formData.centroide ?? null,
+      area: formData.area === '' ? null : Number(formData.area),
     }
     if (formData.idEmpresa) {
       payload.idEmpresa = formData.idEmpresa
@@ -441,9 +445,12 @@ export default function Lotes() {
                             {lote.nombreUsuario || dueno?.nombreUsuario || dueno?.email || `UID: ${lote.idUsuario}`}
                           </span>
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Campo: <span className="text-foreground font-medium">{lote.campo?.nombre || '—'}</span>
-                        </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Campo: <span className="text-foreground font-medium">{lote.campo?.nombre || '—'}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Área: <span className="text-foreground font-medium">{lote.area != null ? `${Number(lote.area).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : '—'}</span>
+                      </p>
                       </div>
                       <div className="flex gap-1 shrink-0">
                         {editable ? (
@@ -506,6 +513,9 @@ export default function Lotes() {
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Campo
                       </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                        Área (ha)
+                      </th>
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Dueño
                       </th>
@@ -544,6 +554,12 @@ export default function Lotes() {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                               {lote.campo?.nombre || '—'}
                             </span>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {lote.area != null
+                              ? `${Number(lote.area).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : '—'}
+                            {lote.area != null && <span className="text-[10px] text-muted-foreground ml-0.5">ha</span>}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col min-w-0">
@@ -835,17 +851,38 @@ export default function Lotes() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">
-                  Mapa del lote
-                </label>
+                <div className="flex items-end justify-between gap-2">
+                  <label className="text-xs font-medium text-foreground">
+                    Mapa del lote
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="lote-area" className="text-xs font-medium text-foreground">
+                      Área (ha)
+                    </label>
+                    <input
+                      id="lote-area"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.area}
+                      onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                      placeholder="0.00"
+                      className="w-28 px-2 py-1.5 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors text-right"
+                    />
+                  </div>
+                </div>
                 <MapaLote
                   dibujar
                   altura="h-96"
                   geometria={formData.geometria}
                   centroide={formData.centroide}
                   onChange={(geometria, centroide, areaHa) => {
-                    setFormData((prev) => ({ ...prev, geometria, centroide }))
-                    setAreaLote(areaHa)
+                    setFormData((prev) => ({
+                      ...prev,
+                      geometria,
+                      centroide,
+                      area: areaHa > 0 ? String(Number(areaHa.toFixed(2))) : prev.area,
+                    }))
                   }}
                 />
                 <p className="text-[11px] text-muted-foreground">
@@ -853,7 +890,6 @@ export default function Lotes() {
                   {formData.centroide && (
                     <> · centroide: {formData.centroide.lat.toFixed(5)}, {formData.centroide.lng.toFixed(5)}</>
                   )}
-                  {areaLote > 0 && <> · superficie: {areaLote.toLocaleString('es-AR', { maximumFractionDigits: 2 })} ha</>}
                 </p>
               </div>
 

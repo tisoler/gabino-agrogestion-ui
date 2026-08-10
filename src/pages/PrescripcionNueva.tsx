@@ -8,6 +8,7 @@ import {
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { periodosCampania } from '../lib/campanias'
+import NuevoInsumoModal from '../components/NuevoInsumoModal'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 const todayLocalISO = () => {
@@ -26,7 +27,6 @@ interface Lote { id: number; idEmpresa: number; descripcion: string | null }
 interface Cultivo { id: number; nombre: string; variedades: { id: number; nombre: string }[] }
 interface Labor { id: number; nombre: string }
 interface Insumo { id: number; nombre: string; unidad?: string | null }
-interface Categoria { id: number; nombre: string }
 
 interface InsumoRow {
   tempId: number
@@ -78,7 +78,6 @@ export default function PrescripcionNueva() {
     api.get('/labores', { params: { all: true } }).then((r) => r.data))
   const { data: insumos = [], mutate: mutateInsumos } = useSWR<Insumo[]>(canWrite ? ['/insumos', 'all'] : null, () =>
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
-  const { data: categorias = [] } = useSWR<Categoria[]>(canWrite ? '/categorias' : null, fetcher)
 
   // Producciones del productor seleccionado; de ahí se derivan las opciones
   // de cada selector (campañas → lotes → cultivos).
@@ -158,7 +157,6 @@ export default function PrescripcionNueva() {
   })
   const [showInsumoModal, setShowInsumoModal] = useState(false)
   const [insumoForRow, setInsumoForRow] = useState<number | null>(null)
-  const [insumoForm, setInsumoForm] = useState({ nombre: '', idCategoria: '' as number | '', precioUnitario: '' })
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -261,29 +259,6 @@ export default function PrescripcionNueva() {
   }
 
   // Crear insumo desde el modal
-  const handleCreateInsumo = async () => {
-    setError(null)
-    try {
-      const payload: Record<string, unknown> = {
-        nombre: insumoForm.nombre.trim(),
-        idCategoria: Number(insumoForm.idCategoria),
-      }
-      if (insumoForm.precioUnitario.trim() !== '') payload.precioUnitario = parseFloat(insumoForm.precioUnitario)
-      const { data } = await api.post('/insumos', payload)
-      await mutateInsumos()
-      if (insumoForRow != null) {
-        setInsumoRows((rows) => rows.map((r) => (r.tempId === insumoForRow ? { ...r, idInsumo: data.id } : r)))
-      }
-      setShowInsumoModal(false)
-      setInsumoForm({ nombre: '', idCategoria: '', precioUnitario: '' })
-      setInsumoForRow(null)
-    } catch (e) {
-      const err = e as { response?: { data?: { message?: string | string[] } } }
-      const msg = err?.response?.data?.message
-      setError(Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : 'No se pudo crear el insumo.')
-    }
-  }
-
   const canSave =
     fecha !== '' && idCampania !== '' && idLabor !== '' && totalHaNum > 0 &&
     insumoRows.every((r) => r.idInsumo !== '')
@@ -798,72 +773,22 @@ export default function PrescripcionNueva() {
         </div>
       )}
 
-      {/* Modal: crear insumo */}
+      {/* Modal: nuevo insumo (compartido) */}
       {showInsumoModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => { setShowInsumoModal(false); setInsumoForRow(null) }} aria-hidden />
-          <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
-              <h2 className="text-base font-semibold text-foreground">Nuevo insumo</h2>
-              <button onClick={() => { setShowInsumoModal(false); setInsumoForRow(null) }} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent" aria-label="Cerrar">
-                <X className="size-4" strokeWidth={1.75} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className={labelCls}>Nombre</label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={insumoForm.nombre}
-                  onChange={(e) => setInsumoForm({ ...insumoForm, nombre: e.target.value })}
-                  placeholder="Ej: Glifosato 48%"
-                  className={inputCls}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className={labelCls}>Categoría</label>
-                <select
-                  value={insumoForm.idCategoria}
-                  onChange={(e) => setInsumoForm({ ...insumoForm, idCategoria: e.target.value === '' ? '' : Number(e.target.value) })}
-                  className={inputCls}
-                >
-                  <option value="">Seleccionar categoría...</option>
-                  {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className={labelCls}>Precio unitario (referencia)</label>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={insumoForm.precioUnitario}
-                  onChange={(e) => setInsumoForm({ ...insumoForm, precioUnitario: e.target.value })}
-                  placeholder="0.00"
-                  className={inputCls}
-                />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowInsumoModal(false); setInsumoForRow(null) }}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={!insumoForm.nombre.trim() || insumoForm.idCategoria === ''}
-                  onClick={handleCreateInsumo}
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  Crear insumo
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <NuevoInsumoModal
+          empresaId={idEmpresa === '' ? null : Number(idEmpresa)}
+          empresaNombre={empresasVisibles.find((e) => e.id === Number(idEmpresa))?.nombre}
+          isAdmin={isAdmin}
+          onCreated={(insumo: any) => {
+            if (insumoForRow != null) {
+              setInsumoRows((rows) => rows.map((r) => (r.tempId === insumoForRow ? { ...r, idInsumo: insumo.id } : r)))
+            }
+            mutateInsumos()
+            setShowInsumoModal(false)
+            setInsumoForRow(null)
+          }}
+          onClose={() => { setShowInsumoModal(false); setInsumoForRow(null) }}
+        />
       )}
     </div>
   )

@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { UNIDADES_PRECIO } from '../constantes'
+import NuevoInsumoModal from '../components/NuevoInsumoModal'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
   costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
@@ -425,16 +427,33 @@ export default function CampaniaDetalle() {
     labores, insumos, costos,
   }), [cabecera, labores, insumos, costos])
 
+  // Aviso de warning cuando falta la sup. sembrada (los costos ponderados se
+  // calculan dividiendo por ella).
+  const avisoSupSembrada = !parseFloat(cabecera.supSembrada) ? (
+    <div className="flex items-center gap-2 bg-warning-soft border-t border-warning/30 text-warning-foreground px-4 py-2.5 text-xs">
+      <AlertCircle className="size-3.5 shrink-0" strokeWidth={2} />
+      <span>
+        Para calcular los costos ponderados, ingresá la <span className="font-semibold">sup. sembrada</span> en la cabecera.
+      </span>
+    </div>
+  ) : undefined
+
   // Modal: crear ítem in-situ de catálogo
   const [creatingItem, setCreatingItem] = useState<{
     kind: 'labor' | 'insumo' | 'costo'
     nombre: string
+    descripcion: string
     categoriaId: number | null
+    unidad: string
     precioUnitario: string
     onCreated: (id: number) => void
   } | null>(null)
   const [creatingItemError, setCreatingItemError] = useState<string | null>(null)
   const [creatingItemBusy, setCreatingItemBusy] = useState(false)
+
+  // Modal compartido de "Nuevo insumo"
+  const [nuevoInsumoOpen, setNuevoInsumoOpen] = useState(false)
+  const nuevoInsumoRowIdRef = useRef<number | null>(null)
   const [creatingCategoriaOpen, setCreatingCategoriaOpen] = useState(false)
   const [creatingCategoriaNombre, setCreatingCategoriaNombre] = useState('')
   const [creatingCategoriaBusy, setCreatingCategoriaBusy] = useState(false)
@@ -783,8 +802,10 @@ export default function CampaniaDetalle() {
         nombre: creatingItem.nombre.trim(),
         idEmpresa: empresaDestinoId,
       }
+      if (creatingItem.descripcion.trim() !== '') payload.descripcion = creatingItem.descripcion.trim()
       if (creatingItem.precioUnitario.trim() !== '') payload.precioUnitario = parseFloat(creatingItem.precioUnitario)
       if (creatingItem.kind === 'insumo') payload.idCategoria = creatingItem.categoriaId
+      if (creatingItem.kind !== 'labor' && creatingItem.unidad.trim() !== '') payload.unidad = creatingItem.unidad.trim()
       const { data } = await api.post(endpoint, payload)
       const refetcher = creatingItem.kind === 'labor' ? refetchLabores
         : creatingItem.kind === 'insumo' ? refetchInsumos : refetchCostos
@@ -1078,11 +1099,12 @@ export default function CampaniaDetalle() {
             onAdd={addLabor}
             onChange={updateLabor}
             onRemove={removeLabor}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'labor', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
+            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'labor', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', onCreated })}
             computedRow={(l) => costoPonderadoHa(l, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de labores"
             totalValue={resultados.costoTotalLaboresHa}
             emptyHint={catalogLabores.length === 0 ? 'No hay labores disponibles para este productor. Creá una primero desde la sección Labores.' : undefined}
+            footer={avisoSupSembrada}
           />
 
           <DetalleTable
@@ -1102,11 +1124,12 @@ export default function CampaniaDetalle() {
             onAdd={addInsumo}
             onChange={updateInsumo}
             onRemove={removeInsumo}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'insumo', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
+            onCreateNew={(row, _onCreated) => { nuevoInsumoRowIdRef.current = row.id; setNuevoInsumoOpen(true) }}
             computedRow={(i) => costoPonderadoInsumoRowHa(i, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de insumos"
             totalValue={resultados.costoTotalInsumosHa}
             emptyHint={catalogInsumos.length === 0 ? 'No hay insumos disponibles para este productor. Creá uno primero desde la sección Insumos.' : undefined}
+            footer={avisoSupSembrada}
           />
 
           <DetalleTable
@@ -1125,7 +1148,7 @@ export default function CampaniaDetalle() {
             onAdd={addCosto}
             onChange={updateCosto}
             onRemove={removeCosto}
-            onCreateNew={(onCreated) => setCreatingItem({ kind: 'costo', nombre: '', categoriaId: null, precioUnitario: '', onCreated })}
+            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'costo', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', onCreated })}
             computedRow={(c) => costoTotalCostoRowHa(c)}
             totalLabel="Costo total de costos varios"
             totalValue={resultados.costoTotalCostosHa}
@@ -1184,6 +1207,7 @@ export default function CampaniaDetalle() {
                 {fmtNumero(parseFloat(cabecera.supCosechada) || 0, 2)} ha
               </span>
             </div>
+            {avisoSupSembrada}
           </section>
 
           {/* Botón Guardar al pie */}
@@ -1191,6 +1215,38 @@ export default function CampaniaDetalle() {
             <SaveButton isSaving={isSaving} hasChanges={hasChanges} onClick={save} />
           </div>
         </>
+      )}
+
+      {/* Modal: nuevo insumo (compartido) */}
+      {nuevoInsumoOpen && (
+        <NuevoInsumoModal
+          empresaId={empresaDestinoId}
+          empresaNombre={empresas.find((e) => e.id === empresaDestinoId)?.nombre}
+          isAdmin={isAdmin}
+          onCreated={(insumo: any) => {
+            if (nuevoInsumoRowIdRef.current != null) {
+              updateInsumo(nuevoInsumoRowIdRef.current, {
+                idInsumo: insumo.id,
+                costoUnidad: insumo.precioUnitario ?? 0,
+              })
+            }
+            nuevoInsumoRowIdRef.current = null
+            // Agrega el nuevo insumo al catálogo de forma optimista para que
+            // quede seleccionado en la fila al instante (luego revalida).
+            refetchInsumos(
+              (prev: InsumoItem[] | undefined) => {
+                const lista = Array.isArray(prev) ? prev : []
+                if (lista.some((i) => i.id === insumo.id)) return lista
+                return [...lista, { id: insumo.id, nombre: insumo.nombre, idEmpresa: insumo.idEmpresa ?? null, precioUnitario: insumo.precioUnitario ?? null }]
+              },
+            )
+            setNuevoInsumoOpen(false)
+          }}
+          onClose={() => {
+            nuevoInsumoRowIdRef.current = null
+            setNuevoInsumoOpen(false)
+          }}
+        />
       )}
 
       {/* Modal: crear ítem in-situ */}
@@ -1227,6 +1283,16 @@ export default function CampaniaDetalle() {
                   </span>.
                 </p>
                 <div className="pt-1 space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Descripción</label>
+                  <textarea
+                    value={creatingItem.descripcion}
+                    onChange={(e) => { setCreatingItem({ ...creatingItem, descripcion: e.target.value }); setCreatingItemError(null) }}
+                    placeholder="Detalles adicionales..."
+                    rows={2}
+                    className={inputCls + ' resize-none'}
+                  />
+                </div>
+                <div className="pt-1 space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Precio unitario (referencia)</label>
                   <input
                     type="number"
@@ -1238,6 +1304,21 @@ export default function CampaniaDetalle() {
                     className={inputCls}
                   />
                 </div>
+                {creatingItem.kind !== 'labor' && (
+                  <div className="pt-1 space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">Unidad</label>
+                    <select
+                      value={creatingItem.unidad}
+                      onChange={(e) => { setCreatingItem({ ...creatingItem, unidad: e.target.value }); setCreatingItemError(null) }}
+                      className={inputCls}
+                    >
+                      <option value="">Sin unidad</option>
+                      {UNIDADES_PRECIO.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {creatingItem.kind === 'insumo' && (
                   <div className="pt-1 space-y-2 border border-dashed border-border rounded-sm p-2">
                     <label className="text-xs font-medium text-foreground">Categoría</label>
@@ -1546,16 +1627,17 @@ interface DetalleTableProps<T extends { id: number }> {
   onAdd: () => void | Promise<void>
   onChange: (id: number, patch: Partial<T>) => void | Promise<void>
   onRemove: (id: number) => void | Promise<void>
-  onCreateNew: (onCreated: (id: number) => void) => void
+  onCreateNew: (row: T, onCreated: (id: number) => void) => void
   computedRow: (row: T) => number
   totalLabel: string
   totalValue: number
   emptyHint?: string
+  footer?: React.ReactNode
 }
 
 function DetalleTable<T extends { id: number }>({
   title, icon: Icon, columns, rows, catalogOptions, addLabel, canAdd,
-  onAdd, onChange, onRemove, onCreateNew, computedRow, totalLabel, totalValue, emptyHint,
+  onAdd, onChange, onRemove, onCreateNew, computedRow, totalLabel, totalValue, emptyHint, footer,
 }: DetalleTableProps<T>) {
   // Fusiona las opciones activas del catálogo con los ítems ya referenciados
   // por filas guardadas (que pueden estar inactivos) para no perder su nombre
@@ -1660,6 +1742,7 @@ function DetalleTable<T extends { id: number }>({
           </table>
         </div>
       )}
+      {footer}
     </section>
   )
 }
@@ -1667,7 +1750,7 @@ function DetalleTable<T extends { id: number }>({
 interface CellCtx<T> {
   catalogOptions: CatalogOption[]
   onChange: (id: number, patch: Partial<T>) => void | Promise<void>
-  onCreateNew: (onCreated: (id: number) => void) => void
+  onCreateNew: (row: T, onCreated: (id: number) => void) => void
   computedRow: (row: T) => number
 }
 
@@ -1706,7 +1789,7 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
         </select>
         <button
           type="button"
-          onClick={() => ctx.onCreateNew((newId) => ctx.onChange(row.id, { [col.key]: newId } as Partial<T>))}
+          onClick={() => ctx.onCreateNew(row, (newId) => ctx.onChange(row.id, { [col.key]: newId } as Partial<T>))}
           className="p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           title="Crear nuevo"
           aria-label="Crear nuevo"

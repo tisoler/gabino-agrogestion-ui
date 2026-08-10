@@ -114,13 +114,12 @@ export default function MapaLote({
         drawPolygon: true,
         drawCircle: false,
         drawText: false,
-        editMode: true,
+        editMode: false,
         dragMode: false,
         cutPolygon: false,
         removalMode: true,
       })
       map.on('pm:create', (e: any) => reemplazar(e.layer))
-      map.on('pm:edit', (e: any) => emitir(e.layer))
       map.on('pm:remove', () => {
         layerRef.current = null
         internalChangeRef.current = true
@@ -155,9 +154,6 @@ export default function MapaLote({
       const geo = L.geoJSON(geometria, {
         style: { color: '#0284c7', weight: 2, fillColor: '#38bdf8', fillOpacity: 0.25 },
       })
-      if (dibujar) {
-        geo.eachLayer((l) => (l as any).pm.enable({ draggable: false }))
-      }
       layerRef.current = geo
       geo.addTo(map)
       map.fitBounds((geo as L.GeoJSON).getBounds(), { padding: [30, 30] })
