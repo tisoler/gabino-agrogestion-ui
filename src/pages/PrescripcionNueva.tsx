@@ -3,7 +3,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Calendar, Building2,
-  Pickaxe, Package, FolderPlus, X,
+  Pickaxe, Package, FolderPlus, X, ClipboardList,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -18,8 +18,9 @@ const todayLocalISO = () => {
 interface CampaniaOption {
   id: number
   nombre: string
-  campania: string
+  campania?: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
+  cultivo?: { id: number; nombre: string } | null
 }
 interface Lote { id: number; idEmpresa: number; descripcion: string | null }
 interface Cultivo { id: number; nombre: string; variedades: { id: number; nombre: string }[] }
@@ -63,10 +64,12 @@ export default function PrescripcionNueva() {
     return empresas.filter((e) => ids.includes(e.id))
   }, [isAdmin, user, empresas])
 
-  // Paso 1: empresa → campañas
+  // Paso 1: productor + campaña (período) + lote + cultivo identifican la producción
   const [fecha, setFecha] = useState(todayLocalISO())
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')
-  const [idCampania, setCampania] = useState<number | ''>('')
+  const [periodo, setPeriodo] = useState<string>('')
+  const [idLote, setIdLote] = useState<number | ''>('')
+  const [idCultivo, setIdCultivo] = useState<number | ''>('')
 
   // Catálogos (sys-admin y asesor-admin ven todas las labores/insumos)
   const { data: lotes = [] } = useSWR<Lote[]>(canWrite ? '/lotes' : null, fetcher)
@@ -77,22 +80,66 @@ export default function PrescripcionNueva() {
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
   const { data: categorias = [] } = useSWR<Categoria[]>(canWrite ? '/categorias' : null, fetcher)
 
-  const { data: campanias = [], mutate: mutateCampanias } = useSWR<CampaniaOption[]>(
-    canWrite && idEmpresa !== '' ? ['/campanias', idEmpresa] : null,
+  // Producciones del productor seleccionado; de ahí se derivan las opciones
+  // de cada selector (campañas → lotes → cultivos).
+  const {
+    data: producciones = [],
+    isLoading: loadingProduccion,
+    mutate: mutateProduccion,
+  } = useSWR<CampaniaOption[]>(
+    canWrite && idEmpresa !== '' ? ['/campanias', 'produccion', idEmpresa] : null,
     async () => {
-      const res = await api.get('/campanias', { params: { currentEmpresaId: Number(idEmpresa) } })
+      const res = await api.get('/campanias', {
+        params: { empresaIds: Number(idEmpresa) },
+      })
       return res.data as CampaniaOption[]
     }
   )
 
+  const periodosDisponibles = useMemo(
+    () =>
+      Array.from(new Set(producciones.map((p) => p.campania).filter((c): c is string => !!c)))
+        .sort((a, b) => b.localeCompare(a, 'es')),
+    [producciones]
+  )
+
+  const lotesDisponibles = useMemo(() => {
+    const rows = periodo === '' ? [] : producciones.filter((p) => p.campania === periodo)
+    const seen = new Map<number, { id: number; descripcion: string | null }>()
+    for (const p of rows) {
+      if (p.lote) seen.set(p.lote.id, p.lote)
+    }
+    return Array.from(seen.values()).sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '', 'es'))
+  }, [producciones, periodo])
+
+  const cultivosDisponibles = useMemo(() => {
+    const rows =
+      periodo === '' || idLote === ''
+        ? []
+        : producciones.filter((p) => p.campania === periodo && p.lote?.id === Number(idLote))
+    const seen = new Map<number, { id: number; nombre: string }>()
+    for (const p of rows) {
+      if (p.cultivo) seen.set(p.cultivo.id, p.cultivo)
+    }
+    return Array.from(seen.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  }, [producciones, periodo, idLote])
+
+  const seleccionCompleta =
+    idEmpresa !== '' && periodo !== '' && idLote !== '' && idCultivo !== ''
+
+  const produccionSel = seleccionCompleta
+    ? producciones.find(
+      (p) =>
+        p.campania === periodo &&
+        p.lote?.id === Number(idLote) &&
+        p.cultivo?.id === Number(idCultivo)
+    )
+    : undefined
+  const idCampania = produccionSel?.id ?? ''
+
   const lotesEmpresa = useMemo(
     () => (idEmpresa === '' ? [] : lotes.filter((l) => l.idEmpresa === Number(idEmpresa))),
     [lotes, idEmpresa]
-  )
-
-  const campaniaSel = useMemo(
-    () => (idCampania === '' ? undefined : campanias.find((c) => c.id === Number(idCampania))),
-    [campanias, idCampania]
   )
 
   // Paso 2: labor + total ha
@@ -115,6 +162,7 @@ export default function PrescripcionNueva() {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [campaniaError, setCampaniaError] = useState<string | null>(null)
 
   const totalHaNum = num(totalHa)
   const canAddInsumos = idCampania !== '' && idLabor !== '' && totalHaNum > 0
@@ -182,9 +230,9 @@ export default function PrescripcionNueva() {
     setInsumoRows((rows) => recomputeByTotalHa(rows, n))
   }
 
-  // Crear campaña desde el modal
+  // Crear producción desde el modal
   const handleCreateCampania = async () => {
-    setError(null)
+    setCampaniaError(null)
     try {
       const payload: Record<string, unknown> = {
         nombre: campaniaForm.nombre.trim(),
@@ -193,10 +241,14 @@ export default function PrescripcionNueva() {
         idCultivo: Number(campaniaForm.idCultivo),
       }
       if (campaniaForm.idVariedad !== '') payload.idVariedad = Number(campaniaForm.idVariedad)
-      const { data } = await api.post('/campanias', payload)
-      await mutateCampanias()
-      setCampania(data.id)
+      await api.post('/campanias', payload)
+      // La cascada queda apuntando a la producción recién creada.
+      setIdLote(campaniaForm.idLote)
+      setIdCultivo(campaniaForm.idCultivo)
+      setPeriodo(campaniaForm.campania)
+      await mutateProduccion()
       setShowCampaniaModal(false)
+      setCampaniaError(null)
       setCampaniaForm({
         nombre: '', campania: periodosCampania()[0] || '',
         idLote: '', idCultivo: '', idVariedad: '',
@@ -204,7 +256,7 @@ export default function PrescripcionNueva() {
     } catch (e) {
       const err = e as { response?: { data?: { message?: string | string[] } } }
       const msg = err?.response?.data?.message
-      setError(Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : 'No se pudo crear la campaña.')
+      setCampaniaError(Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : 'No se pudo crear la producción.')
     }
   }
 
@@ -291,7 +343,7 @@ export default function PrescripcionNueva() {
   }
 
   const inputCls =
-    'w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors'
+    'w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
   const labelCls = 'text-xs font-medium text-foreground'
 
   return (
@@ -308,7 +360,7 @@ export default function PrescripcionNueva() {
           </button>
           <div>
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Nueva Prescripción</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Receta de aplicación de labor e insumos sobre una campaña</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Receta de aplicación de labor e insumos sobre una producción</p>
           </div>
         </div>
       </div>
@@ -338,7 +390,8 @@ export default function PrescripcionNueva() {
               onChange={(e) => {
                 const v = e.target.value === '' ? '' : Number(e.target.value)
                 setIdEmpresa(v)
-                setCampania('')
+                setIdLote('')
+                setIdCultivo('')
               }}
               className={inputCls}
             >
@@ -350,48 +403,127 @@ export default function PrescripcionNueva() {
           </div>
         </div>
 
-        {/* Campañas */}
-        <div className="space-y-1.5">
-          <label className={labelCls}>Campaña</label>
-          {idEmpresa === '' ? (
-            <p className="text-sm text-muted-foreground">Elegí primero el productor.</p>
-          ) : (
-            <>
+        {/* Producción: productor + campaña + lote + cultivo */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className={labelCls}>Campaña</label>
               <select
-                value={idCampania}
-                onChange={(e) => setCampania(e.target.value === '' ? '' : Number(e.target.value))}
+                value={periodo}
+                onChange={(e) => {
+                  setPeriodo(e.target.value)
+                  setIdLote('')
+                  setIdCultivo('')
+                }}
+                disabled={idEmpresa === ''}
                 className={inputCls}
               >
-                <option value="">Seleccionar campaña...</option>
-                {campanias.map((c) => (
+                <option value="" disabled>
+                  {idEmpresa === '' ? 'Elegí primero el productor' : 'Seleccionar campaña...'}
+                </option>
+                {periodosDisponibles.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls}>Lote</label>
+              <select
+                value={idLote}
+                onChange={(e) => {
+                  setIdLote(e.target.value === '' ? '' : Number(e.target.value))
+                  setIdCultivo('')
+                }}
+                disabled={periodo === ''}
+                className={inputCls}
+              >
+                <option value="" disabled>
+                  {periodo === '' ? 'Elegí campaña' : 'Seleccionar lote...'}
+                </option>
+                {lotesDisponibles.map((l) => (
+                  <option key={l.id} value={l.id}>{l.descripcion || `Lote #${l.id}`}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls}>Cultivo</label>
+              <select
+                value={idCultivo}
+                onChange={(e) => setIdCultivo(e.target.value === '' ? '' : Number(e.target.value))}
+                disabled={idLote === ''}
+                className={inputCls}
+              >
+                <option value="" disabled>
+                  {idLote === '' ? 'Elegí lote' : 'Seleccionar cultivo...'}
+                </option>
+                {cultivosDisponibles.map((c) => (
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
-              {campaniaSel && (
-                <p className="text-[12px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
-                  <span>
-                    Lote: <span className="font-medium text-foreground">{campaniaSel.lote?.descripcion || `Lote #${campaniaSel.lote?.id ?? '—'}`}</span>
-                  </span>
-                  <span>
-                    Campaña: <span className="font-medium text-foreground">{campaniaSel.campania}</span>
-                  </span>
-                </p>
-              )}
-              {campanias.length === 0 && (
-                <p className="text-[12px] text-muted-foreground">
-                  Este productor aún no tiene campañas. Creá una para continuar.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowCampaniaModal(true)}
-                className="inline-flex items-center gap-1.5 mt-1 text-xs font-medium text-primary hover:underline"
-              >
-                <FolderPlus className="size-3.5" strokeWidth={1.75} />
-                Crear campaña
-              </button>
-            </>
+            </div>
+          </div>
+
+          {idEmpresa === '' ? (
+            <p className="text-[12px] text-muted-foreground">Elegí primero el productor.</p>
+          ) : loadingProduccion ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Cargando producciones...</span>
+            </div>
+          ) : periodo === '' ? (
+            periodosDisponibles.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No existe una producción para esa combinación. Creala para continuar.
+              </p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Elegí una campaña.</p>
+            )
+          ) : idLote === '' ? (
+            lotesDisponibles.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No existe una producción para esa combinación. Creala para continuar.
+              </p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Elegí un lote.</p>
+            )
+          ) : idCultivo === '' ? (
+            cultivosDisponibles.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No existe una producción para esa combinación. Creala para continuar.
+              </p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Elegí un cultivo.</p>
+            )
+          ) : produccionSel ? (
+            <div className="flex items-center gap-2 text-sm">
+              <ClipboardList className="size-4 text-primary shrink-0" strokeWidth={1.75} />
+              <span className="text-muted-foreground">Producción:</span>
+              <span className="font-medium text-foreground">
+                {produccionSel.nombre || `Producción #${produccionSel.id}`}
+              </span>
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted-foreground">
+              No existe una producción para esa combinación. Creala para continuar.
+            </p>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setCampaniaError(null)
+              setCampaniaForm((f) => ({
+                ...f,
+                idLote,
+                campania: periodo || periodosCampania()[0] || '',
+              }))
+              setShowCampaniaModal(true)
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            <FolderPlus className="size-3.5" strokeWidth={1.75} />
+            Crear producción
+          </button>
         </div>
       </section>
 
@@ -449,7 +581,7 @@ export default function PrescripcionNueva() {
 
         {!canAddInsumos ? (
           <p className="text-sm text-muted-foreground">
-            Seleccioná la campaña, la labor y el total de hectáreas para habilitar los insumos.
+            Seleccioná la producción, la labor y el total de hectáreas para habilitar los insumos.
           </p>
         ) : insumoRows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No hay insumos agregados todavía.</p>
@@ -560,7 +692,7 @@ export default function PrescripcionNueva() {
         </button>
       </div>
 
-      {/* Modal: crear campaña */}
+      {/* Modal: crear producción */}
       {showCampaniaModal && idEmpresa !== '' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => setShowCampaniaModal(false)} aria-hidden />
@@ -568,7 +700,7 @@ export default function PrescripcionNueva() {
             <div className="px-5 py-4 border-b border-border flex justify-between items-center">
               <h2 className="text-base font-semibold text-foreground">
                 <Building2 className="size-4 inline mr-2 text-primary" strokeWidth={1.75} />
-                Nueva campaña
+                Nueva producción
               </h2>
               <button onClick={() => setShowCampaniaModal(false)} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent" aria-label="Cerrar">
                 <X className="size-4" strokeWidth={1.75} />
@@ -581,7 +713,7 @@ export default function PrescripcionNueva() {
                   type="text"
                   value={campaniaForm.nombre}
                   onChange={(e) => setCampaniaForm({ ...campaniaForm, nombre: e.target.value })}
-                  placeholder="Ej: Campaña 2025/2026"
+                  placeholder="Ej: Producción Soja 25/26"
                   className={inputCls}
                 />
               </div>
@@ -638,6 +770,12 @@ export default function PrescripcionNueva() {
                   ))}
                 </select>
               </div>
+              {campaniaError && (
+                <p className="text-[12px] w-full text-destructive inline-flex items-center gap-1 bg-destructive-soft border border-destructive/20 rounded-md px-3 py-2">
+                  <AlertCircle className="size-3 shrink-0" strokeWidth={1.75} />
+                  {campaniaError}
+                </p>
+              )}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"

@@ -44,7 +44,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: LucideIcon }[] = [
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/campanias', label: 'Campañas', icon: Calendar, permission: 'lectura:campania' },
+  { to: '/campanias', label: 'Producción', icon: Calendar, permission: 'lectura:campania' },
   { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
   { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
   { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },

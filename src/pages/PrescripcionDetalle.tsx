@@ -84,40 +84,59 @@ export default function PrescripcionDetalle() {
         </span>
       </div>
 
-      {/* Campaña */}
+      {/* Lote */}
       <section className="bg-card border border-border rounded-lg p-5 space-y-3">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider text-muted-foreground">
-          Campaña
+          Lote en campaña
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
-            <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Calendar className="size-3 shrink-0" strokeWidth={2} />
+              Identificador de producción
+            </p>
+            <div className="text-sm">
               {prescripcion.campania ? (
                 <Link
                   to={`/campanias/${prescripcion.campania.id}`}
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="font-medium text-primary hover:underline"
                 >
-                  {prescripcion.campania.nombre || `Campaña #${prescripcion.campania.id}`}
+                  {prescripcion.campania.nombre || `Producción #${prescripcion.campania.id}`}
                 </Link>
               ) : (
-                <p className="text-sm font-medium text-foreground">—</p>
+                <span className="font-medium text-foreground">—</span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Building2 className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
-            <span className="text-sm text-foreground">{empresa?.nombre || '—'}</span>
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Calendar className="size-3 shrink-0" strokeWidth={2} />
+              Campaña
+            </p>
+            <p className="text-sm text-foreground">{prescripcion.campania?.campania || '—'}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
-            <span className="text-sm text-foreground">
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Building2 className="size-3 shrink-0" strokeWidth={2} />
+              Productor
+            </p>
+            <p className="text-sm text-foreground">{empresa?.nombre || '—'}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <MapPin className="size-3 shrink-0" strokeWidth={2} />
+              Lote
+            </p>
+            <p className="text-sm text-foreground">
               {prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`}
-            </span>
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Sprout className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
-            <span className="text-sm text-foreground">{prescripcion.campania?.cultivo?.nombre || '—'}</span>
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Sprout className="size-3 shrink-0" strokeWidth={2} />
+              Cultivo
+            </p>
+            <p className="text-sm text-foreground">{prescripcion.campania?.cultivo?.nombre || '—'}</p>
           </div>
         </div>
       </section>

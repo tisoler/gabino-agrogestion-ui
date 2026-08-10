@@ -1,6 +1,7 @@
 export interface PrescripcionCampania {
   id: number
   nombre: string
+  campania?: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
   cultivo?: { id: number; nombre: string } | null
 }

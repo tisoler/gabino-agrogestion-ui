@@ -3,17 +3,20 @@ import useSWR from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, AlertCircle, Activity, ClipboardList, MapPin, Calendar,
-  Pickaxe, Package,
+  Pickaxe, Package, Building2,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { fmtFecha, fmtHa, type PrescripcionListItem } from '../lib/prescripciones'
+import { periodosCampania } from '../lib/campanias'
+import MultiselectFilter from '../components/MultiselectFilter'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
 interface CampaniaOption {
   id: number
   nombre: string
+  campania?: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
 }
 interface Lote {
@@ -44,8 +47,9 @@ export default function Prescripciones() {
   }, [isAdmin, user, empresas])
 
   // Filtros
-  const [filterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
+  const [filterEmpresaIds, setFilterEmpresaIds] = useState<number[]>([])
   const [filterIdCampania, setFilterIdCampania] = useState<number | null>(null)
+  const [filterCampanias, setFilterCampanias] = useState<string[]>([])
   const [filterIdLote, setFilterIdLote] = useState<number | null>(null)
   const [filterIdLabor, setFilterIdLabor] = useState<number | null>(null)
   const [filterIdInsumo, setFilterIdInsumo] = useState<number | null>(null)
@@ -60,21 +64,22 @@ export default function Prescripciones() {
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
 
   const campaniasFiltradas = useMemo(() => {
-    if (!filterEmpresaId) return campanias
-    return campanias.filter((c) => c.lote?.idEmpresa === filterEmpresaId)
-  }, [campanias, filterEmpresaId])
+    if (filterEmpresaIds.length === 0) return campanias
+    return campanias.filter((c) => c.lote?.idEmpresa != null && filterEmpresaIds.includes(c.lote.idEmpresa))
+  }, [campanias, filterEmpresaIds])
 
   const lotesFiltrados = useMemo(() => {
-    if (!filterEmpresaId) return lotes
-    return lotes.filter((l) => l.idEmpresa === filterEmpresaId)
-  }, [lotes, filterEmpresaId])
+    if (filterEmpresaIds.length === 0) return lotes
+    return lotes.filter((l) => filterEmpresaIds.includes(l.idEmpresa))
+  }, [lotes, filterEmpresaIds])
 
   const prescripcionesFetcher = async ([
-    , empresaId, idCampania, idLote, idLabor, idInsumo,
-  ]: [string, number | null, number | null, number | null, number | null, number | null]) => {
+    , empresaIds, idCampania, campanias, idLote, idLabor, idInsumo,
+  ]: [string, string, number | null, string, number | null, number | null, number | null]) => {
     const params: Record<string, unknown> = {}
-    if (empresaId) params.empresaId = empresaId
+    if (empresaIds) params.empresaIds = empresaIds
     if (idCampania) params.idCampania = idCampania
+    if (campanias) params.campanias = campanias
     if (idLote) params.idLote = idLote
     if (idLabor) params.idLabor = idLabor
     if (idInsumo) params.idInsumo = idInsumo
@@ -84,7 +89,7 @@ export default function Prescripciones() {
 
   const { data: prescripciones = [], isLoading } = useSWR<PrescripcionListItem[]>(
     canRead
-      ? ['prescripciones', filterEmpresaId, filterIdCampania, filterIdLote, filterIdLabor, filterIdInsumo]
+      ? ['prescripciones', filterEmpresaIds.join(','), filterIdCampania, filterCampanias.join(','), filterIdLote, filterIdLabor, filterIdInsumo]
       : null,
     prescripcionesFetcher,
     { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 0 }
@@ -95,18 +100,20 @@ export default function Prescripciones() {
     if (!term) return prescripciones
     return prescripciones.filter((p) =>
       p.campania?.nombre.toLowerCase().includes(term) ||
+      (p.campania?.campania || '').toLowerCase().includes(term) ||
       p.labor?.nombre.toLowerCase().includes(term) ||
       (p.campania?.lote?.descripcion || '').toLowerCase().includes(term)
     )
   }, [prescripciones, searchTerm])
 
   const hasActiveFilters =
-    filterEmpresaId !== null || filterIdCampania !== null || filterIdLote !== null ||
-    filterIdLabor !== null || filterIdInsumo !== null
+    filterEmpresaIds.length > 0 || filterIdCampania !== null || filterCampanias.length > 0 ||
+    filterIdLote !== null || filterIdLabor !== null || filterIdInsumo !== null
 
   const clearFilters = () => {
-    setFilterEmpresaId(null)
+    setFilterEmpresaIds([])
     setFilterIdCampania(null)
+    setFilterCampanias([])
     setFilterIdLote(null)
     setFilterIdLabor(null)
     setFilterIdInsumo(null)
@@ -132,7 +139,7 @@ export default function Prescripciones() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Prescripciones</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Recetas de aplicación por labor e insumos sobre una campaña
+            Recetas de aplicación por labor e insumos sobre una producción
           </p>
         </div>
         {canWrite && (
@@ -152,41 +159,22 @@ export default function Prescripciones() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
           <input
             type="text"
-            placeholder="Buscar por campaña, labor o lote..."
+            placeholder="Buscar por producción, campaña, labor o lote..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Productor
-            </label>
-            <select
-              value={filterEmpresaId ?? ''}
-              onChange={(e) => {
-                setFilterEmpresaId(e.target.value === '' ? null : Number(e.target.value))
-                setFilterIdCampania(null)
-                setFilterIdLote(null)
-              }}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            >
-              <option value="">Todos</option>
-              {empresasVisibles.map((e) => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Campaña
+              Producción
             </label>
             <select
               value={filterIdCampania ?? ''}
               onChange={(e) => setFilterIdCampania(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todas</option>
               {campaniasFiltradas.map((c) => (
@@ -196,12 +184,36 @@ export default function Prescripciones() {
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+              Productor
+            </label>
+            <MultiselectFilter
+              value={filterEmpresaIds.map(String)}
+              opciones={empresasVisibles.map((e) => ({ value: String(e.id), label: e.nombre }))}
+              onChange={(next) => setFilterEmpresaIds(next.map(Number))}
+              placeholder="Todos"
+              etiqueta="productor"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+              Campaña
+            </label>
+            <MultiselectFilter
+              value={filterCampanias}
+              opciones={periodosCampania().map((p) => ({ value: p, label: p }))}
+              onChange={setFilterCampanias}
+              placeholder="Todas"
+              etiqueta="período"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Lote
             </label>
             <select
               value={filterIdLote ?? ''}
               onChange={(e) => setFilterIdLote(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todos</option>
               {lotesFiltrados.map((l) => (
@@ -216,7 +228,7 @@ export default function Prescripciones() {
             <select
               value={filterIdLabor ?? ''}
               onChange={(e) => setFilterIdLabor(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todas</option>
               {labores.map((l) => (
@@ -231,7 +243,7 @@ export default function Prescripciones() {
             <select
               value={filterIdInsumo ?? ''}
               onChange={(e) => setFilterIdInsumo(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todos</option>
               {insumos.map((i) => (
@@ -283,6 +295,12 @@ export default function Prescripciones() {
                     Fecha
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Producción
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Productor
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Campaña
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -314,7 +332,21 @@ export default function Prescripciones() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-foreground truncate">
-                        {p.campania?.nombre || `Campaña #${p.idCampania}`}
+                        {p.campania?.nombre || `Producción #${p.idCampania}`}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                        <span className="text-sm text-foreground truncate">
+                          {empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre
+                            || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-foreground">
+                        {p.campania?.campania || '—'}
                       </span>
                     </td>
                     <td className="px-4 py-3">

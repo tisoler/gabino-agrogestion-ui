@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react'
 import useSWR from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, Search, Filter, Calendar, Activity, AlertCircle, Shield,
-  ChevronDown, Check, X, FileSpreadsheet, MapPin, Sprout, Layers
+  Plus, Search, Calendar, Activity, AlertCircle, Shield,
+  X, FileSpreadsheet, MapPin, Sprout, Layers
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { fmtMoneda, fmtNumero, fmtQQHa, periodosCampania } from '../lib/campanias'
+import MultiselectFilter from '../components/MultiselectFilter'
 
 interface CampaniaListTotales {
   rendimientoQqHa: number
@@ -59,17 +60,12 @@ export default function Campanias() {
   // Filtros
   // Sin filtro por defecto: admins ven todas las empresas y asesor/productor
   // todas las que tienen vinculadas (el backend filtra por idEmpresas).
-  const [filterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
+  const [filterEmpresaIds, setFilterEmpresaIds] = useState<number[]>([])
   const filterEmpresasVisibles = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const [filterCampanias, setFilterCampanias] = useState<string[]>([])
   const [filterIdCultivo, setFilterIdCultivo] = useState<number | null>(null)
   const [filterIdVariedad, setFilterIdVariedad] = useState<number | null>(null)
   const [filterIdLote, setFilterIdLote] = useState<number | null>(null)
-
-  // UI
-  const [showAll, setShowAll] = useState(false)
-  const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [campaniasMenuOpen, setCampaniasMenuOpen] = useState(false)
 
   // Catálogos para los selects de filtro y para la creación
   const { data: cultivos = [] } = useSWR<Cultivo[]>(canRead ? '/cultivos' : null, fetcher)
@@ -82,19 +78,18 @@ export default function Campanias() {
     return c?.variedades || []
   }, [cultivos, filterIdCultivo])
 
-  // Lotes filtrados por empresa (para asesor/productor ya viene filtrado del backend;
-  // para admins usamos el filtro de empresa seleccionado)
+  // Lotes filtrados por productor seleccionado
   const lotesFiltrados = useMemo(() => {
     if (!lotes) return []
-    if (isAdmin && filterEmpresaId) {
-      return lotes.filter((l) => l.idEmpresa === filterEmpresaId)
+    if (filterEmpresaIds.length > 0) {
+      return lotes.filter((l) => filterEmpresaIds.includes(l.idEmpresa))
     }
     return lotes
-  }, [lotes, isAdmin, filterEmpresaId])
+  }, [lotes, filterEmpresaIds])
 
   const campaniasFetcher = async ([
     ,
-    empresaId,
+    empresaIds,
     campanias,
     nombre,
     idCultivo,
@@ -102,7 +97,7 @@ export default function Campanias() {
     idLote,
   ]: [
       string,
-      number | null,
+      string,
       string,
       string,
       number | null,
@@ -110,7 +105,7 @@ export default function Campanias() {
       number | null
     ]) => {
     const params: Record<string, unknown> = {}
-    if (empresaId) params.currentEmpresaId = empresaId
+    if (empresaIds) params.empresaIds = empresaIds
     if (campanias) params.campanias = campanias
     if (nombre) params.nombre = nombre
     if (idCultivo) params.idCultivo = idCultivo
@@ -124,7 +119,7 @@ export default function Campanias() {
     canRead
       ? [
         'campanias',
-        filterEmpresaId,
+        filterEmpresaIds.join(','),
         filterCampanias.join(','),
         searchTerm,
         filterIdCultivo,
@@ -144,7 +139,7 @@ export default function Campanias() {
   }, [campanias])
 
   const clearFilters = () => {
-    setFilterEmpresaId(null)
+    setFilterEmpresaIds([])
     setFilterCampanias([])
     setFilterIdCultivo(null)
     setFilterIdVariedad(null)
@@ -152,7 +147,7 @@ export default function Campanias() {
   }
 
   const hasActiveFilters =
-    filterEmpresaId !== null ||
+    filterEmpresaIds.length > 0 ||
     filterCampanias.length > 0 ||
     filterIdCultivo !== null ||
     filterIdVariedad !== null ||
@@ -171,15 +166,13 @@ export default function Campanias() {
     )
   }
 
-  const filterEmpresaLabel = empresas.find((e) => e.id === filterEmpresaId)?.nombre
-
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Campañas</h1>
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Producción</h1>
             {isAdmin && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
                 <Shield className="size-3" strokeWidth={2} />
@@ -198,7 +191,7 @@ export default function Campanias() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
           >
             <Plus className="size-4" strokeWidth={2} />
-            <span>Nueva Campaña</span>
+            <span>Nueva producción</span>
           </button>
         )}
       </div>
@@ -207,7 +200,7 @@ export default function Campanias() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Campañas
+            Producción
           </p>
           <p className="text-2xl font-semibold text-foreground mt-1">{totalesGlobales.cantidad}</p>
         </div>
@@ -229,120 +222,13 @@ export default function Campanias() {
         </div>
       </div>
 
-      {/* Filtros */}
-      {isAdmin && (
-        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <span
-                role="switch"
-                aria-checked={showAll}
-                onClick={() => setShowAll(!showAll)}
-                onKeyDown={(e) => {
-                  if (e.key === ' ' || e.key === 'Enter') {
-                    e.preventDefault()
-                    setShowAll(!showAll)
-                  }
-                }}
-                tabIndex={0}
-                className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${showAll ? 'bg-primary' : 'bg-muted-foreground/30'
-                  }`}
-              >
-                <span
-                  className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${showAll ? 'translate-x-4' : 'translate-x-0.5'
-                    }`}
-                />
-              </span>
-              <span className="text-sm text-foreground">Ver todos los productores</span>
-            </label>
-
-            {showAll && (
-              <div className="relative">
-                <button
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent border border-border rounded-md text-xs font-medium text-foreground hover:bg-muted transition-colors"
-                  aria-haspopup="menu"
-                  aria-expanded={isFilterOpen}
-                >
-                  <Filter className="size-3.5" strokeWidth={2} />
-                  <span>Productor</span>
-                  <ChevronDown
-                    className={`size-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}
-                    strokeWidth={2}
-                  />
-                </button>
-
-                {isFilterOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-30"
-                      onClick={() => setIsFilterOpen(false)}
-                      aria-hidden
-                    />
-                    <div
-                      role="menu"
-                      className="absolute right-0 mt-1.5 w-64 bg-popover border border-border rounded-md shadow-lg overflow-hidden z-40"
-                    >
-                      <div className="px-3 py-2 border-b border-border bg-accent/40">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Productores
-                        </span>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto p-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFilterEmpresaId(null)
-                            setIsFilterOpen(false)
-                          }}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${filterEmpresaId === null
-                            ? 'bg-primary-soft text-primary font-medium'
-                            : 'text-foreground hover:bg-accent'
-                            }`}
-                        >
-                          <span className="truncate">Todos</span>
-                          {filterEmpresaId === null && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
-                        </button>
-                        {empresas?.map((e) => (
-                          <button
-                            type="button"
-                            key={e.id}
-                            onClick={() => {
-                              setFilterEmpresaId(e.id)
-                              setIsFilterOpen(false)
-                            }}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-sm transition-colors ${filterEmpresaId === e.id
-                              ? 'bg-primary-soft text-primary font-medium'
-                              : 'text-foreground hover:bg-accent'
-                              }`}
-                          >
-                            <span className="truncate">{e.nombre}</span>
-                            {filterEmpresaId === e.id && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {filterEmpresaLabel && (
-            <p className="text-[11px] text-muted-foreground px-1">
-              Filtrando por <span className="font-medium text-foreground">{filterEmpresaLabel}</span>
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Búsqueda + filtros por año/cultivo/variedad/lote */}
+      {/* Búsqueda + filtros */}
       <div className="bg-card/60 border border-border rounded-lg p-3 space-y-3">
         <div className="relative group">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
           <input
             type="text"
-            placeholder="Buscar por nombre de campaña..."
+            placeholder="Buscar por identificador de producción..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
@@ -350,76 +236,29 @@ export default function Campanias() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-          {!isAdmin && filterEmpresasVisibles.length > 0 && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-                Productor
-              </label>
-              <select
-                value={filterEmpresaId ?? ''}
-                onChange={(e) => setFilterEmpresaId(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-              >
-                <option value="">Todos</option>
-                {filterEmpresasVisibles.map((e) => (
-                  <option key={e.id} value={e.id}>{e.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+              Productor
+            </label>
+            <MultiselectFilter
+              value={filterEmpresaIds.map(String)}
+              opciones={filterEmpresasVisibles.map((e) => ({ value: String(e.id), label: e.nombre }))}
+              onChange={(next) => setFilterEmpresaIds(next.map(Number))}
+              placeholder="Todos"
+              etiqueta="productor"
+            />
+          </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Campaña
             </label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCampaniasMenuOpen((o) => !o)}
-                className="w-full inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground hover:border-primary transition-colors"
-                aria-haspopup="menu"
-                aria-expanded={campaniasMenuOpen}
-              >
-                <span className={`truncate ${filterCampanias.length ? '' : 'text-muted-foreground'}`}>
-                  {filterCampanias.length === 0
-                    ? 'Todas'
-                    : filterCampanias.length === 1
-                      ? filterCampanias[0]
-                      : `${filterCampanias.length} períodos`}
-                </span>
-                <ChevronDown
-                  className={`size-3.5 shrink-0 transition-transform ${campaniasMenuOpen ? 'rotate-180' : ''}`}
-                  strokeWidth={2}
-                />
-              </button>
-              {campaniasMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setCampaniasMenuOpen(false)} aria-hidden />
-                  <div role="menu" className="absolute z-40 mt-1 w-44 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
-                    <div className="max-h-60 overflow-y-auto p-1">
-                      {periodosCampania().map((p) => (
-                        <button
-                          type="button"
-                          key={p}
-                          onClick={() =>
-                            setFilterCampanias((prev) =>
-                              prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-                            )
-                          }
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-sm text-xs transition-colors ${
-                            filterCampanias.includes(p)
-                              ? 'bg-primary-soft text-primary font-medium'
-                              : 'text-foreground hover:bg-accent'
-                          }`}
-                        >
-                          <span>{p}</span>
-                          {filterCampanias.includes(p) && <Check className="size-3.5 shrink-0" strokeWidth={2} />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <MultiselectFilter
+              value={filterCampanias}
+              opciones={periodosCampania().map((p) => ({ value: p, label: p }))}
+              onChange={setFilterCampanias}
+              placeholder="Todas"
+              etiqueta="período"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
@@ -432,7 +271,7 @@ export default function Campanias() {
                 setFilterIdCultivo(v)
                 setFilterIdVariedad(null)
               }}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todos</option>
               {cultivos.map((c) => (
@@ -448,7 +287,7 @@ export default function Campanias() {
               value={filterIdVariedad ?? ''}
               onChange={(e) => setFilterIdVariedad(e.target.value === '' ? null : Number(e.target.value))}
               disabled={!filterIdCultivo}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-50"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-50"
             >
               <option value="">{filterIdCultivo ? 'Todas' : 'Elegí cultivo'}</option>
               {variedadesFiltradas.map((v) => (
@@ -463,7 +302,7 @@ export default function Campanias() {
             <select
               value={filterIdLote ?? ''}
               onChange={(e) => setFilterIdLote(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
             >
               <option value="">Todos</option>
               {lotesFiltrados.map((l) => (
@@ -492,18 +331,18 @@ export default function Campanias() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center p-12 bg-card rounded-lg border border-border border-dashed">
           <Activity className="size-8 text-primary mb-3 animate-pulse" strokeWidth={1.75} />
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando campañas...</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando producción...</p>
         </div>
       ) : campanias.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <FileSpreadsheet className="size-10 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1.5} />
-          <p className="text-sm text-muted-foreground mb-1">No hay campañas cargadas.</p>
+          <p className="text-sm text-muted-foreground mb-1">No hay producción cargada.</p>
           {canWrite && (
             <button
               onClick={goToCreate}
               className="text-sm font-medium text-primary hover:underline mt-1"
             >
-              Crear la primera campaña
+              Crear la primera producción
             </button>
           )}
         </div>
@@ -514,19 +353,19 @@ export default function Campanias() {
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Producción
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Productor
+                  </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Campaña
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Lote
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Productor
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Cultivo / Variedad
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Período
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
                     Sup. cos.
@@ -558,18 +397,21 @@ export default function Campanias() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
+                        <span className="text-sm text-foreground">
+                          {empresas.find((e) => e.id === c.lote?.idEmpresa)?.nombre
+                            || `Productor #${c.lote?.idEmpresa ?? '—'}`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                        {c.campania}
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <MapPin className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
                           <span className="text-sm text-foreground truncate">
                             {c.lote?.descripcion || `Lote #${c.idLote}`}
                           </span>
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-foreground">
-                          {empresas.find((e) => e.id === c.lote?.idEmpresa)?.nombre
-                            || `Productor #${c.lote?.idEmpresa ?? '—'}`}
-                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
@@ -584,9 +426,6 @@ export default function Campanias() {
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                        {c.campania}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {fmtNumero(c.totales.supCosechada, 2)}

@@ -475,7 +475,7 @@ export default function CampaniaDetalle() {
       navigate(`/campanias/${data.id}`, { replace: true })
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } }
-      setCreateError(e?.response?.data?.message || 'Error al crear la campaña')
+      setCreateError(e?.response?.data?.message || 'Error al crear la producción')
     } finally {
       setCreating(false)
     }
@@ -837,7 +837,7 @@ export default function CampaniaDetalle() {
       <div className="flex flex-col items-center justify-center p-20 text-center">
         <AlertCircle className="size-10 text-destructive mb-4" strokeWidth={1.5} />
         <h2 className="text-xl font-semibold text-foreground">Acceso Denegado</h2>
-        <p className="text-sm text-muted-foreground mt-1.5">No tenés permisos para ver campañas.</p>
+        <p className="text-sm text-muted-foreground mt-1.5">No tenés permisos para ver producción.</p>
       </div>
     )
   }
@@ -846,7 +846,7 @@ export default function CampaniaDetalle() {
     return (
       <div className="flex flex-col items-center justify-center p-12">
         <Loader2 className="size-8 text-primary mb-3 animate-spin" strokeWidth={1.75} />
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando campaña...</p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando producción...</p>
       </div>
     )
   }
@@ -867,7 +867,7 @@ export default function CampaniaDetalle() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            {isNew ? 'Nueva Campaña' : cabecera.nombre || `Campaña #${campaniaId}`}
+            {isNew ? 'Nueva producción' : cabecera.nombre || `Producción #${campaniaId}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {isNew
@@ -912,7 +912,7 @@ export default function CampaniaDetalle() {
       <section className="bg-card border border-border rounded-lg p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Datos de la campaña
+            Datos de la producción
           </h2>
         </div>
 
@@ -958,7 +958,7 @@ export default function CampaniaDetalle() {
             </select>
           </Field>
 
-          <Field label="Nombre campaña" icon={Calendar} colSpan={2}>
+          <Field label="Identificador producción" icon={Calendar} colSpan={2}>
             <input
               type="text"
               value={cabecera.nombre}
@@ -1029,7 +1029,7 @@ export default function CampaniaDetalle() {
               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {creating ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              <span>{creating ? 'Creando…' : 'Crear campaña'}</span>
+              <span>{creating ? 'Creando…' : 'Crear producción'}</span>
             </button>
           </div>
         )}
