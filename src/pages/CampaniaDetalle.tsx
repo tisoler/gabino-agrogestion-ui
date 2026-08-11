@@ -446,6 +446,7 @@ export default function CampaniaDetalle() {
     categoriaId: number | null
     unidad: string
     precioUnitario: string
+    idEmpresa: number | null
     onCreated: (id: number) => void
   } | null>(null)
   const [creatingItemError, setCreatingItemError] = useState<string | null>(null)
@@ -800,7 +801,7 @@ export default function CampaniaDetalle() {
     try {
       const payload: Record<string, unknown> = {
         nombre: creatingItem.nombre.trim(),
-        idEmpresa: empresaDestinoId,
+        idEmpresa: isAdmin ? creatingItem.idEmpresa : empresaDestinoId,
       }
       if (creatingItem.descripcion.trim() !== '') payload.descripcion = creatingItem.descripcion.trim()
       if (creatingItem.precioUnitario.trim() !== '') payload.precioUnitario = parseFloat(creatingItem.precioUnitario)
@@ -1099,7 +1100,7 @@ export default function CampaniaDetalle() {
             onAdd={addLabor}
             onChange={updateLabor}
             onRemove={removeLabor}
-            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'labor', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', onCreated })}
+            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'labor', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', idEmpresa: null, onCreated })}
             computedRow={(l) => costoPonderadoHa(l, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de labores"
             totalValue={resultados.costoTotalLaboresHa}
@@ -1148,7 +1149,7 @@ export default function CampaniaDetalle() {
             onAdd={addCosto}
             onChange={updateCosto}
             onRemove={removeCosto}
-            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'costo', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', onCreated })}
+            onCreateNew={(_row, onCreated) => setCreatingItem({ kind: 'costo', nombre: '', descripcion: '', categoriaId: null, unidad: '', precioUnitario: '', idEmpresa: null, onCreated })}
             computedRow={(c) => costoTotalCostoRowHa(c)}
             totalLabel="Costo total de costos varios"
             totalValue={resultados.costoTotalCostosHa}
@@ -1276,12 +1277,20 @@ export default function CampaniaDetalle() {
                   required
                   className={inputCls}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Se asignará al productor{' '}
-                  <span className="font-medium text-foreground">
-                    {empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'actual'}
-                  </span>.
-                </p>
+                <div className="pt-1 space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Productor</label>
+                  <select
+                    value={isAdmin ? (creatingItem.idEmpresa ?? '') : String(empresaDestinoId ?? '')}
+                    onChange={(e) => { setCreatingItem({ ...creatingItem, idEmpresa: e.target.value === '' ? null : Number(e.target.value) }); setCreatingItemError(null) }}
+                    disabled={!isAdmin}
+                    className={inputCls + (isAdmin ? '' : ' cursor-not-allowed opacity-80')}
+                  >
+                    {isAdmin && <option value="">Global (todas las empresas)</option>}
+                    <option value={empresaDestinoId ?? ''}>
+                      {empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'Productor'}
+                    </option>
+                  </select>
+                </div>
                 <div className="pt-1 space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Descripción</label>
                   <textarea
@@ -1293,7 +1302,7 @@ export default function CampaniaDetalle() {
                   />
                 </div>
                 <div className="pt-1 space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">Precio unitario (referencia)</label>
+                  <label className="text-xs font-medium text-foreground">{creatingItem.kind === 'labor' ? 'Precio / ha (referencia - en pesos $)' : 'Precio referencia (en pesos $)'}</label>
                   <input
                     type="number"
                     min="0"

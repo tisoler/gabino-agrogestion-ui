@@ -7,6 +7,8 @@ import {
 import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { UNIDADES_PRECIO } from '../constantes'
+import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
+import MonedaToggle from '../components/MonedaToggle'
 
 interface Categoria {
   id: number
@@ -31,6 +33,10 @@ interface Insumo {
 
 export default function Insumos() {
   const [searchTerm, setSearchTerm] = useState('')
+
+  const [moneda, setMoneda] = useState<Moneda>('pesos')
+  const { venta } = useCotizacionDolar()
+  const dolar = venta
 
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
@@ -254,15 +260,18 @@ export default function Insumos() {
           <p className="text-sm text-muted-foreground mt-0.5">Catálogo maestro de productos y agroinsumos</p>
         </div>
 
-        {canWrite && (
-          <button
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
-          >
-            <Plus className="size-4" strokeWidth={2} />
-            <span>Nuevo Insumo</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <MonedaToggle value={moneda} onChange={setMoneda} />
+          {canWrite && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            >
+              <Plus className="size-4" strokeWidth={2} />
+              <span>Nuevo Insumo</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4 space-y-3">
@@ -357,7 +366,7 @@ export default function Insumos() {
                       )}
                       {insumo.precioUnitario != null && (
                         <p className="text-sm font-medium text-success mt-0.5">
-                          ${Number(insumo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {fmtPrecio(insumo.precioUnitario, moneda, dolar)}
                           {insumo.unidad ? ` / ${insumo.unidad}` : ''}
                         </p>
                       )}
@@ -482,7 +491,7 @@ export default function Insumos() {
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground">
                             {insumo.precioUnitario != null
-                              ? `$${Number(insumo.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${insumo.unidad ? ` / ${insumo.unidad}` : ''}`
+                              ? `${fmtPrecio(insumo.precioUnitario, moneda, dolar)}${insumo.unidad ? ` / ${insumo.unidad}` : ''}`
                               : '—'}
                           </span>
                         </td>
@@ -668,7 +677,7 @@ export default function Insumos() {
 
               <div className="space-y-1.5">
                 <label htmlFor="insumo-precio" className="text-xs font-medium text-foreground">
-                  Precio referencia
+                  Precio referencia (en pesos $)
                 </label>
                 <input
                   id="insumo-precio"

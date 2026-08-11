@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
+import MonedaToggle from '../components/MonedaToggle'
 
 interface Labor {
   id: number
@@ -20,6 +22,10 @@ interface Labor {
 
 export default function Labores() {
   const [searchTerm, setSearchTerm] = useState('')
+
+  const [moneda, setMoneda] = useState<Moneda>('pesos')
+  const { compra } = useCotizacionDolar()
+  const dolar = compra
 
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
@@ -184,15 +190,18 @@ export default function Labores() {
           <p className="text-sm text-muted-foreground mt-0.5">Catálogo maestro de actividades agrícolas</p>
         </div>
 
-        {canWrite && (
-          <button
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
-          >
-            <Plus className="size-4" strokeWidth={2} />
-            <span>Nueva Labor</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <MonedaToggle value={moneda} onChange={setMoneda} />
+          {canWrite && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            >
+              <Plus className="size-4" strokeWidth={2} />
+              <span>Nueva Labor</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg p-4 space-y-3">
@@ -290,7 +299,7 @@ export default function Labores() {
                       )}
                       {labor.precioUnitario != null && (
                         <p className="text-sm font-medium text-success mt-0.5">
-                          ${Number(labor.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {fmtPrecio(labor.precioUnitario, moneda, dolar)}
                         </p>
                       )}
                     </div>
@@ -390,7 +399,7 @@ export default function Labores() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground">
-                            {labor.precioUnitario != null ? `$${Number(labor.precioUnitario).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            {labor.precioUnitario != null ? fmtPrecio(labor.precioUnitario, moneda, dolar) : '—'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -530,7 +539,7 @@ export default function Labores() {
 
               <div className="space-y-1.5">
                 <label htmlFor="labor-precio" className="text-xs font-medium text-foreground">
-                  Precio / ha (referencia)
+                  Precio / ha (referencia - en pesos $)
                 </label>
                 <input
                   id="labor-precio"
