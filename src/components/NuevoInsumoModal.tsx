@@ -227,7 +227,7 @@ export default function NuevoInsumoModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className={labelCls}>Precio referencia (en pesos $)</label>
+            <label className={labelCls}>Precio referencia (en dólares USD)</label>
             <input
               type="number" min="0" step="0.01"
               value={precioUnitario}

@@ -29,7 +29,7 @@ export default function Costos() {
   const [moneda, setMoneda] = useState<Moneda>('pesos')
   const { compra } = useCotizacionDolar()
   const dolar = compra
-  useEffect(() => { setMonedaGlobal(moneda, 'compra') }, [moneda])
+  useEffect(() => { setMonedaGlobal(moneda, 'compra', 'pesos') }, [moneda])
 
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')

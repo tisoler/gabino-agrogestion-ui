@@ -7,7 +7,7 @@ import {
 import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { UNIDADES_PRECIO } from '../constantes'
-import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
+import { useCotizacionDolar, fmtPrecioInsumo, type Moneda } from '../lib/moneda'
 import { setMonedaGlobal } from '../lib/monedaStore'
 import MonedaToggle from '../components/MonedaToggle'
 
@@ -35,10 +35,10 @@ interface Insumo {
 export default function Insumos() {
   const [searchTerm, setSearchTerm] = useState('')
 
-  const [moneda, setMoneda] = useState<Moneda>('pesos')
+  const [moneda, setMoneda] = useState<Moneda>('usd')
   const { venta } = useCotizacionDolar()
   const dolar = venta
-  useEffect(() => { setMonedaGlobal(moneda, 'venta') }, [moneda])
+  useEffect(() => { setMonedaGlobal(moneda, 'venta', 'usd') }, [moneda])
 
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
@@ -368,7 +368,7 @@ export default function Insumos() {
                       )}
                       {insumo.precioUnitario != null && (
                         <p className="text-sm font-medium text-success mt-0.5">
-                          {fmtPrecio(insumo.precioUnitario, moneda, dolar)}
+                          {fmtPrecioInsumo(insumo.precioUnitario, moneda, dolar)}
                           {insumo.unidad ? ` / ${insumo.unidad}` : ''}
                         </p>
                       )}
@@ -493,7 +493,7 @@ export default function Insumos() {
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground">
                             {insumo.precioUnitario != null
-                              ? `${fmtPrecio(insumo.precioUnitario, moneda, dolar)}${insumo.unidad ? ` / ${insumo.unidad}` : ''}`
+                              ? `${fmtPrecioInsumo(insumo.precioUnitario, moneda, dolar)}${insumo.unidad ? ` / ${insumo.unidad}` : ''}`
                               : '—'}
                           </span>
                         </td>
@@ -679,7 +679,7 @@ export default function Insumos() {
 
               <div className="space-y-1.5">
                 <label htmlFor="insumo-precio" className="text-xs font-medium text-foreground">
-                  Precio referencia (en pesos $)
+                  Precio referencia (en dólares USD)
                 </label>
                 <input
                   id="insumo-precio"

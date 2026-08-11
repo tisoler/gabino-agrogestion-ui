@@ -24,17 +24,33 @@ export function useCotizacionDolar() {
   }
 }
 
+const fmtNum = (n: number) =>
+  n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 /**
- * Formatea un precio según la moneda elegida. En USD se divide por la
- * cotización indicada (compra o venta según la vista). El valor guardado
- * siempre es en pesos; la conversión es sólo visual.
+ * Formatea un precio cuyo valor guardado es en pesos (costos, labores).
+ * En USD se divide por la cotización indicada (compra o venta según la vista).
  */
 export function fmtPrecio(valor: number | null | undefined, moneda: Moneda, dolar: number): string {
   if (valor === null || valor === undefined || Number.isNaN(valor)) return '—'
   const v = Number(valor)
   if (moneda === 'usd') {
     const d = dolar > 0 ? dolar : 1
-    return `USD ${(v / d).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return `USD ${fmtNum(v / d)}`
   }
-  return `$${v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `$${fmtNum(v)}`
+}
+
+/**
+ * Formatea el precio de un insumo. El valor guardado en BD es en dólares;
+ * en pesos se multiplica por la cotización de venta. La conversión es visual.
+ */
+export function fmtPrecioInsumo(valor: number | null | undefined, moneda: Moneda, dolar: number): string {
+  if (valor === null || valor === undefined || Number.isNaN(valor)) return '—'
+  const v = Number(valor)
+  if (moneda === 'pesos') {
+    const d = dolar > 0 ? dolar : 1
+    return `$${fmtNum(v * d)}`
+  }
+  return `USD ${fmtNum(v)}`
 }

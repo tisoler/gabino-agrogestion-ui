@@ -2,21 +2,23 @@ import { useSyncExternalStore } from 'react'
 
 export type Moneda = 'pesos' | 'usd'
 export type TipoDolar = 'compra' | 'venta'
+export type MonedaBase = 'pesos' | 'usd'
 
 interface MonedaState {
   moneda: Moneda
   tipoDolar: TipoDolar | null
+  base: MonedaBase
 }
 
-let state: MonedaState = { moneda: 'pesos', tipoDolar: null }
+let state: MonedaState = { moneda: 'pesos', tipoDolar: null, base: 'pesos' }
 const listeners = new Set<() => void>()
 
 function emit() {
   for (const l of listeners) l()
 }
 
-export function setMonedaGlobal(moneda: Moneda, tipoDolar: TipoDolar | null) {
-  state = { moneda, tipoDolar }
+export function setMonedaGlobal(moneda: Moneda, tipoDolar: TipoDolar | null, base: MonedaBase) {
+  state = { moneda, tipoDolar, base }
   emit()
 }
 

@@ -20,11 +20,11 @@ export default function CotizacionDolar() {
     (url) => api.get(url).then((r) => r.data),
     { refreshInterval: 30 * 60 * 1000, revalidateOnFocus: false }
   )
-  const { moneda, tipoDolar } = useMonedaGlobal()
+  const { moneda, tipoDolar, base } = useMonedaGlobal()
 
   if (!data || (!data.compra && !data.venta)) return null
 
-  const resaltar = (tipo: 'compra' | 'venta') => moneda === 'usd' && tipoDolar === tipo
+  const resaltar = (tipo: 'compra' | 'venta') => moneda !== base && tipoDolar === tipo
 
   const Rate = ({ tipo, label, valor }: { tipo: 'compra' | 'venta'; label: string; valor: number }) => {
     const active = resaltar(tipo)
