@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import useSWR from 'swr'
 import {
   Plus, Search, Pencil, Activity, Pickaxe,
@@ -7,6 +7,7 @@ import {
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
+import { setMonedaGlobal } from '../lib/monedaStore'
 import MonedaToggle from '../components/MonedaToggle'
 
 interface Labor {
@@ -26,6 +27,7 @@ export default function Labores() {
   const [moneda, setMoneda] = useState<Moneda>('pesos')
   const { compra } = useCotizacionDolar()
   const dolar = compra
+  useEffect(() => { setMonedaGlobal(moneda, 'compra') }, [moneda])
 
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
