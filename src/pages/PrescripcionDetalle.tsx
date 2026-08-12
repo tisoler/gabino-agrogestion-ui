@@ -12,7 +12,7 @@ const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
 export default function PrescripcionDetalle() {
   const params = useParams<{ id: string }>()
-  const { permisos } = useAuth()
+  const { permisos, empresas } = useAuth()
   const canRead = permisos.includes('lectura:prescripcion')
 
   const { data: prescripcion, error, isLoading } = useSWR<Prescripcion>(
@@ -52,8 +52,9 @@ export default function PrescripcionDetalle() {
     )
   }
 
-  const empresa = prescripcion.campania?.lote
-    ? { id: prescripcion.campania.lote.idEmpresa, nombre: `Productor #${prescripcion.campania.lote.idEmpresa}` }
+  const idEmpresa = prescripcion.campania?.lote?.idEmpresa
+  const empresa = idEmpresa != null
+    ? { id: idEmpresa, nombre: empresas.find((e) => e.id === idEmpresa)?.nombre || `Productor #${idEmpresa}` }
     : null
 
   return (

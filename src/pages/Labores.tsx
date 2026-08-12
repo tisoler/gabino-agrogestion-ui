@@ -45,7 +45,7 @@ export default function Labores() {
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
@@ -53,7 +53,7 @@ export default function Labores() {
   // Empresas visibles en el alcance "Por empresa": admins ven todas, el resto solo sus asociadas
   const scopeEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const canWrite = permisos.includes('escritura:labor')
-  const canRead = permisos.includes('lectura:labor')
+  const canRead = permisos.includes('lectura:labor') && !isProductor
 
   const laboresFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
     const params: any = {}

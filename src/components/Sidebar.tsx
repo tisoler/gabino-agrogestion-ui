@@ -34,6 +34,8 @@ interface NavItem {
   label: string
   icon: LucideIcon
   permission?: string
+  /** Oculto para el rol productor (ve esos catálogos solo desde producción). */
+  ocultarParaProductor?: boolean
 }
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: LucideIcon }[] = [
@@ -48,10 +50,10 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
   { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
   { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },
-  { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo' },
-  { to: '/labores', label: 'Labores', icon: Pickaxe, permission: 'lectura:labor' },
-  { to: '/insumos', label: 'Insumos', icon: Database, permission: 'lectura:insumo' },
-  { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo' },
+  { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo', ocultarParaProductor: true },
+  { to: '/labores', label: 'Labores', icon: Pickaxe, permission: 'lectura:labor', ocultarParaProductor: true },
+  { to: '/insumos', label: 'Insumos', icon: Database, permission: 'lectura:insumo', ocultarParaProductor: true },
+  { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo', ocultarParaProductor: true },
 ]
 
 interface SidebarContentProps extends SidebarProps {
@@ -60,7 +62,7 @@ interface SidebarContentProps extends SidebarProps {
 
 function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarContentProps) {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
-  const { user, logout, permisos } = useAuth()
+  const { user, logout, permisos, isProductor } = useAuth()
   const { mode, setMode } = useTheme()
 
   const roleLabel = getRoleLabel(user?.roles)
@@ -108,7 +110,8 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
       {/* Navigation */}
       <nav className="flex-1 p-2.5 space-y-0.5 overflow-y-auto overflow-x-hidden">
         {NAV_ITEMS.map((item) =>
-          (!item.permission || hasPermission(item.permission)) && (
+          (!item.permission || hasPermission(item.permission)) &&
+          !(isProductor && item.ocultarParaProductor) && (
             <NavLink
               key={item.to}
               to={item.to}

@@ -15,6 +15,7 @@ import CampaniaDetalle from './pages/CampaniaDetalle'
 import Prescripciones from './pages/Prescripciones'
 import PrescripcionNueva from './pages/PrescripcionNueva'
 import PrescripcionDetalle from './pages/PrescripcionDetalle'
+import Notificaciones from './pages/Notificaciones'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -53,6 +54,7 @@ function App() {
               <Route path="/prescripciones" element={<Prescripciones />} />
               <Route path="/prescripciones/nueva" element={<PrescripcionNueva />} />
               <Route path="/prescripciones/:id" element={<PrescripcionDetalle />} />
+              <Route path="/notificaciones" element={<Notificaciones />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

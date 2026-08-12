@@ -48,7 +48,7 @@ export default function Costos() {
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
@@ -56,7 +56,7 @@ export default function Costos() {
   // Empresas visibles en el alcance "Por empresa": admins ven todas, el resto solo sus asociadas
   const scopeEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const canWrite = permisos.includes('escritura:costo')
-  const canRead = permisos.includes('lectura:costo')
+  const canRead = permisos.includes('lectura:costo') && !isProductor
 
   const costosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
     const params: any = {}

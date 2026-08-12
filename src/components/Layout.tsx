@@ -2,6 +2,7 @@ import { Sidebar } from './Sidebar'
 import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import CotizacionDolar from './CotizacionDolar'
+import NotificacionesBell from './NotificacionesBell'
 
 export default function Layout() {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -15,7 +16,8 @@ export default function Layout() {
         }`}
       >
         <div className="mx-auto max-w-7xl p-4 md:p-8 pt-16 md:pt-4 min-h-screen">
-          <div className="flex justify-end mb-7">
+          <div className="flex justify-end items-center gap-2 mb-7">
+            <NotificacionesBell />
             <CotizacionDolar />
           </div>
           <Outlet />

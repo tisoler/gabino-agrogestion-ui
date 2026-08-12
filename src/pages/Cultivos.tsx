@@ -54,7 +54,7 @@ export default function Cultivos() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, empresas, currentEmpresaId, user } = useAuth()
+  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
@@ -62,7 +62,7 @@ export default function Cultivos() {
   // Empresas visibles en el alcance "Por empresa": admins ven todas, el resto solo sus asociadas
   const scopeEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const canWrite = permisos.includes('escritura:cultivo')
-  const canRead = permisos.includes('lectura:cultivo')
+  const canRead = permisos.includes('lectura:cultivo') && !isProductor
 
   const cultivosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
     const params: any = {}
