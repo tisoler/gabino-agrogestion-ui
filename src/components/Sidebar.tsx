@@ -18,6 +18,7 @@ import {
   Moon,
   Monitor,
   ClipboardList,
+  FileBarChart,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,16 +45,25 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: LucideIcon }[] = [
   { mode: 'system', label: 'Tema del sistema', icon: Monitor },
 ]
 
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/campanias', label: 'Producción', icon: Calendar, permission: 'lectura:campania' },
-  { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
-  { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
-  { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },
-  { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo', ocultarParaProductor: true },
-  { to: '/labores', label: 'Labores', icon: Pickaxe, permission: 'lectura:labor', ocultarParaProductor: true },
-  { to: '/insumos', label: 'Insumos', icon: Database, permission: 'lectura:insumo', ocultarParaProductor: true },
-  { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo', ocultarParaProductor: true },
+const NAV_GROUPS: NavItem[][] = [
+  [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  ],
+  [
+    { to: '/campanias', label: 'Producción', icon: Calendar, permission: 'lectura:campania' },
+    { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
+    { to: '/reportes', label: 'Reportes', icon: FileBarChart, permission: 'lectura:reporte' },
+  ],
+  [
+    { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
+    { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },
+  ],
+  [
+    { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo', ocultarParaProductor: true },
+    { to: '/labores', label: 'Labores', icon: Pickaxe, permission: 'lectura:labor', ocultarParaProductor: true },
+    { to: '/insumos', label: 'Insumos', icon: Database, permission: 'lectura:insumo', ocultarParaProductor: true },
+    { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo', ocultarParaProductor: true },
+  ],
 ]
 
 interface SidebarContentProps extends SidebarProps {
@@ -108,22 +118,32 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2.5 space-y-0.5 overflow-y-auto overflow-x-hidden">
-        {NAV_ITEMS.map((item) =>
-          (!item.permission || hasPermission(item.permission)) &&
-          !(isProductor && item.ocultarParaProductor) && (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={activeLink}
-              onClick={() => onCloseMobile?.()}
-              title={isCollapsed ? item.label : undefined}
-            >
-              <item.icon className="size-[18px] shrink-0" strokeWidth={1.75} />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
-            </NavLink>
+      <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto overflow-x-hidden">
+        {NAV_GROUPS.map((group, gi) => {
+          const items = group.filter(
+            (item) =>
+              (!item.permission || hasPermission(item.permission)) &&
+              !(isProductor && item.ocultarParaProductor),
           )
-        )}
+          if (items.length === 0) return null
+          const showSeparator = !isProductor && gi > 0
+          return (
+            <div key={gi} className={`space-y-0.5 ${showSeparator ? 'pt-2.5 mt-1 border-t border-sidebar-border' : ''}`}>
+              {items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={activeLink}
+                  onClick={() => onCloseMobile?.()}
+                  title={isCollapsed ? item.label : undefined}
+                >
+                  <item.icon className="size-[18px] shrink-0" strokeWidth={1.75} />
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                </NavLink>
+              ))}
+            </div>
+          )
+        })}
       </nav>
 
       {/* Footer */}
@@ -218,7 +238,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   return (
     <>
       {/* Mobile Top Header */}
-      <div className="lg:hidden fixed top-0 inset-x-0 h-14 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 z-50">
+      <div className="print-hide lg:hidden fixed top-0 inset-x-0 h-14 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 z-50">
         <div className="flex items-center gap-2.5">
           <div className="size-8 rounded-md bg-primary-soft text-primary flex items-center justify-center">
             <Sprout className="size-5" strokeWidth={1.75} />

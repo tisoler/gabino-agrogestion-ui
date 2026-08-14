@@ -2,7 +2,7 @@ import useSWR from 'swr'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Building2, MapPin,
-  Sprout, Pickaxe, Package, Lock,
+  Sprout, Pickaxe, Package, Lock, Printer,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -58,7 +58,9 @@ export default function PrescripcionDetalle() {
     : null
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0">
+    <>
+      <style>{'@page { margin: 0; }'}</style>
+      <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0 print-hide">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -79,10 +81,19 @@ export default function PrescripcionDetalle() {
             </p>
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-accent border border-border rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Lock className="size-3" strokeWidth={2} />
-          Guardada · solo lectura
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+          >
+            <Printer className="size-4" strokeWidth={1.75} />
+            Imprimir / PDF
+          </button>
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-accent border border-border rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Lock className="size-3" strokeWidth={2} />
+            Guardada · solo lectura
+          </span>
+        </div>
       </div>
 
       {/* Lote */}
@@ -204,6 +215,81 @@ export default function PrescripcionDetalle() {
           </div>
         )}
       </section>
-    </div>
+      </div>
+
+      {/* Vista de impresión: media hoja A4 vertical con membrete y pie */}
+      <div className="print-prescripcion">
+        <div className="prescripcion-print-membrete">
+          <img src="/membrete.png" alt="Membrete" />
+        </div>
+
+        <div className="prescripcion-print-body">
+          <div className="prescripcion-print-titulo">
+            <h1>Prescripción</h1>
+            <p>{fmtFecha(prescripcion.fecha)}</p>
+          </div>
+
+          <dl className="prescripcion-print-datos">
+            <div>
+              <dt>Productor</dt>
+              <dd>{empresa?.nombre || '—'}</dd>
+            </div>
+            <div>
+              <dt>Lote</dt>
+              <dd>
+                {prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`}
+              </dd>
+            </div>
+            <div>
+              <dt>Cultivo</dt>
+              <dd>{prescripcion.campania?.cultivo?.nombre || '—'}</dd>
+            </div>
+            <div>
+              <dt>Campaña</dt>
+              <dd>{prescripcion.campania?.campania || '—'}</dd>
+            </div>
+            <div>
+              <dt>Labor</dt>
+              <dd>{prescripcion.labor?.nombre || `Labor #${prescripcion.idLabor}`}</dd>
+            </div>
+            <div>
+              <dt>Superficie</dt>
+              <dd>{fmtHa(prescripcion.totalHaAplicacion)}</dd>
+            </div>
+          </dl>
+
+          <table className="prescripcion-print-tabla">
+            <thead>
+              <tr>
+                <th>Insumo</th>
+                <th>Unidad</th>
+                <th className="text-right">Cantidad / ha</th>
+                <th className="text-right">Cantidad total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prescripcion.insumos.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>Esta prescripción no tiene insumos.</td>
+                </tr>
+              ) : (
+                prescripcion.insumos.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
+                    <td>{i.insumo?.unidad || '—'}</td>
+                    <td className="text-right">{fmtCantidad(i.cantidadPorHa)}</td>
+                    <td className="text-right">{fmtCantidad(i.cantidadTotal)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="prescripcion-print-pie">
+          <img src="/pie.png" alt="Pie" />
+        </div>
+      </div>
+    </>
   )
 }

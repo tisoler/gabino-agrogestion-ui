@@ -232,3 +232,142 @@
     @apply bg-card/60 border border-border rounded-lg backdrop-blur-sm;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Print: la vista de reportes se imprime limpia (sin sidebar ni header)      */
+/* -------------------------------------------------------------------------- */
+@media print {
+  aside,
+  .print-hide {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  main > div {
+    padding: 0 !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Impresión: sin header/pie del navegador (fecha, nombre de app, n° página)  */
+/* ni márgenes. El tamaño de hoja lo define el diálogo de impresión.          */
+/* La prescripción ocupa la mitad de la hoja A4 vertical, con un margen de    */
+/* seguridad: ancho 145.5mm (-2% de 148.5) y alto 207.3mm (-1.3% de 210)      */
+/* para que entre en una sola hoja aunque el navegador/impresora agregue      */
+/* márgenes residuales.                                                       */
+/* -------------------------------------------------------------------------- */
+@page {
+  margin: 0;
+}
+
+.print-prescripcion {
+  display: none;
+}
+
+@media print {
+  .print-prescripcion {
+    display: flex;
+    flex-direction: column;
+    width: 145.5mm;
+    height: 207.3mm;
+    box-sizing: border-box;
+  }
+
+  .prescripcion-print-membrete {
+    padding: 0 5mm;
+    box-sizing: border-box;
+  }
+
+  .prescripcion-print-membrete img {
+    display: block;
+    width: 100%;
+  }
+
+  .prescripcion-print-body {
+    flex: 1;
+    padding: 4mm 7mm;
+  }
+
+  .prescripcion-print-titulo {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2mm;
+    margin-bottom: 3mm;
+  }
+
+  .prescripcion-print-titulo h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .prescripcion-print-titulo p {
+    font-size: 11px;
+  }
+
+  .prescripcion-print-datos {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5mm 6mm;
+    margin-bottom: 4mm;
+  }
+
+  .prescripcion-print-datos dt {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .prescripcion-print-datos dd {
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .prescripcion-print-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .prescripcion-print-tabla th {
+    text-align: left;
+    border-bottom: 1px solid #000;
+    padding: 1.5mm 2mm;
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .prescripcion-print-tabla td {
+    border-bottom: 1px solid #ddd;
+    padding: 1.5mm 2mm;
+  }
+
+  .prescripcion-print-tabla .text-right {
+    text-align: right;
+  }
+
+  .prescripcion-print-pie {
+    margin: auto 5mm 0;
+    border: 1px solid #000;
+    padding: 1mm;
+    box-sizing: border-box;
+  }
+
+  .prescripcion-print-pie img {
+    display: block;
+    width: 100%;
+  }
+}

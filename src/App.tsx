@@ -16,6 +16,10 @@ import Prescripciones from './pages/Prescripciones'
 import PrescripcionNueva from './pages/PrescripcionNueva'
 import PrescripcionDetalle from './pages/PrescripcionDetalle'
 import Notificaciones from './pages/Notificaciones'
+import Reportes from './pages/Reportes'
+import ReporteResumen from './pages/ReporteResumen'
+import ReporteDetalle from './pages/ReporteDetalle'
+import ReporteVer from './pages/ReporteVer'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -55,6 +59,10 @@ function App() {
               <Route path="/prescripciones/nueva" element={<PrescripcionNueva />} />
               <Route path="/prescripciones/:id" element={<PrescripcionDetalle />} />
               <Route path="/notificaciones" element={<Notificaciones />} />
+              <Route path="/reportes" element={<Reportes />} />
+              <Route path="/reportes/resumen" element={<ReporteResumen />} />
+              <Route path="/reportes/detalle" element={<ReporteDetalle />} />
+              <Route path="/reportes/ver/:id" element={<ReporteVer />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
