@@ -226,7 +226,7 @@ export default function Productores() {
       .filter((u) => isAdmin || u.uid !== user?.id)
       .filter((u) => !inEmpresa.has(u.uid))
       .filter((u) => matchesSearch(u, term))
-  }, [allUsers, data, addModalEmpresaId, addSearch, user])
+  }, [allUsers, data, addModalEmpresaId, addSearch, user, isAdmin])
 
   const addModalEmpresa = data?.find((e) => e.id === addModalEmpresaId)
 

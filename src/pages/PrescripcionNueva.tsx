@@ -8,6 +8,7 @@ import {
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { periodosCampania } from '../lib/campanias'
+import { colorCategoria } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 
@@ -32,7 +33,13 @@ interface Lote {
 }
 interface Cultivo { id: number; nombre: string; variedades: { id: number; nombre: string }[] }
 interface Labor { id: number; nombre: string }
-interface Insumo { id: number; nombre: string; unidad?: string | null }
+interface Insumo {
+  id: number
+  nombre: string
+  unidad?: string | null
+  idCategoria?: number | null
+  categoria?: { id: number; nombre: string } | null
+}
 
 interface InsumoRow {
   tempId: number
@@ -55,6 +62,12 @@ const fmtInputDecimal = (s: string): string => s.replace(/\./g, ',')
 function fmtNumValue(n: number): string {
   if (!Number.isFinite(n) || n === 0) return n === 0 ? '0' : ''
   return n.toLocaleString('es-AR', { maximumFractionDigits: 2 })
+}
+
+/** Formateo para "Cantidad / ha" con 3 decimales. */
+function fmtNumValue3(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return n === 0 ? '0' : ''
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 3 })
 }
 
 export default function PrescripcionNueva() {
@@ -85,6 +98,10 @@ export default function PrescripcionNueva() {
     api.get('/labores', { params: { all: true } }).then((r) => r.data))
   const { data: insumos = [], mutate: mutateInsumos } = useSWR<Insumo[]>(canWrite ? ['/insumos', 'all'] : null, () =>
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
+  const { data: categoriasInsumo = [] } = useSWR<{ id: number; nombre: string }[]>(
+    canWrite ? '/categorias' : null,
+    fetcher,
+  )
 
   // Producciones del productor seleccionado; de ahí se derivan las opciones
   // de cada selector (campañas → lotes → cultivos).
@@ -189,10 +206,32 @@ export default function PrescripcionNueva() {
   const [showCampaniaModal, setShowCampaniaModal] = useState(false)
   const [campaniaForm, setCampaniaForm] = useState({
     campania: periodosCampania()[0] || '',
+    idCampo: '' as number | '',
     idLote: '' as number | '', idCultivo: '' as number | '', idVariedad: '' as number | '',
   })
   const [showInsumoModal, setShowInsumoModal] = useState(false)
   const [insumoForRow, setInsumoForRow] = useState<number | null>(null)
+
+  // Campos del modal "Nueva producción": el campo seleccionado filtra los lotes.
+  const camposModal = useMemo(() => {
+    const seen = new Map<number, string>()
+    let sinCampo = false
+    for (const l of lotesEmpresa) {
+      if (l.campo) seen.set(l.campo.id, l.campo.nombre)
+      else sinCampo = true
+    }
+    const opciones = Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
+    if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
+    return opciones
+  }, [lotesEmpresa])
+
+  const lotesModal = useMemo(() => {
+    if (campaniaForm.idCampo === '') return lotesEmpresa
+    const target = campaniaForm.idCampo === 0 ? null : Number(campaniaForm.idCampo)
+    return lotesEmpresa.filter((l) => (l.idCampo ?? null) === target)
+  }, [lotesEmpresa, campaniaForm.idCampo])
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -238,7 +277,7 @@ export default function PrescripcionNueva() {
             ...r,
             cantidadTotal: clean,
             lastEdited: 'total',
-            cantidadPorHa: totalHaNum > 0 ? fmtNumValue(num(clean) / totalHaNum) : r.cantidadPorHa,
+            cantidadPorHa: totalHaNum > 0 ? fmtNumValue3(num(clean) / totalHaNum) : r.cantidadPorHa,
           }
           : r
       )
@@ -251,7 +290,7 @@ export default function PrescripcionNueva() {
         return { ...r, cantidadTotal: fmtNumValue(num(r.cantidadPorHa) * newTotalHa) }
       }
       if (r.lastEdited === 'total') {
-        return { ...r, cantidadPorHa: newTotalHa > 0 ? fmtNumValue(num(r.cantidadTotal) / newTotalHa) : r.cantidadPorHa }
+        return { ...r, cantidadPorHa: newTotalHa > 0 ? fmtNumValue3(num(r.cantidadTotal) / newTotalHa) : r.cantidadPorHa }
       }
       return r
     })
@@ -284,7 +323,7 @@ export default function PrescripcionNueva() {
       setCampaniaError(null)
       setCampaniaForm({
         campania: periodosCampania()[0] || '',
-        idLote: '', idCultivo: '', idVariedad: '',
+        idCampo: '', idLote: '', idCultivo: '', idVariedad: '',
       })
     } catch (e) {
       const err = e as { response?: { data?: { message?: string | string[] } } }
@@ -423,7 +462,9 @@ export default function PrescripcionNueva() {
               options={periodosDisponibles.map((p) => ({ value: p, label: p }))}
               placeholder={idEmpresa === '' ? 'Elegí primero el productor' : 'Seleccionar campaña...'}
               disabled={idEmpresa === ''}
+              sort={{ by: 'alfabetico', direction: 'desc' }}
               autoSelectSingle
+              defaultFirst
             />
             <SelectAutocomplete
               label="Campo"
@@ -510,9 +551,11 @@ export default function PrescripcionNueva() {
             type="button"
             onClick={() => {
               setCampaniaError(null)
+              const loteSel = lotes.find((l) => l.id === idLote)
               setCampaniaForm((f) => ({
                 ...f,
                 idLote,
+                idCampo: loteSel ? (loteSel.idCampo ?? 0) : '',
                 campania: periodo || periodosCampania()[0] || '',
               }))
               setShowCampaniaModal(true)
@@ -556,7 +599,7 @@ export default function PrescripcionNueva() {
       </section>
 
       {/* Insumos */}
-      <section className="bg-card border border-border rounded-lg p-5 space-y-4">
+      <section className="bg-card border border-border rounded-lg p-5 space-y-4 mb-60">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="size-4 text-primary" strokeWidth={1.75} />
@@ -598,6 +641,14 @@ export default function PrescripcionNueva() {
                       }
                       options={insumos.map((i) => ({ value: i.id, label: i.nombre }))}
                       placeholder="Elegí…"
+                      renderTag={(opt) => {
+                        const i = insumos.find((x) => x.id === Number(opt.value))
+                        return i?.categoria ? (
+                          <span className={`ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${colorCategoria(i.idCategoria, categoriasInsumo)}`}>
+                            {i.categoria.nombre}
+                          </span>
+                        ) : null
+                      }}
                     />
                     <button
                       type="button"
@@ -663,24 +714,26 @@ export default function PrescripcionNueva() {
         )}
       </section>
 
-      {/* Acciones */}
-      <div className="flex justify-end gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => navigate('/prescripciones')}
-          className="px-4 py-2 cursor-pointer border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canSave || saving}
-          className="inline-flex cursor-pointer items-center justify-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {saving && <Loader2 className="size-4 animate-spin" />}
-          {saving ? 'Guardando…' : 'Guardar prescripción'}
-        </button>
+      {/* Acciones: barra fija al fondo, siempre visible */}
+      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/90 backdrop-blur-sm print-hide">
+        <div className="max-w-4xl mx-auto flex justify-end gap-2 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => navigate('/prescripciones')}
+            className="px-4 py-2 cursor-pointer border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="inline-flex cursor-pointer items-center justify-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            {saving ? 'Guardando…' : 'Guardar prescripción'}
+          </button>
+        </div>
       </div>
 
       {/* Modal: crear producción */}
@@ -711,6 +764,16 @@ export default function PrescripcionNueva() {
                   ))}
                 </select>
               </div>
+              <SelectAutocomplete
+                label="Campo"
+                value={campaniaForm.idCampo}
+                onChange={(v) =>
+                  setCampaniaForm((f) => ({ ...f, idCampo: v === '' ? '' : Number(v), idLote: '' }))
+                }
+                options={camposModal}
+                placeholder="Todos los campos"
+                clearable
+              />
               <div className="space-y-1.5">
                 <label className={labelCls}>Lote</label>
                 <select
@@ -719,7 +782,7 @@ export default function PrescripcionNueva() {
                   className={inputCls}
                 >
                   <option value="">Seleccionar lote...</option>
-                  {lotesEmpresa.map((l) => (
+                  {lotesModal.map((l) => (
                     <option key={l.id} value={l.id}>{l.descripcion || `Lote #${l.id}`}</option>
                   ))}
                 </select>
@@ -761,7 +824,7 @@ export default function PrescripcionNueva() {
                 <button
                   type="button"
                   onClick={() => setShowCampaniaModal(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 cursor-pointer px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
                 >
                   Cancelar
                 </button>
@@ -769,7 +832,7 @@ export default function PrescripcionNueva() {
                   type="button"
                   disabled={campaniaForm.idLote === '' || campaniaForm.idCultivo === ''}
                   onClick={handleCreateCampania}
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="flex-1 cursor-pointer px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   Crear campaña
                 </button>

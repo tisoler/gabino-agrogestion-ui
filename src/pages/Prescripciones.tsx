@@ -17,6 +17,8 @@ interface Lote {
   id: number
   idEmpresa: number
   descripcion: string | null
+  idCampo?: number | null
+  campo?: { id: number; nombre: string } | null
 }
 interface Labor {
   id: number
@@ -43,9 +45,10 @@ export default function Prescripciones() {
   // Filtros
   const [filterEmpresaIds, setFilterEmpresaIds] = useState<number[]>([])
   const [filterCampanias, setFilterCampanias] = useState<string[]>([])
-  const [filterIdLote, setFilterIdLote] = useState<number | null>(null)
-  const [filterIdLabor, setFilterIdLabor] = useState<number | null>(null)
-  const [filterIdInsumo, setFilterIdInsumo] = useState<number | null>(null)
+  const [filterCampoIds, setFilterCampoIds] = useState<number[]>([])
+  const [filterLoteIds, setFilterLoteIds] = useState<number[]>([])
+  const [filterLaborIds, setFilterLaborIds] = useState<number[]>([])
+  const [filterInsumoIds, setFilterInsumoIds] = useState<number[]>([])
   const [searchTerm, setSearchTerm] = useState('')
 
   // Catálogos para los selects de filtro
@@ -55,27 +58,62 @@ export default function Prescripciones() {
   const { data: insumos = [] } = useSWR<Insumo[]>(canRead ? ['/insumos', 'all'] : null, () =>
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
 
-  const lotesFiltrados = useMemo(() => {
+  // Lotes del productor filtrado; los campos salen de ahí y el campo filtra los lotes.
+  const lotesDeProductor = useMemo(() => {
     if (filterEmpresaIds.length === 0) return lotes
     return lotes.filter((l) => filterEmpresaIds.includes(l.idEmpresa))
   }, [lotes, filterEmpresaIds])
 
+  const camposDisponibles = useMemo(() => {
+    const seen = new Map<number, string>()
+    let sinCampo = false
+    for (const l of lotesDeProductor) {
+      if (l.campo) seen.set(l.campo.id, l.campo.nombre)
+      else sinCampo = true
+    }
+    const opciones = Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
+    if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
+    return opciones
+  }, [lotesDeProductor])
+
+  // El campo seleccionado filtra la lista de lotes del filtro.
+  const lotesFiltrados = useMemo(() => {
+    if (filterCampoIds.length === 0) return lotesDeProductor
+    const sinCampo = filterCampoIds.includes(0)
+    const campos = new Set(filterCampoIds.filter((n) => n !== 0))
+    return lotesDeProductor.filter((l) => {
+      const lc = l.idCampo ?? null
+      if (lc == null) return sinCampo
+      return campos.has(lc)
+    })
+  }, [lotesDeProductor, filterCampoIds])
+
+  // Solo conserva lotes que sigan existiendo en las opciones (el campo puede
+  // haber quitado lotes de la lista del filtro).
+  const lotesEfectivos = useMemo(
+    () => filterLoteIds.filter((id) => lotesFiltrados.some((l) => l.id === id)),
+    [filterLoteIds, lotesFiltrados]
+  )
+
   const prescripcionesFetcher = async ([
-    , empresaIds, campanias, idLote, idLabor, idInsumo,
-  ]: [string, string, string, number | null, number | null, number | null]) => {
+    , empresaIds, campanias, campos, lotes, labores, insumos,
+  ]: [string, string, string, string, string, string, string]) => {
     const params: Record<string, unknown> = {}
     if (empresaIds) params.empresaIds = empresaIds
     if (campanias) params.campanias = campanias
-    if (idLote) params.idLote = idLote
-    if (idLabor) params.idLabor = idLabor
-    if (idInsumo) params.idInsumo = idInsumo
+    if (campos) params.idCampo = campos
+    if (lotes) params.idLote = lotes
+    if (labores) params.idLabor = labores
+    if (insumos) params.idInsumo = insumos
     const res = await api.get('/prescripciones', { params })
     return res.data as PrescripcionListItem[]
   }
 
   const { data: prescripciones = [], isLoading, mutate: revalidarPrescripciones } = useSWR<PrescripcionListItem[]>(
     canRead
-      ? ['prescripciones', filterEmpresaIds.join(','), filterCampanias.join(','), filterIdLote, filterIdLabor, filterIdInsumo]
+      ? ['prescripciones', filterEmpresaIds.join(','), filterCampanias.join(','), filterCampoIds.join(','), lotesEfectivos.join(','), filterLaborIds.join(','), filterInsumoIds.join(',')]
       : null,
     prescripcionesFetcher,
     { revalidateOnFocus: false, revalidateOnMount: true, dedupingInterval: 0 }
@@ -85,23 +123,25 @@ export default function Prescripciones() {
     const term = searchTerm.trim().toLowerCase()
     if (!term) return prescripciones
     return prescripciones.filter((p) =>
-      (p.campania?.campania || '').toLowerCase().includes(term) ||
+      (empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre || '').toLowerCase().includes(term) ||
       (p.campania?.lote?.campo?.nombre || '').toLowerCase().includes(term) ||
-      p.labor?.nombre.toLowerCase().includes(term) ||
-      (p.campania?.lote?.descripcion || '').toLowerCase().includes(term)
+      (p.campania?.lote?.descripcion || '').toLowerCase().includes(term) ||
+      (p.labor?.nombre || '').toLowerCase().includes(term)
     )
-  }, [prescripciones, searchTerm])
+  }, [prescripciones, searchTerm, empresas])
 
   const hasActiveFilters =
     filterEmpresaIds.length > 0 || filterCampanias.length > 0 ||
-    filterIdLote !== null || filterIdLabor !== null || filterIdInsumo !== null
+    filterCampoIds.length > 0 || lotesEfectivos.length > 0 ||
+    filterLaborIds.length > 0 || filterInsumoIds.length > 0
 
   const clearFilters = () => {
     setFilterEmpresaIds([])
     setFilterCampanias([])
-    setFilterIdLote(null)
-    setFilterIdLabor(null)
-    setFilterIdInsumo(null)
+    setFilterCampoIds([])
+    setFilterLoteIds([])
+    setFilterLaborIds([])
+    setFilterInsumoIds([])
   }
 
   const goToDetail = (id: number) => navigate(`/prescripciones/${id}`)
@@ -171,14 +211,14 @@ export default function Prescripciones() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
           <input
             type="text"
-            placeholder="Buscar por producción, campaña, labor o lote..."
+            placeholder="Buscar por productor, campo, lote o labor..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Productor
@@ -205,48 +245,51 @@ export default function Prescripciones() {
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+              Campo
+            </label>
+            <MultiselectFilter
+              value={filterCampoIds.map(String)}
+              opciones={camposDisponibles.map((c) => ({ value: String(c.value), label: c.label }))}
+              onChange={(next) => setFilterCampoIds(next.map(Number))}
+              placeholder="Todos"
+              etiqueta="campo"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Lote
             </label>
-            <select
-              value={filterIdLote ?? ''}
-              onChange={(e) => setFilterIdLote(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            >
-              <option value="">Todos</option>
-              {lotesFiltrados.map((l) => (
-                <option key={l.id} value={l.id}>{l.descripcion || `Lote #${l.id}`}</option>
-              ))}
-            </select>
+            <MultiselectFilter
+              value={lotesEfectivos.map(String)}
+              opciones={lotesFiltrados.map((l) => ({ value: String(l.id), label: l.descripcion || `Lote #${l.id}` }))}
+              onChange={(next) => setFilterLoteIds(next.map(Number))}
+              placeholder="Todos"
+              etiqueta="lote"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Labor
             </label>
-            <select
-              value={filterIdLabor ?? ''}
-              onChange={(e) => setFilterIdLabor(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            >
-              <option value="">Todas</option>
-              {labores.map((l) => (
-                <option key={l.id} value={l.id}>{l.nombre}</option>
-              ))}
-            </select>
+            <MultiselectFilter
+              value={filterLaborIds.map(String)}
+              opciones={labores.map((l) => ({ value: String(l.id), label: l.nombre }))}
+              onChange={(next) => setFilterLaborIds(next.map(Number))}
+              placeholder="Todas"
+              etiqueta="labor"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Insumo
             </label>
-            <select
-              value={filterIdInsumo ?? ''}
-              onChange={(e) => setFilterIdInsumo(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            >
-              <option value="">Todos</option>
-              {insumos.map((i) => (
-                <option key={i.id} value={i.id}>{i.nombre}</option>
-              ))}
-            </select>
+            <MultiselectFilter
+              value={filterInsumoIds.map(String)}
+              opciones={insumos.map((i) => ({ value: String(i.id), label: i.nombre }))}
+              onChange={(next) => setFilterInsumoIds(next.map(Number))}
+              placeholder="Todos"
+              etiqueta="insumo"
+            />
           </div>
         </div>
 

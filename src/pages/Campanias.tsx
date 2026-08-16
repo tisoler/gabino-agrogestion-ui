@@ -94,8 +94,8 @@ export default function Campanias() {
     [filterVariedadIds, variedadesFiltradas]
   )
 
-  // Lotes filtrados por productor seleccionado
-  const lotesFiltrados = useMemo(() => {
+  // Lotes del productor seleccionado
+  const lotesDeProductor = useMemo(() => {
     if (!lotes) return []
     if (filterEmpresaIds.length > 0) {
       return lotes.filter((l) => filterEmpresaIds.includes(l.idEmpresa))
@@ -107,7 +107,7 @@ export default function Campanias() {
   const camposDisponibles = useMemo(() => {
     const seen = new Map<number, string>()
     let sinCampo = false
-    for (const l of lotesFiltrados) {
+    for (const l of lotesDeProductor) {
       if (l.campo) seen.set(l.campo.id, l.campo.nombre)
       else sinCampo = true
     }
@@ -116,7 +116,26 @@ export default function Campanias() {
       .map(([value, label]) => ({ value, label }))
     if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
     return opciones
-  }, [lotesFiltrados])
+  }, [lotesDeProductor])
+
+  // El campo seleccionado filtra la lista de lotes del filtro.
+  const lotesFiltrados = useMemo(() => {
+    if (filterCampoIds.length === 0) return lotesDeProductor
+    const sinCampo = filterCampoIds.includes(0)
+    const campos = new Set(filterCampoIds.filter((n) => n !== 0))
+    return lotesDeProductor.filter((l) => {
+      const lc = l.idCampo ?? null
+      if (lc == null) return sinCampo
+      return campos.has(lc)
+    })
+  }, [lotesDeProductor, filterCampoIds])
+
+  // Solo conserva lotes que sigan existiendo en las opciones (el campo puede
+  // haber quitado lotes de la lista del filtro).
+  const lotesEfectivos = useMemo(
+    () => filterLoteIds.filter((id) => lotesFiltrados.some((l) => l.id === id)),
+    [filterLoteIds, lotesFiltrados]
+  )
 
   const campaniasFetcher = async ([
     ,
@@ -153,7 +172,7 @@ export default function Campanias() {
         filterEmpresaIds.join(','),
         filterCampanias.join(','),
         filterCampoIds.join(','),
-        filterLoteIds.join(','),
+        lotesEfectivos.join(','),
         filterCultivoIds.join(','),
         variedadIdsEfectivos.join(','),
       ]
@@ -182,7 +201,7 @@ export default function Campanias() {
     filterEmpresaIds.length > 0 ||
     filterCampanias.length > 0 ||
     filterCampoIds.length > 0 ||
-    filterLoteIds.length > 0 ||
+    lotesEfectivos.length > 0 ||
     filterCultivoIds.length > 0 ||
     variedadIdsEfectivos.length > 0
 
@@ -257,7 +276,7 @@ export default function Campanias() {
 
       {/* Búsqueda + filtros */}
       <div className="bg-card/60 border border-border rounded-lg p-3 space-y-3">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Productor
@@ -299,7 +318,7 @@ export default function Campanias() {
               Lote
             </label>
             <MultiselectFilter
-              value={filterLoteIds.map(String)}
+              value={lotesEfectivos.map(String)}
               opciones={lotesFiltrados.map((l) => ({ value: String(l.id), label: l.descripcion || `Lote #${l.id}` }))}
               onChange={(next) => setFilterLoteIds(next.map(Number))}
               placeholder="Todos"

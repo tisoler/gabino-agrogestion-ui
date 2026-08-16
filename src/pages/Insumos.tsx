@@ -6,10 +6,11 @@ import {
 } from 'lucide-react'
 import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
-import { UNIDADES_PRECIO } from '../constantes'
+import { UNIDADES_PRECIO, colorCategoria } from '../constantes'
 import { useCotizacionDolar, fmtPrecioInsumo, type Moneda } from '../lib/moneda'
 import { setMonedaGlobal } from '../lib/monedaStore'
 import MonedaToggle from '../components/MonedaToggle'
+import MultiselectFilter from '../components/MultiselectFilter'
 
 interface Categoria {
   id: number
@@ -43,6 +44,9 @@ export default function Insumos() {
   // Alcance unificado para todos los roles: todas | global | por empresa
   const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
   const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+
+  // Filtro multiselección de categorías
+  const [filterCategoriaIds, setFilterCategoriaIds] = useState<number[]>([])
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingInsumo, setEditingInsumo] = useState<Insumo | null>(null)
@@ -110,21 +114,21 @@ export default function Insumos() {
   )
 
   const filteredInsumos = useMemo(() => {
-    return insumos
-      ?.filter(i =>
-        i.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (i.descripcion?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (i.categoria?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const term = searchTerm.trim().toLowerCase()
+    return (insumos || [])
+      .filter(i =>
+        (filterCategoriaIds.length === 0 || (i.idCategoria != null && filterCategoriaIds.includes(i.idCategoria))) &&
+        (!term ||
+          i.nombre.toLowerCase().includes(term) ||
+          (i.descripcion?.toLowerCase() || '').includes(term))
       )
-      ?.toSorted((a, b) => {
-        if (a.idEmpresa !== b.idEmpresa) {
-          if (a.idEmpresa === null) return -1
-          if (b.idEmpresa === null) return 1
-          return a.idEmpresa - b.idEmpresa
-        }
-        return a.nombre.localeCompare(b.nombre)
+      .toSorted((a, b) => {
+        const catA = (a.categoria?.nombre || '').toLowerCase()
+        const catB = (b.categoria?.nombre || '').toLowerCase()
+        if (catA !== catB) return catA.localeCompare(catB, 'es')
+        return a.nombre.localeCompare(b.nombre, 'es')
       })
-  }, [insumos, searchTerm])
+  }, [insumos, searchTerm, filterCategoriaIds])
 
   const handleOpenModal = (insumo: Insumo | null = null) => {
     if (insumo) {
@@ -320,15 +324,29 @@ export default function Insumos() {
       </div>
 
       <div className="bg-card/60 border border-border rounded-lg p-3">
-        <div className="relative group">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre o descripción..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative group flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre o descripción..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+            />
+          </div>
+          <div className="sm:w-64 shrink-0">
+            <MultiselectFilter
+              value={filterCategoriaIds.map(String)}
+              opciones={categorias
+                .filter((c) => c.activo !== false)
+                .map((c) => ({ value: String(c.id), label: c.nombre }))}
+              onChange={(next) => setFilterCategoriaIds(next.map(Number))}
+              placeholder="Todas las categorías"
+              etiqueta="categoría"
+              colorOf={(value) => colorCategoria(Number(value), categorias)}
+            />
+          </div>
         </div>
       </div>
 
@@ -374,7 +392,7 @@ export default function Insumos() {
                       )}
                       {insumo.categoria && (
                         <div className="mt-1.5">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border text-[11px] font-medium text-foreground rounded">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 border ${colorCategoria(insumo.idCategoria, categorias)} text-[11px] font-medium rounded`}>
                             <Tag className="size-3" strokeWidth={1.75} />
                             {insumo.categoria.nombre}
                           </span>
@@ -438,11 +456,11 @@ export default function Insumos() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/4">
-                      Nombre
-                    </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Categoría
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/4">
+                      Nombre
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Descripción
@@ -456,7 +474,7 @@ export default function Insumos() {
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
                       Alcance
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-1/6">
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-16">
                       Estado
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
@@ -473,19 +491,19 @@ export default function Insumos() {
                         className={`transition-colors ${insumo.activo ? 'hover:bg-muted/40' : 'bg-muted/20 opacity-60'}`}
                       >
                         <td className="px-4 py-3">
-                          <span className={`font-medium ${insumo.activo ? 'text-foreground' : 'text-muted-foreground'}`}>
-                            {insumo.nombre}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
                           {insumo.categoria ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border text-[11px] font-medium text-foreground rounded">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 border ${colorCategoria(insumo.idCategoria, categorias)} text-[11px] font-medium rounded`}>
                               <Tag className="size-3" strokeWidth={1.75} />
                               {insumo.categoria.nombre}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${insumo.activo ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {insumo.nombre}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-muted-foreground line-clamp-1">{insumo.descripcion || '—'}</span>

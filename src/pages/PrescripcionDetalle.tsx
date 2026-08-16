@@ -214,7 +214,7 @@ export default function PrescripcionDetalle() {
                         {i.insumo?.nombre || `Insumo #${i.idInsumo}`}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{i.insumo?.unidad || '—'}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadPorHa)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadPorHa, 3)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadTotal)}</td>
                     </tr>
                   ))}
@@ -285,7 +285,7 @@ export default function PrescripcionDetalle() {
                   <tr key={i.id}>
                     <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
                     <td>{i.insumo?.unidad || '—'}</td>
-                    <td className="text-right">{fmtCantidad(i.cantidadPorHa)}</td>
+                    <td className="text-right">{fmtCantidad(i.cantidadPorHa, 3)}</td>
                     <td className="text-right">{fmtCantidad(i.cantidadTotal)}</td>
                   </tr>
                 ))

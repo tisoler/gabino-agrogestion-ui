@@ -7,12 +7,15 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
-import { UNIDADES_PRECIO } from '../constantes'
+import { UNIDADES_PRECIO, colorCategoria } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
+import MonedaToggle from '../components/MonedaToggle'
+import SelectAutocomplete from '../components/SelectAutocomplete'
+import { useCotizacionDolar, fmtPrecioInsumo, type Moneda } from '../lib/moneda'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
   costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
-  calcularResultados, formatInputNumber, round2, periodosCampania,
+  calcularResultados, periodosCampania,
   type Campania, type CampaniaLaborDetalle, type CampaniaInsumoDetalle,
   type CampaniaCostoDetalle, type LaborItem, type InsumoItem, type CostoItem,
   type CategoriaInsumoItem,
@@ -116,6 +119,7 @@ function buildLaborPayload(row: {
   fecha?: string | null
   superficieLaboreada?: number | null
   costoLaborHa?: number | null
+  observaciones?: string | null
 }) {
   return {
     idLabor: row.idLabor ?? 0,
@@ -126,6 +130,9 @@ function buildLaborPayload(row: {
     costoLaborHa: typeof row.costoLaborHa === 'number' && !Number.isNaN(row.costoLaborHa)
       ? row.costoLaborHa
       : 0,
+    observaciones: typeof row.observaciones === 'string' && row.observaciones.trim() !== ''
+      ? row.observaciones
+      : null,
   }
 }
 
@@ -264,6 +271,11 @@ export default function CampaniaDetalle() {
   )
   // Campo: filtra el selector de lotes (no se persiste en la campaña).
   const [idCampo, setIdCampo] = useState<number | ''>('')
+
+  // Moneda para el costo/unidad de insumos (el valor se guarda en USD; se
+  // muestra en pesos usando el dólar venta, igual que la vista Insumos).
+  const { venta: dolarVenta } = useCotizacionDolar()
+  const [moneda, setMoneda] = useState<Moneda>('pesos')
 
   const [cabecera, setCabecera] = useState<Cabecera>(emptyCabecera)
   const [cabeceraSaved, setCabeceraSaved] = useState<Cabecera>(emptyCabecera)
@@ -539,16 +551,14 @@ export default function CampaniaDetalle() {
   // -------------------------------------------------------------------------
   const addLabor = () => {
     if (!campaniaId || catalogLabores.length === 0) return
-    const first = catalogLabores[0]
     const tempId = newTempId()
     const newRow: CampaniaLaborDetalle = {
       id: tempId,
       idCampania: campaniaId,
-      idLabor: first.id,
+      idLabor: null,
       fecha: todayLocalISO(),
       superficieLaboreada: 0,
-      costoLaborHa: first.precioUnitario ?? 0,
-      labor: first,
+      costoLaborHa: 0,
     }
     setLabores((arr) => [...arr, newRow])
     bumpDirty()
@@ -577,16 +587,14 @@ export default function CampaniaDetalle() {
 
   const addInsumo = () => {
     if (!campaniaId || catalogInsumos.length === 0) return
-    const first = catalogInsumos[0]
     const tempId = newTempId()
     const newRow: CampaniaInsumoDetalle = {
       id: tempId,
       idCampania: campaniaId,
-      idInsumo: first.id,
+      idInsumo: null,
       unidadesHa: 0,
-      costoUnidad: first.precioUnitario ?? 0,
+      costoUnidad: 0,
       superficieAplicada: 0,
-      insumo: first,
     }
     setInsumos((arr) => [...arr, newRow])
     bumpDirty()
@@ -613,15 +621,13 @@ export default function CampaniaDetalle() {
 
   const addCosto = () => {
     if (!campaniaId || catalogCostos.length === 0) return
-    const first = catalogCostos[0]
     const tempId = newTempId()
     const newRow: CampaniaCostoDetalle = {
       id: tempId,
       idCampania: campaniaId,
-      idCosto: first.id,
+      idCosto: null,
       unidadesHa: 0,
-      costoUnidad: first.precioUnitario ?? 0,
-      costo: first,
+      costoUnidad: 0,
     }
     setCostos((arr) => [...arr, newRow])
     bumpDirty()
@@ -704,6 +710,18 @@ export default function CampaniaDetalle() {
   const save = useCallback(async (): Promise<boolean> => {
     if (!campaniaId || isSaving) return false
     if (!hasChanges) return false
+
+    // Las filas nuevas arrancan sin tipo (muestran "Elegí…"); no se pueden
+    // guardar hasta elegir el ítem.
+    const incompletas = [
+      ...(labores.some((r) => r.idLabor == null) ? ['labores'] : []),
+      ...(insumos.some((r) => r.idInsumo == null) ? ['insumos'] : []),
+      ...(costos.some((r) => r.idCosto == null) ? ['costos'] : []),
+    ]
+    if (incompletas.length > 0) {
+      setSaveError(`Completá el tipo en las filas de: ${incompletas.join(', ')}`)
+      return false
+    }
 
     setIsSaving(true)
     setSaveError(null)
@@ -1118,10 +1136,11 @@ export default function CampaniaDetalle() {
             title="Labores"
             icon={Pickaxe}
             columns={[
-              { key: 'idLabor', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoLaborHa' },
+              { key: 'idLabor', label: 'Labor', kind: 'select-with-create', preloadField: 'costoLaborHa' },
               { key: 'fecha', label: 'Fecha', kind: 'date' },
               { key: 'superficieLaboreada', label: 'Sup. laboreada (ha)', kind: 'number', align: 'right' },
               { key: 'costoLaborHa', label: 'Costo labor/ha', kind: 'number', align: 'right' },
+              { key: 'observaciones', label: 'Observaciones', kind: 'text' },
               { key: '__ponderado', label: 'Costo ponderado/ha', kind: 'readonly-money', align: 'right' },
             ]}
             rows={labores}
@@ -1142,11 +1161,20 @@ export default function CampaniaDetalle() {
           <DetalleTable
             title="Insumos"
             icon={Package}
+            moneda={moneda}
+            onChangeMoneda={setMoneda}
+            dolar={dolarVenta}
+            totalUsd
+            optionTag={(o) => o.categoria ? (
+              <span className={`ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${colorCategoria(o.idCategoria, catalogCategorias)}`}>
+                {o.categoria.nombre}
+              </span>
+            ) : null}
             columns={[
-              { key: 'idInsumo', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoUnidad' },
+              { key: 'idInsumo', label: 'Insumo', kind: 'select-with-create', preloadField: 'costoUnidad' },
               { key: 'superficieAplicada', label: 'Sup. aplicada (ha)', kind: 'number', align: 'right' },
-              { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
-              { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
+              { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right', precision: 3 },
+              { key: 'costoUnidad', label: 'Costo/unidad', kind: 'precio-insumo', align: 'right' },
               { key: '__ponderado', label: 'Costo ponderado/ha', kind: 'readonly-money', align: 'right' },
             ]}
             rows={insumos}
@@ -1168,7 +1196,7 @@ export default function CampaniaDetalle() {
             title="Costos varios"
             icon={DollarSign}
             columns={[
-              { key: 'idCosto', label: 'Tipo', kind: 'select-with-create', preloadField: 'costoUnidad' },
+              { key: 'idCosto', label: 'Costo', kind: 'select-with-create', preloadField: 'costoUnidad' },
               { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
               { key: '__total', label: 'Costo total', kind: 'readonly-money', align: 'right' },
@@ -1510,31 +1538,39 @@ function NumField<K extends keyof Cabecera>({
 /**
  * Input numérico que NO recompone su valor desde el padre mientras el
  * usuario tipea. Mantiene el string en estado local, lo que evita que el
- * formateo a 2 decimales (o el parseo) pise lo que se está tipeando.
+ * formateo (por defecto 2 decimales, configurable con `precision`) pise lo
+ * que se está tipeando.
  *
- * El padre recibe el valor en `onBlur`, ya redondeado a 2 decimales.
+ * El padre recibe el valor en `onBlur`.
  */
 function NumberInput2({
-  value, onCommit, min, max, className,
+  value, onCommit, min, max, className, precision = 2,
 }: {
   value: number
   onCommit: (n: number) => void
   min?: number
   max?: number
   className?: string
+  precision?: number
 }) {
-  const [display, setDisplay] = useState<string>(formatInputNumber(value))
+  const fmt = useCallback((n: number): string => {
+    const p = Math.pow(10, precision)
+    const v = Math.round(n * p) / p
+    if (v === 0) return ''
+    return v.toFixed(precision)
+  }, [precision])
+  const [display, setDisplay] = useState<string>(fmt(value))
   const focusedRef = useRef(false)
   // Refleja cambios externos del value (por ej. la precarga del precio de
   // referencia al seleccionar un ítem) sólo cuando el input no está enfocado,
   // para no pisar lo que el usuario está escribiendo.
   useEffect(() => {
-    if (!focusedRef.current) setDisplay(formatInputNumber(value))
-  }, [value])
+    if (!focusedRef.current) setDisplay(fmt(value))
+  }, [value, fmt])
   return (
     <input
       type="number"
-      step="0.01"
+      step={Math.pow(10, -precision)}
       min={min}
       max={max}
       value={display}
@@ -1542,8 +1578,8 @@ function NumberInput2({
       onFocus={() => { focusedRef.current = true }}
       onBlur={() => {
         focusedRef.current = false
-        const n = round2(parseFloat(display) || 0)
-        setDisplay(formatInputNumber(n))
+        const n = parseFloat(display) || 0
+        setDisplay(fmt(n))
         onCommit(n)
       }}
       className={className}
@@ -1651,10 +1687,18 @@ function FilaRes({
 type ColumnDef =
   | { key: string; label: string; kind: 'select-with-create'; align?: 'right'; preloadField?: string }
   | { key: string; label: string; kind: 'date'; align?: 'right' }
-  | { key: string; label: string; kind: 'number'; align?: 'right' }
+  | { key: string; label: string; kind: 'text'; align?: 'right' }
+  | { key: string; label: string; kind: 'number'; align?: 'right'; precision?: number }
+  | { key: string; label: string; kind: 'precio-insumo'; align?: 'right' }
   | { key: string; label: string; kind: 'readonly-money'; align?: 'right' }
 
-type CatalogOption = { id: number; nombre: string; precioUnitario?: number | null }
+type CatalogOption = {
+  id: number
+  nombre: string
+  precioUnitario?: number | null
+  idCategoria?: number | null
+  categoria?: { id: number; nombre: string } | null
+}
 
 interface DetalleTableProps<T extends { id: number }> {
   title: string
@@ -1673,11 +1717,20 @@ interface DetalleTableProps<T extends { id: number }> {
   totalValue: number
   emptyHint?: string
   footer?: React.ReactNode
+  /** Etiqueta (p.ej. categoría) que se muestra junto a cada opción del selector. */
+  optionTag?: (o: CatalogOption) => React.ReactNode
+  /** Moneda para columnas `precio-insumo` y total en USD (insumos). */
+  moneda?: Moneda
+  onChangeMoneda?: (m: Moneda) => void
+  dolar?: number
+  /** Si el total está en USD, se formatea con la moneda activa (insumos). */
+  totalUsd?: boolean
 }
 
 function DetalleTable<T extends { id: number }>({
   title, icon: Icon, columns, rows, catalogOptions, addLabel, canAdd,
   onAdd, onChange, onRemove, onCreateNew, computedRow, totalLabel, totalValue, emptyHint, footer,
+  optionTag, moneda, onChangeMoneda, dolar, totalUsd,
 }: DetalleTableProps<T>) {
   // Fusiona las opciones activas del catálogo con los ítems ya referenciados
   // por filas guardadas (que pueden estar inactivos) para no perder su nombre
@@ -1686,31 +1739,47 @@ function DetalleTable<T extends { id: number }>({
     const map = new Map<number, CatalogOption>()
     for (const o of catalogOptions) map.set(o.id, o)
     for (const r of rows as Array<Record<string, unknown>>) {
-      const rel = (r.labor || r.insumo || r.costo) as { id?: number; nombre?: string; precioUnitario?: number | null } | undefined
+      const rel = (r.labor || r.insumo || r.costo) as {
+        id?: number; nombre?: string; precioUnitario?: number | null
+        idCategoria?: number | null; categoria?: { id: number; nombre: string } | null
+      } | undefined
       if (rel?.id && rel.nombre) {
         const prev = map.get(rel.id)
-        map.set(rel.id, { id: rel.id, nombre: rel.nombre, precioUnitario: prev?.precioUnitario ?? rel.precioUnitario })
+        map.set(rel.id, {
+          id: rel.id,
+          nombre: rel.nombre,
+          precioUnitario: prev?.precioUnitario ?? rel.precioUnitario,
+          idCategoria: prev?.idCategoria ?? rel.idCategoria,
+          categoria: prev?.categoria ?? rel.categoria,
+        })
       }
     }
     return Array.from(map.values())
   }, [catalogOptions, rows])
 
+  const tienePrecioInsumo = columns.some((c) => c.kind === 'precio-insumo')
+
   return (
     <section className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider inline-flex items-center gap-2">
           <Icon className="size-4" strokeWidth={1.75} />
           {title}
         </h2>
-        {canAdd && (
-          <button
-            onClick={onAdd}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="size-3.5" strokeWidth={2} />
-            {addLabel}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {tienePrecioInsumo && moneda && onChangeMoneda && (
+            <MonedaToggle value={moneda} onChange={onChangeMoneda} />
+          )}
+          {canAdd && (
+            <button
+              onClick={onAdd}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="size-3.5" strokeWidth={2} />
+              {addLabel}
+            </button>
+          )}
+        </div>
       </div>
 
       {emptyHint && rows.length === 0 ? (
@@ -1723,7 +1792,7 @@ function DetalleTable<T extends { id: number }>({
                 {columns.map((c) => (
                   <th
                     key={c.key}
-                    className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${c.align === 'right' ? 'text-right' : 'text-left'}`}
+                    className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${c.align === 'right' ? 'text-right' : 'text-left'} ${c.kind === 'select-with-create' ? 'min-w-[300px]' : ''}`}
                   >
                     {c.label}
                   </th>
@@ -1746,7 +1815,7 @@ function DetalleTable<T extends { id: number }>({
                         key={c.key}
                         className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}
                       >
-                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow })}
+                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow, moneda, dolar, totalUsd, optionTag })}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right">
@@ -1773,7 +1842,9 @@ function DetalleTable<T extends { id: number }>({
                     {totalLabel}
                   </td>
                   <td className="px-3 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
-                    {fmtMoneda(totalValue, 2)}
+                    {totalUsd
+                      ? fmtPrecioInsumo(totalValue, moneda ?? 'pesos', dolar ?? 0)
+                      : fmtMoneda(totalValue, 2)}
                   </td>
                   <td className="w-10" />
                 </tr>
@@ -1792,6 +1863,10 @@ interface CellCtx<T> {
   onChange: (id: number, patch: Partial<T>) => void | Promise<void>
   onCreateNew: (row: T, onCreated: (id: number) => void) => void
   computedRow: (row: T) => number
+  moneda?: Moneda
+  dolar?: number
+  totalUsd?: boolean
+  optionTag?: (o: CatalogOption) => React.ReactNode
 }
 
 function renderCell<T extends Record<string, unknown> & { id: number }>(
@@ -1807,34 +1882,35 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
     const v = cellValue(col.key)
     return (
       <div className="flex items-center gap-1">
-        <select
+        <SelectAutocomplete
+          className="flex-1 min-w-0"
           value={v ?? ''}
-          onChange={(e) => {
-            const nv = e.target.value === '' ? null : Number(e.target.value)
-            ctx.onChange(row.id, { [col.key]: nv } as Partial<T>)
+          onChange={(nv) => {
+            const val = Number(nv)
+            ctx.onChange(row.id, { [col.key]: val } as Partial<T>)
             // Precarga el precio de referencia del ítem seleccionado en el
             // campo de costo unitario (editable después). Se asigna siempre:
             // 0 si el ítem no tiene precio de referencia.
-            if (col.preloadField && nv != null) {
-              const opt = ctx.catalogOptions.find((o) => o.id === nv)
+            if (col.preloadField) {
+              const opt = ctx.catalogOptions.find((o) => o.id === val)
               ctx.onChange(row.id, { [col.preloadField]: opt?.precioUnitario ?? 0 } as Partial<T>)
             }
           }}
-          className="flex-1 min-w-0 px-2 py-1 bg-background border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
-        >
-          <option value="">Elegí…</option>
-          {ctx.catalogOptions.map((o) => (
-            <option key={o.id} value={o.id}>{o.nombre}</option>
-          ))}
-        </select>
+          options={ctx.catalogOptions.map((o) => ({ value: o.id, label: o.nombre }))}
+          placeholder="Elegí…"
+          renderTag={(opt) => {
+            const o = ctx.catalogOptions.find((x) => x.id === Number(opt.value))
+            return o && ctx.optionTag ? ctx.optionTag(o) : null
+          }}
+        />
         <button
           type="button"
           onClick={() => ctx.onCreateNew(row, (newId) => ctx.onChange(row.id, { [col.key]: newId } as Partial<T>))}
-          className="p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer shrink-0"
           title="Crear nuevo"
           aria-label="Crear nuevo"
         >
-          <Plus className="size-3.5" strokeWidth={1.75} />
+          <Plus className="size-4" strokeWidth={1.75} />
         </button>
       </div>
     )
@@ -1851,20 +1927,58 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
       />
     )
   }
+  if (col.kind === 'text') {
+    const v = cellValue(col.key) as string | undefined
+    return (
+      <input
+        type="text"
+        value={v ?? ''}
+        onChange={(e) => ctx.onChange(row.id, { [col.key]: e.target.value } as Partial<T>)}
+        placeholder="—"
+        className="w-full px-2 py-1 bg-background border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
+      />
+    )
+  }
   if (col.kind === 'number') {
     const v = cellValue(col.key) as number | undefined
     return (
       <NumberInput2
         value={typeof v === 'number' ? v : 0}
         min={0}
+        precision={col.precision}
         onCommit={(n) => ctx.onChange(row.id, { [col.key]: n } as Partial<T>)}
+        className="w-full px-2 py-1 bg-background border border-border rounded text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
+      />
+    )
+  }
+  if (col.kind === 'precio-insumo') {
+    // El valor se guarda en USD; se muestra/edita en la moneda activa usando el
+    // dólar venta. Al editar en pesos se convierte de vuelta a USD.
+    const v = cellValue(col.key) as number | undefined
+    const raw = typeof v === 'number' && Number.isFinite(v) ? v : 0
+    const d = ctx.dolar && ctx.dolar > 0 ? ctx.dolar : 1
+    const enPesos = (ctx.moneda ?? 'pesos') === 'pesos'
+    return (
+      <NumberInput2
+        value={enPesos ? raw * d : raw}
+        min={0}
+        onCommit={(n) => {
+          const stored = enPesos ? n / d : n
+          ctx.onChange(row.id, { [col.key]: stored } as Partial<T>)
+        }}
         className="w-full px-2 py-1 bg-background border border-border rounded text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
       />
     )
   }
   if (col.kind === 'readonly-money') {
     const v = ctx.computedRow(row)
-    return <span className="tabular-nums text-sm text-foreground">{fmtMoneda(v, 2)}</span>
+    return (
+      <span className="tabular-nums text-sm text-foreground">
+        {ctx.totalUsd
+          ? fmtPrecioInsumo(v, ctx.moneda ?? 'pesos', ctx.dolar ?? 0)
+          : fmtMoneda(v, 2)}
+      </span>
+    )
   }
   return null
 }

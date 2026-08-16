@@ -40,6 +40,8 @@ export interface InsumoItem {
   nombre: string
   idEmpresa: number | null
   precioUnitario?: number | null
+  idCategoria?: number | null
+  categoria?: { id: number; nombre: string } | null
 }
 
 export interface CostoItem {
@@ -52,17 +54,18 @@ export interface CostoItem {
 export interface CampaniaLaborDetalle {
   id: number
   idCampania: number
-  idLabor: number
+  idLabor: number | null
   fecha: string
   superficieLaboreada: number
   costoLaborHa: number
+  observaciones?: string | null
   labor?: LaborItem
 }
 
 export interface CampaniaInsumoDetalle {
   id: number
   idCampania: number
-  idInsumo: number
+  idInsumo: number | null
   unidadesHa: number
   costoUnidad: number
   superficieAplicada: number
@@ -72,7 +75,7 @@ export interface CampaniaInsumoDetalle {
 export interface CampaniaCostoDetalle {
   id: number
   idCampania: number
-  idCosto: number
+  idCosto: number | null
   unidadesHa: number
   costoUnidad: number
   costo?: CostoItem

@@ -17,6 +17,8 @@ interface MultiselectFilterProps {
   /** Texto cuando la lista de opciones está vacía. */
   vacio?: string
   widthCls?: string
+  /** Clases de color por opción (p.ej. el color de la categoría). */
+  colorOf?: (value: string) => string
 }
 
 /**
@@ -31,6 +33,7 @@ export default function MultiselectFilter({
   etiqueta,
   vacio = 'Sin opciones.',
   widthCls = 'w-full',
+  colorOf,
 }: MultiselectFilterProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -96,7 +99,13 @@ export default function MultiselectFilter({
                 >
                   {value.includes(o.value) && <Check className="size-3" strokeWidth={2.5} />}
                 </span>
-                <span className="truncate">{o.label}</span>
+                {colorOf ? (
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium border ${colorOf(o.value)}`}>
+                    {o.label}
+                  </span>
+                ) : (
+                  <span className="truncate">{o.label}</span>
+                )}
               </button>
             ))}
           </div>
