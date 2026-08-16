@@ -20,6 +20,7 @@ import Reportes from './pages/Reportes'
 import ReporteResumen from './pages/ReporteResumen'
 import ReporteDetalle from './pages/ReporteDetalle'
 import ReporteVer from './pages/ReporteVer'
+import Configuracion from './pages/Configuracion'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -63,6 +64,7 @@ function App() {
               <Route path="/reportes/resumen" element={<ReporteResumen />} />
               <Route path="/reportes/detalle" element={<ReporteDetalle />} />
               <Route path="/reportes/ver/:id" element={<ReporteVer />} />
+              <Route path="/configuracion" element={<Configuracion />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

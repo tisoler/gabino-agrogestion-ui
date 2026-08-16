@@ -131,7 +131,7 @@ export default function Lotes() {
     canRead ? ['lotes', effectiveEmpresaId] : null,
     lotesFetcher,
     {
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
       revalidateOnMount: true,
       dedupingInterval: 0,
     }
@@ -216,7 +216,7 @@ export default function Lotes() {
       idUsuario: lote.idUsuario,
       geometria: lote.geometria ?? null,
       centroide: lote.centroide ?? null,
-      area: lote.area != null ? String(Number(lote.area)) : '',
+      area: lote.area?.toString() ?? '',
       idEmpresa: lote.idEmpresa,
     })
     setIsModalOpen(true)
@@ -411,8 +411,8 @@ export default function Lotes() {
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando lotes...</p>
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-4 items-start">
-          <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex flex-col xl:flex-row gap-4 items-start">
+          <div className="flex-1 min-w-0 space-y-4 w-full">
             <div className="grid grid-cols-1 gap-3 sm:hidden">
               {filteredLotes?.map((lote) => {
                 const editable = isEditable(lote)
@@ -445,12 +445,12 @@ export default function Lotes() {
                             {lote.nombreUsuario || dueno?.nombreUsuario || dueno?.email || `UID: ${lote.idUsuario}`}
                           </span>
                         </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Campo: <span className="text-foreground font-medium">{lote.campo?.nombre || '—'}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Área: <span className="text-foreground font-medium">{lote.area != null ? `${Number(lote.area).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : '—'}</span>
-                      </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Campo: <span className="text-foreground font-medium">{lote.campo?.nombre || '—'}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Área: <span className="text-foreground font-medium">{lote.area != null ? `${Number(lote.area).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : '—'}</span>
+                        </p>
                       </div>
                       <div className="flex gap-1 shrink-0">
                         {editable ? (
@@ -539,10 +539,10 @@ export default function Lotes() {
                           key={lote.id}
                           onClick={() => setSelectedLoteId(lote.id)}
                           className={`cursor-pointer transition-colors ${selectedLoteId === lote.id
-                              ? 'bg-primary-soft/80'
-                              : lote.activo
-                                ? 'hover:bg-muted/40'
-                                : 'bg-muted/20 opacity-60'
+                            ? 'bg-primary-soft/80'
+                            : lote.activo
+                              ? 'hover:bg-muted/40'
+                              : 'bg-muted/20 opacity-60'
                             }`}
                         >
                           <td className="px-4 py-3">
@@ -648,7 +648,7 @@ export default function Lotes() {
           </div>
 
           {/* Mapa del lote seleccionado */}
-          <div className="w-full lg:w-[400px] lg:sticky lg:top-4">
+          <div className="w-full xl:w-[400px] xl:sticky xl:top-4">
             <div className="bg-card border border-border rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">Mapa del lote</h3>
@@ -660,7 +660,7 @@ export default function Lotes() {
               </div>
               {loteSeleccionado ? (
                 <MapaLote
-                  altura="h-72"
+                  altura="h-108"
                   geometria={loteSeleccionado.geometria}
                   centroide={loteSeleccionado.centroide}
                 />

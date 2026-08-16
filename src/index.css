@@ -277,6 +277,7 @@
     flex-direction: column;
     width: 145.5mm;
     height: 207.3mm;
+    margin-left: auto;
     box-sizing: border-box;
   }
 
@@ -370,4 +371,15 @@
     display: block;
     width: 100%;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* UX: cursor pointer en selects y en el ícono de calendario del input date   */
+/* -------------------------------------------------------------------------- */
+select {
+  cursor: pointer;
+}
+
+[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
 }

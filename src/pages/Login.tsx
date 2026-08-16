@@ -9,6 +9,7 @@ import {
   signOut,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../lib/firebase'
+import { asegurarUsuarioFirestore } from '../lib/signup'
 import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2, KeyRound } from 'lucide-react'
 
 export default function Login() {
@@ -58,6 +59,7 @@ export default function Login() {
     try {
       if (isRegister) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+        await asegurarUsuarioFirestore()
         await sendEmailVerification(userCredential.user)
         setSuccess('¡Cuenta creada! Por favor, verifica tu email para poder ingresar.')
         await signOut(auth)
@@ -99,8 +101,9 @@ export default function Login() {
     setLoading(true)
     try {
       await signInWithPopup(auth, googleProvider)
+      await asegurarUsuarioFirestore()
       navigate('/')
-    } catch (err: any) {
+    } catch {
       setError('Error al iniciar sesión con Google.')
     } finally {
       setLoading(false)

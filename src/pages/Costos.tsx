@@ -79,7 +79,7 @@ export default function Costos() {
     swrCostosKey,
     costosFetcher as any,
     {
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
       revalidateOnMount: true,
       dedupingInterval: 0,
     }

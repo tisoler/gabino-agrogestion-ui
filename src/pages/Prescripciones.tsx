@@ -3,7 +3,7 @@ import useSWR from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, AlertCircle, Activity, ClipboardList, MapPin, Calendar,
-  Pickaxe, Package, Building2,
+  Pickaxe, Package, Building2, Loader2, X,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,12 +13,6 @@ import MultiselectFilter from '../components/MultiselectFilter'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
-interface CampaniaOption {
-  id: number
-  nombre: string
-  campania?: string
-  lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
-}
 interface Lote {
   id: number
   idEmpresa: number
@@ -48,7 +42,6 @@ export default function Prescripciones() {
 
   // Filtros
   const [filterEmpresaIds, setFilterEmpresaIds] = useState<number[]>([])
-  const [filterIdCampania, setFilterIdCampania] = useState<number | null>(null)
   const [filterCampanias, setFilterCampanias] = useState<string[]>([])
   const [filterIdLote, setFilterIdLote] = useState<number | null>(null)
   const [filterIdLabor, setFilterIdLabor] = useState<number | null>(null)
@@ -56,17 +49,11 @@ export default function Prescripciones() {
   const [searchTerm, setSearchTerm] = useState('')
 
   // Catálogos para los selects de filtro
-  const { data: campanias = [] } = useSWR<CampaniaOption[]>(canRead ? '/campanias' : null, fetcher)
   const { data: lotes = [] } = useSWR<Lote[]>(canRead ? '/lotes' : null, fetcher)
   const { data: labores = [] } = useSWR<Labor[]>(canRead ? ['/labores', 'all'] : null, () =>
     api.get('/labores', { params: { all: true } }).then((r) => r.data))
   const { data: insumos = [] } = useSWR<Insumo[]>(canRead ? ['/insumos', 'all'] : null, () =>
     api.get('/insumos', { params: { all: true } }).then((r) => r.data))
-
-  const campaniasFiltradas = useMemo(() => {
-    if (filterEmpresaIds.length === 0) return campanias
-    return campanias.filter((c) => c.lote?.idEmpresa != null && filterEmpresaIds.includes(c.lote.idEmpresa))
-  }, [campanias, filterEmpresaIds])
 
   const lotesFiltrados = useMemo(() => {
     if (filterEmpresaIds.length === 0) return lotes
@@ -74,11 +61,10 @@ export default function Prescripciones() {
   }, [lotes, filterEmpresaIds])
 
   const prescripcionesFetcher = async ([
-    , empresaIds, idCampania, campanias, idLote, idLabor, idInsumo,
-  ]: [string, string, number | null, string, number | null, number | null, number | null]) => {
+    , empresaIds, campanias, idLote, idLabor, idInsumo,
+  ]: [string, string, string, number | null, number | null, number | null]) => {
     const params: Record<string, unknown> = {}
     if (empresaIds) params.empresaIds = empresaIds
-    if (idCampania) params.idCampania = idCampania
     if (campanias) params.campanias = campanias
     if (idLote) params.idLote = idLote
     if (idLabor) params.idLabor = idLabor
@@ -87,32 +73,31 @@ export default function Prescripciones() {
     return res.data as PrescripcionListItem[]
   }
 
-  const { data: prescripciones = [], isLoading } = useSWR<PrescripcionListItem[]>(
+  const { data: prescripciones = [], isLoading, mutate: revalidarPrescripciones } = useSWR<PrescripcionListItem[]>(
     canRead
-      ? ['prescripciones', filterEmpresaIds.join(','), filterIdCampania, filterCampanias.join(','), filterIdLote, filterIdLabor, filterIdInsumo]
+      ? ['prescripciones', filterEmpresaIds.join(','), filterCampanias.join(','), filterIdLote, filterIdLabor, filterIdInsumo]
       : null,
     prescripcionesFetcher,
-    { revalidateOnFocus: true, revalidateOnMount: true, dedupingInterval: 0 }
+    { revalidateOnFocus: false, revalidateOnMount: true, dedupingInterval: 0 }
   )
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     if (!term) return prescripciones
     return prescripciones.filter((p) =>
-      p.campania?.nombre.toLowerCase().includes(term) ||
       (p.campania?.campania || '').toLowerCase().includes(term) ||
+      (p.campania?.lote?.campo?.nombre || '').toLowerCase().includes(term) ||
       p.labor?.nombre.toLowerCase().includes(term) ||
       (p.campania?.lote?.descripcion || '').toLowerCase().includes(term)
     )
   }, [prescripciones, searchTerm])
 
   const hasActiveFilters =
-    filterEmpresaIds.length > 0 || filterIdCampania !== null || filterCampanias.length > 0 ||
+    filterEmpresaIds.length > 0 || filterCampanias.length > 0 ||
     filterIdLote !== null || filterIdLabor !== null || filterIdInsumo !== null
 
   const clearFilters = () => {
     setFilterEmpresaIds([])
-    setFilterIdCampania(null)
     setFilterCampanias([])
     setFilterIdLote(null)
     setFilterIdLabor(null)
@@ -121,6 +106,33 @@ export default function Prescripciones() {
 
   const goToDetail = (id: number) => navigate(`/prescripciones/${id}`)
   const goToCreate = () => navigate('/prescripciones/nueva')
+
+  // Anular / recuperar (borrado lógico) con confirmación
+  const [confirmTarget, setConfirmTarget] = useState<PrescripcionListItem | null>(null)
+  const [annulBusy, setAnnulBusy] = useState(false)
+  const [annulError, setAnnulError] = useState<string | null>(null)
+
+  const handleToggleAnulada = async () => {
+    if (!confirmTarget || annulBusy) return
+    setAnnulBusy(true)
+    setAnnulError(null)
+    try {
+      await api.patch(`/prescripciones/${confirmTarget.id}/anulada`, {
+        anulada: !confirmTarget.anulada,
+      })
+      setConfirmTarget(null)
+      await revalidarPrescripciones()
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } } }
+      const msg = err?.response?.data?.message
+      const detalle = Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : ''
+      setAnnulError(
+        detalle || (e instanceof Error ? e.message : 'No se pudo actualizar la prescripción.'),
+      )
+    } finally {
+      setAnnulBusy(false)
+    }
+  }
 
   if (!canRead) {
     return (
@@ -145,7 +157,7 @@ export default function Prescripciones() {
         {canWrite && (
           <button
             onClick={goToCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            className="inline-flex cursor-pointer items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
           >
             <Plus className="size-4" strokeWidth={2} />
             <span>Nueva Prescripción</span>
@@ -166,22 +178,7 @@ export default function Prescripciones() {
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-              Producción
-            </label>
-            <select
-              value={filterIdCampania ?? ''}
-              onChange={(e) => setFilterIdCampania(e.target.value === '' ? null : Number(e.target.value))}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-            >
-              <option value="">Todas</option>
-              {campaniasFiltradas.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
               Productor
@@ -286,16 +283,97 @@ export default function Prescripciones() {
           )}
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
+        <>
+          {/* Mobile: cards */}
+          <div className="grid grid-cols-1 gap-3 sm:hidden">
+            {filtered.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => goToDetail(p.id)}
+                className={`bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40 ${p.anulada ? 'bg-muted/40 opacity-75' : ''}`}
+              >
+                <div className="flex justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-semibold text-foreground leading-tight truncate">
+                        {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                        <span className="font-normal text-muted-foreground">
+                          {p.campania?.campania ? ` · ${p.campania.campania}` : ''}
+                        </span>
+                      </h3>
+                      {p.anulada && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 rounded text-[10px] font-semibold uppercase tracking-wider">
+                          Anulada
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                      <Calendar className="size-3.5" strokeWidth={1.75} />
+                      {fmtFecha(p.fecha)}
+                    </div>
+                  </div>
+                  {canWrite && (
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <button
+                        onClick={() => { setAnnulError(null); setConfirmTarget(p) }}
+                        className={`inline-flex items-center px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors ${p.anulada
+                          ? 'text-primary border-primary/30 hover:bg-primary/10'
+                          : 'text-destructive border-destructive/30 hover:bg-destructive/10'
+                          }`}
+                      >
+                        {p.anulada ? 'Recuperar' : 'Anular'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Productor</dt>
+                    <dd className="text-foreground truncate">
+                      {empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre
+                        || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaña</dt>
+                    <dd className="text-foreground">{p.campania?.campania || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</dt>
+                    <dd className="text-foreground truncate">{p.campania?.lote?.campo?.nombre || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</dt>
+                    <dd className="text-foreground truncate">
+                      {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Labor</dt>
+                    <dd className="text-foreground truncate">{p.labor?.nombre || `Labor #${p.idLabor}`}</dd>
+                  </div>
+                </dl>
+
+                <div className="pt-2 border-t border-border flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Total {fmtHa(p.totalHaAplicacion)}</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
+                    <Package className="size-3" strokeWidth={1.75} />
+                    {p.insumoCount} {p.insumoCount === 1 ? 'insumo' : 'insumos'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: tabla */}
+          <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Fecha
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Producción
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Productor
@@ -304,37 +382,45 @@ export default function Prescripciones() {
                     Campaña
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Lote
+                    Campo
                   </th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Labor
+                    Lote
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
-                    Total ha
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
-                    Insumos
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => goToDetail(p.id)}
-                    className="cursor-pointer transition-colors hover:bg-muted/40"
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                        <span className="text-sm text-foreground">{fmtFecha(p.fecha)}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-foreground truncate">
-                        {p.campania?.nombre || `Producción #${p.idCampania}`}
-                      </span>
-                    </td>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Labor
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                      Total ha
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                      Insumos
+                    </th>
+                    {canWrite && (
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                        Acciones
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((p) => (
+                    <tr
+                      key={p.id}
+                      onClick={() => goToDetail(p.id)}
+                      className={`cursor-pointer transition-colors ${p.anulada ? 'bg-destructive/10 hover:bg-destructive/20 text-muted-foreground' : 'hover:bg-muted/40'}`}
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                          <span className="text-sm text-foreground">{fmtFecha(p.fecha)}</span>
+                          {p.anulada && (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 rounded text-[10px] font-semibold uppercase tracking-wider">
+                              Anulada
+                            </span>
+                          )}
+                        </div>
+                      </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
@@ -350,6 +436,11 @@ export default function Prescripciones() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
+                      <span className="text-sm text-foreground">
+                        {p.campania?.lote?.campo?.nombre || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <MapPin className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
                         <span className="text-sm text-foreground truncate">
@@ -357,25 +448,105 @@ export default function Prescripciones() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Pickaxe className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                        <span className="text-sm text-foreground truncate">
-                          {p.labor?.nombre || `Labor #${p.idLabor}`}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Pickaxe className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                          <span className="text-sm text-foreground truncate">
+                            {p.labor?.nombre || `Labor #${p.idLabor}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-sm">{fmtHa(p.totalHaAplicacion)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
+                          <Package className="size-3" strokeWidth={1.75} />
+                          {p.insumoCount}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-sm">{fmtHa(p.totalHaAplicacion)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
-                        <Package className="size-3" strokeWidth={1.75} />
-                        {p.insumoCount}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      {canWrite && (
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => { setAnnulError(null); setConfirmTarget(p) }}
+                            disabled={!canWrite}
+                            className={`inline-flex cursor-pointer items-center px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-white ${p.anulada
+                              ? 'text-primary border-primary/30 hover:bg-primary/10'
+                              : 'text-destructive border-destructive/30 hover:bg-destructive/10'
+                              }`}
+                          >
+                            {p.anulada ? 'Recuperar' : 'Anular'}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal de confirmación: anular / recuperar */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+            onClick={() => !annulBusy && setConfirmTarget(null)}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
+              <h2 className="text-base font-semibold text-foreground">
+                {confirmTarget.anulada ? 'Recuperar prescripción' : 'Anular prescripción'}
+              </h2>
+              <button
+                onClick={() => setConfirmTarget(null)}
+                disabled={annulBusy}
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent disabled:opacity-50"
+                aria-label="Cerrar"
+              >
+                <X className="size-4" strokeWidth={1.75} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-foreground">
+                {confirmTarget.anulada
+                  ? `¿Desea recuperar la prescripción #${confirmTarget.id}?`
+                  : `¿Desea anular la prescripción #${confirmTarget.id}?`}
+              </p>
+              {annulError && (
+                <p className="text-[11px] text-destructive inline-flex items-center gap-1">
+                  <AlertCircle className="size-3" strokeWidth={1.75} />
+                  {annulError}
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmTarget(null)}
+                  disabled={annulBusy}
+                  className="flex-1 cursor-pointer px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={annulBusy}
+                  onClick={handleToggleAnulada}
+                  className={`flex-1 cursor-pointer px-4 py-2 rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2 ${confirmTarget.anulada
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-destructive text-destructive-foreground'
+                    }`}
+                >
+                  {annulBusy && <Loader2 className="size-4 animate-spin" />}
+                  {annulBusy
+                    ? 'Procesando…'
+                    : confirmTarget.anulada
+                      ? 'Recuperar'
+                      : 'Anular'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,8 +1,12 @@
 export interface PrescripcionCampania {
   id: number
-  nombre: string
   campania?: string
-  lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
+  lote?: {
+    id: number
+    descripcion: string | null
+    idEmpresa: number
+    campo?: { id: number; nombre: string } | null
+  } | null
   cultivo?: { id: number; nombre: string } | null
 }
 
@@ -12,6 +16,7 @@ export interface PrescripcionListItem {
   idCampania: number
   idLabor: number
   totalHaAplicacion: number
+  anulada: boolean
   campania: PrescripcionCampania | null
   labor: { id: number; nombre: string } | null
   insumoCount: number

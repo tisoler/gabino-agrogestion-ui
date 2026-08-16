@@ -3,6 +3,7 @@ import useSWR from 'swr'
 import { X, AlertCircle, Loader2, FolderPlus } from 'lucide-react'
 import api from '../lib/api'
 import { UNIDADES_PRECIO } from '../constantes'
+import SelectAutocomplete from './SelectAutocomplete'
 
 interface Categoria {
   id: number
@@ -106,7 +107,7 @@ export default function NuevoInsumoModal({
       <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex justify-between items-center">
           <h2 className="text-base font-semibold text-foreground">Nuevo insumo</h2>
-          <button onClick={onClose} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent" aria-label="Cerrar">
+          <button onClick={onClose} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent cursor-pointer" aria-label="Cerrar">
             <X className="size-4" strokeWidth={1.75} />
           </button>
         </div>
@@ -125,37 +126,34 @@ export default function NuevoInsumoModal({
 
           <div className="space-y-1.5">
             <label className={labelCls}>Productor</label>
-            <select
-              value={isAdmin ? (idEmpresa ?? '') : (empresaId ?? '')}
-              onChange={(e) => { setIdEmpresa(e.target.value === '' ? null : Number(e.target.value)); setError(null) }}
+            <SelectAutocomplete
+              value={idEmpresa ?? ''}
+              onChange={(v) => { setIdEmpresa(v === '' ? null : Number(v)); setError(null) }}
               disabled={!isAdmin}
-              className={inputCls + (isAdmin ? '' : ' disabled:opacity-60 disabled:cursor-not-allowed')}
-            >
-              {isAdmin && <option value="">Global (todas las empresas)</option>}
-              <option value={empresaId ?? ''}>{empresaNombre || 'Productor'}</option>
-            </select>
+              options={[
+                ...(isAdmin ? [{ value: '' as const, label: 'Global (todas las empresas)' }] : []),
+                ...(empresaId != null ? [{ value: empresaId, label: empresaNombre || 'Productor' }] : []),
+              ]}
+              placeholder="Seleccionar productor..."
+            />
           </div>
 
           <div className="space-y-1.5">
             <label className={labelCls}>Categoría</label>
             {!showCategoriaCreate ? (
-              <div className="flex gap-2">
-                <select
+              <div className="flex gap-2 items-center">
+                <SelectAutocomplete
+                  className="flex-1 min-w-0"
                   value={idCategoria}
-                  onChange={(e) => { setIdCategoria(e.target.value === '' ? '' : Number(e.target.value)); setError(null) }}
-                  required
-                  className={inputCls}
-                >
-                  <option value="">Seleccionar categoría...</option>
-                  {categorias.filter((c) => c.activo !== false).map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setIdCategoria(v === '' ? '' : Number(v)); setError(null) }}
+                  options={categorias.filter((c) => c.activo !== false).map((c) => ({ value: c.id, label: c.nombre }))}
+                  placeholder="Seleccionar categoría..."
+                />
                 {isAdmin && (
                   <button
                     type="button"
                     onClick={() => { setCategoriaError(null); setShowCategoriaCreate(true) }}
-                    className="inline-flex items-center gap-1 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0"
+                    className="inline-flex items-center gap-1 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0 cursor-pointer"
                     title="Crear nueva categoría"
                     aria-label="Crear nueva categoría"
                   >
@@ -183,7 +181,7 @@ export default function NuevoInsumoModal({
                   <button
                     type="button"
                     onClick={() => { setShowCategoriaCreate(false); setCategoriaError(null) }}
-                    className="flex-1 px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                    className="flex-1 px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                   >
                     Cancelar
                   </button>
@@ -191,7 +189,7 @@ export default function NuevoInsumoModal({
                     type="button"
                     onClick={handleCreateCategoria}
                     disabled={!categoriaNombre.trim() || categoriaBusy}
-                    className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                    className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {categoriaBusy && <Loader2 className="size-3 animate-spin" />}
                     Crear categoría
@@ -203,16 +201,15 @@ export default function NuevoInsumoModal({
 
           <div className="space-y-1.5">
             <label className={labelCls}>Unidad</label>
-            <select
+            <SelectAutocomplete
               value={unidad}
-              onChange={(e) => setUnidad(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Sin unidad</option>
-              {UNIDADES_PRECIO.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
+              onChange={(v) => setUnidad(String(v))}
+              options={[
+                { value: '', label: 'Sin unidad' },
+                ...UNIDADES_PRECIO.map((u) => ({ value: u, label: u })),
+              ]}
+              placeholder="Sin unidad"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -248,7 +245,7 @@ export default function NuevoInsumoModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -256,7 +253,7 @@ export default function NuevoInsumoModal({
               type="button"
               disabled={!nombre.trim() || idCategoria === '' || busy}
               onClick={handleSubmit}
-              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2 cursor-pointer"
             >
               {busy && <Loader2 className="size-4 animate-spin" />}
               {busy ? 'Creando…' : 'Crear insumo'}

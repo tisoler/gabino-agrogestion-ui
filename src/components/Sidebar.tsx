@@ -19,6 +19,7 @@ import {
   Monitor,
   ClipboardList,
   FileBarChart,
+  Settings,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -37,6 +38,8 @@ interface NavItem {
   permission?: string
   /** Oculto para el rol productor (ve esos catálogos solo desde producción). */
   ocultarParaProductor?: boolean
+  /** Sólo visible para sys-admin. */
+  soloSysAdmin?: boolean
 }
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: LucideIcon }[] = [
@@ -64,6 +67,9 @@ const NAV_GROUPS: NavItem[][] = [
     { to: '/insumos', label: 'Insumos', icon: Database, permission: 'lectura:insumo', ocultarParaProductor: true },
     { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo', ocultarParaProductor: true },
   ],
+  [
+    { to: '/configuracion', label: 'Configuración', icon: Settings, soloSysAdmin: true },
+  ],
 ]
 
 interface SidebarContentProps extends SidebarProps {
@@ -72,7 +78,7 @@ interface SidebarContentProps extends SidebarProps {
 
 function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarContentProps) {
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
-  const { user, logout, permisos, isProductor } = useAuth()
+  const { user, logout, permisos, isProductor, isSysAdmin } = useAuth()
   const { mode, setMode } = useTheme()
 
   const roleLabel = getRoleLabel(user?.roles)
@@ -123,7 +129,8 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
           const items = group.filter(
             (item) =>
               (!item.permission || hasPermission(item.permission)) &&
-              !(isProductor && item.ocultarParaProductor),
+              !(isProductor && item.ocultarParaProductor) &&
+              !(item.soloSysAdmin && !isSysAdmin),
           )
           if (items.length === 0) return null
           const showSeparator = !isProductor && gi > 0

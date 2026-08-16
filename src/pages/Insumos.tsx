@@ -98,7 +98,7 @@ export default function Insumos() {
     swrInsumosKey,
     insumosFetcher as any,
     {
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
       revalidateOnMount: true,
       dedupingInterval: 0,
     }

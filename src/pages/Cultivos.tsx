@@ -84,7 +84,7 @@ export default function Cultivos() {
   const { data: cultivos = [], isLoading, mutate } = useSWR<Cultivo[]>(
     swrCultivosKey,
     cultivosFetcher as any,
-    { revalidateOnFocus: true }
+    { revalidateOnFocus: false }
   )
 
   const filteredCultivos = useMemo(() => {

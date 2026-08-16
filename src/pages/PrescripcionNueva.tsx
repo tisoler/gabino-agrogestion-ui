@@ -3,12 +3,13 @@ import useSWR, { useSWRConfig } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Calendar, Building2,
-  Pickaxe, Package, FolderPlus, X, ClipboardList,
+  Pickaxe, Package, FolderPlus, X, CheckCircle2,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { periodosCampania } from '../lib/campanias'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
+import SelectAutocomplete from '../components/SelectAutocomplete'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 const todayLocalISO = () => {
@@ -18,12 +19,17 @@ const todayLocalISO = () => {
 
 interface CampaniaOption {
   id: number
-  nombre: string
   campania?: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
   cultivo?: { id: number; nombre: string } | null
 }
-interface Lote { id: number; idEmpresa: number; descripcion: string | null }
+interface Lote {
+  id: number
+  idEmpresa: number
+  descripcion: string | null
+  idCampo?: number | null
+  campo?: { id: number; nombre: string } | null
+}
 interface Cultivo { id: number; nombre: string; variedades: { id: number; nombre: string }[] }
 interface Labor { id: number; nombre: string }
 interface Insumo { id: number; nombre: string; unidad?: string | null }
@@ -64,10 +70,11 @@ export default function PrescripcionNueva() {
     return empresas.filter((e) => ids.includes(e.id))
   }, [isAdmin, user, empresas])
 
-  // Paso 1: productor + campaña (período) + lote + cultivo identifican la producción
+  // Paso 1: productor + campaña (período) + campo + lote + cultivo identifican la producción
   const [fecha, setFecha] = useState(todayLocalISO())
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')
   const [periodo, setPeriodo] = useState<string>('')
+  const [idCampo, setIdCampo] = useState<number | ''>('')
   const [idLote, setIdLote] = useState<number | ''>('')
   const [idCultivo, setIdCultivo] = useState<number | ''>('')
 
@@ -104,12 +111,41 @@ export default function PrescripcionNueva() {
 
   const lotesDisponibles = useMemo(() => {
     const rows = periodo === '' ? [] : producciones.filter((p) => p.campania === periodo)
-    const seen = new Map<number, { id: number; descripcion: string | null }>()
+    const seen = new Map<number, Lote>()
     for (const p of rows) {
       if (p.lote) seen.set(p.lote.id, p.lote)
     }
     return Array.from(seen.values()).sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '', 'es'))
   }, [producciones, periodo])
+
+  // Campos del productor (enriquecidos con el catálogo de lotes que trae "campo").
+  const lotesConCampo = useMemo(() => {
+    const byId = new Map(lotes.map((l) => [l.id, l]))
+    return lotesDisponibles.map((ld): Lote =>
+      byId.get(ld.id) || { ...ld, idCampo: null, campo: null }
+    )
+  }, [lotesDisponibles, lotes])
+
+  const camposDisponibles = useMemo(() => {
+    const seen = new Map<number, string>()
+    let sinCampo = false
+    for (const l of lotesConCampo) {
+      if (l.campo) seen.set(l.campo.id, l.campo.nombre)
+      else sinCampo = true
+    }
+    const opciones = Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
+    if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
+    return opciones
+  }, [lotesConCampo])
+
+  // El selector de campo filtra los lotes disponibles.
+  const lotesFiltrados = useMemo(() => {
+    if (idCampo === '') return lotesConCampo
+    const target = idCampo === 0 ? null : Number(idCampo)
+    return lotesConCampo.filter((l) => (l.idCampo ?? null) === target)
+  }, [lotesConCampo, idCampo])
 
   const cultivosDisponibles = useMemo(() => {
     const rows =
@@ -152,7 +188,7 @@ export default function PrescripcionNueva() {
   // Modales
   const [showCampaniaModal, setShowCampaniaModal] = useState(false)
   const [campaniaForm, setCampaniaForm] = useState({
-    nombre: '', campania: periodosCampania()[0] || '',
+    campania: periodosCampania()[0] || '',
     idLote: '' as number | '', idCultivo: '' as number | '', idVariedad: '' as number | '',
   })
   const [showInsumoModal, setShowInsumoModal] = useState(false)
@@ -233,7 +269,6 @@ export default function PrescripcionNueva() {
     setCampaniaError(null)
     try {
       const payload: Record<string, unknown> = {
-        nombre: campaniaForm.nombre.trim(),
         campania: campaniaForm.campania,
         idLote: Number(campaniaForm.idLote),
         idCultivo: Number(campaniaForm.idCultivo),
@@ -248,7 +283,7 @@ export default function PrescripcionNueva() {
       setShowCampaniaModal(false)
       setCampaniaError(null)
       setCampaniaForm({
-        nombre: '', campania: periodosCampania()[0] || '',
+        campania: periodosCampania()[0] || '',
         idLote: '', idCultivo: '', idVariedad: '',
       })
     } catch (e) {
@@ -322,7 +357,7 @@ export default function PrescripcionNueva() {
   const labelCls = 'text-xs font-medium text-foreground'
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0">
+    <div className="max-w-4xl mx-auto space-y-6 pb-20 md:pb-0">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -351,91 +386,82 @@ export default function PrescripcionNueva() {
       <section className="bg-card border border-border rounded-lg p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Calendar className="size-4 text-primary" strokeWidth={1.75} />
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Datos de la aplicación</h2>
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Datos de la producción</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className={labelCls}>Fecha</label>
-            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls + ' cursor-pointer'} />
           </div>
-          <div className="space-y-1.5">
-            <label className={labelCls}>Productor</label>
-            <select
-              value={idEmpresa}
-              onChange={(e) => {
-                const v = e.target.value === '' ? '' : Number(e.target.value)
-                setIdEmpresa(v)
+          <SelectAutocomplete
+            label="Productor"
+            value={idEmpresa}
+            onChange={(v) => {
+              setIdEmpresa(Number(v))
+              setIdCampo('')
+              setIdLote('')
+              setIdCultivo('')
+            }}
+            options={empresasVisibles.map((e) => ({ value: e.id, label: e.nombre }))}
+            placeholder="Seleccionar productor..."
+            autoSelectSingle
+          />
+        </div>
+
+        {/* Producción: productor + campaña + campo + lote + cultivo */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectAutocomplete
+              label="Campaña"
+              value={periodo}
+              onChange={(v) => {
+                setPeriodo(String(v))
+                setIdCampo('')
                 setIdLote('')
                 setIdCultivo('')
               }}
-              className={inputCls}
-            >
-              <option value="">Seleccionar productor...</option>
-              {empresasVisibles.map((e) => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
+              options={periodosDisponibles.map((p) => ({ value: p, label: p }))}
+              placeholder={idEmpresa === '' ? 'Elegí primero el productor' : 'Seleccionar campaña...'}
+              disabled={idEmpresa === ''}
+              autoSelectSingle
+            />
+            <SelectAutocomplete
+              label="Campo"
+              value={idCampo}
+              onChange={(v) => {
+                setIdCampo(Number(v))
+                setIdLote('')
+                setIdCultivo('')
+              }}
+              options={camposDisponibles.map((c) => ({ value: c.value, label: c.label }))}
+              placeholder={periodo === '' ? 'Elegí campaña' : 'Seleccionar campo...'}
+              disabled={periodo === ''}
+              autoSelectSingle
+            />
           </div>
-        </div>
 
-        {/* Producción: productor + campaña + lote + cultivo */}
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className={labelCls}>Campaña</label>
-              <select
-                value={periodo}
-                onChange={(e) => {
-                  setPeriodo(e.target.value)
-                  setIdLote('')
-                  setIdCultivo('')
-                }}
-                disabled={idEmpresa === ''}
-                className={inputCls}
-              >
-                <option value="" disabled>
-                  {idEmpresa === '' ? 'Elegí primero el productor' : 'Seleccionar campaña...'}
-                </option>
-                {periodosDisponibles.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls}>Lote</label>
-              <select
-                value={idLote}
-                onChange={(e) => {
-                  setIdLote(e.target.value === '' ? '' : Number(e.target.value))
-                  setIdCultivo('')
-                }}
-                disabled={periodo === ''}
-                className={inputCls}
-              >
-                <option value="" disabled>
-                  {periodo === '' ? 'Elegí campaña' : 'Seleccionar lote...'}
-                </option>
-                {lotesDisponibles.map((l) => (
-                  <option key={l.id} value={l.id}>{l.descripcion || `Lote #${l.id}`}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls}>Cultivo</label>
-              <select
-                value={idCultivo}
-                onChange={(e) => setIdCultivo(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={idLote === ''}
-                className={inputCls}
-              >
-                <option value="" disabled>
-                  {idLote === '' ? 'Elegí lote' : 'Seleccionar cultivo...'}
-                </option>
-                {cultivosDisponibles.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectAutocomplete
+              label="Lote"
+              value={idLote}
+              onChange={(v) => {
+                setIdLote(Number(v))
+                setIdCultivo('')
+              }}
+              options={lotesFiltrados.map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))}
+              placeholder={periodo === '' ? 'Elegí campaña' : 'Seleccionar lote...'}
+              disabled={periodo === ''}
+              autoSelectSingle
+            />
+            <SelectAutocomplete
+              label="Cultivo"
+              value={idCultivo}
+              onChange={(v) => setIdCultivo(Number(v))}
+              options={cultivosDisponibles.map((c) => ({ value: c.id, label: c.nombre }))}
+              placeholder={idLote === '' ? 'Elegí lote' : 'Seleccionar cultivo...'}
+              disabled={idLote === ''}
+              autoSelectSingle
+            />
           </div>
 
           {idEmpresa === '' ? (
@@ -454,7 +480,7 @@ export default function PrescripcionNueva() {
               <p className="text-[12px] text-muted-foreground">Elegí una campaña.</p>
             )
           ) : idLote === '' ? (
-            lotesDisponibles.length === 0 ? (
+            lotesFiltrados.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">
                 No existe una producción para esa combinación. Creala para continuar.
               </p>
@@ -470,12 +496,9 @@ export default function PrescripcionNueva() {
               <p className="text-[12px] text-muted-foreground">Elegí un cultivo.</p>
             )
           ) : produccionSel ? (
-            <div className="flex items-center gap-2 text-sm">
-              <ClipboardList className="size-4 text-primary shrink-0" strokeWidth={1.75} />
-              <span className="text-muted-foreground">Producción:</span>
-              <span className="font-medium text-foreground">
-                {produccionSel.nombre || `Producción #${produccionSel.id}`}
-              </span>
+            <div className="flex items-center gap-2 text-sm text-success">
+              <CheckCircle2 className="size-4 shrink-0" strokeWidth={1.75} />
+              <span className="font-medium">Producción seleccionada. Ingresá la labor.</span>
             </div>
           ) : (
             <p className="text-[12px] text-muted-foreground">
@@ -494,34 +517,30 @@ export default function PrescripcionNueva() {
               }))
               setShowCampaniaModal(true)
             }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            disabled={idEmpresa === ''}
+            title={idEmpresa === '' ? 'Elegí primero el productor' : undefined}
+            className="inline-flex mt-3 cursor-pointer items-center gap-1.5 text-sm font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
           >
-            <FolderPlus className="size-3.5" strokeWidth={1.75} />
-            Crear producción
+            <FolderPlus className="size-4.5" strokeWidth={1.75} />
+            Agregar producción
           </button>
         </div>
       </section>
 
       {/* Labor + total ha */}
-      <section className="space-y-4">
+      <section className="bg-card border border-border rounded-lg p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Pickaxe className="size-4 text-primary" strokeWidth={1.75} />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Labor y superficie</h2>
         </div>
-        <div className="bg-card border border-border rounded-lg p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className={labelCls}>Labor</label>
-            <select
-              value={idLabor}
-              onChange={(e) => setLabor(e.target.value === '' ? '' : Number(e.target.value))}
-              className={inputCls}
-            >
-              <option value="">Seleccionar labor...</option>
-              {labores.map((l) => (
-                <option key={l.id} value={l.id}>{l.nombre}</option>
-              ))}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SelectAutocomplete
+            label="Labor"
+            value={idLabor}
+            onChange={(v) => setLabor(Number(v))}
+            options={labores.map((l) => ({ value: l.id, label: l.nombre }))}
+            placeholder="Seleccionar labor..."
+          />
           <div className="space-y-1.5">
             <label className={labelCls}>Total ha para aplicación</label>
             <input
@@ -547,7 +566,7 @@ export default function PrescripcionNueva() {
             type="button"
             onClick={addInsumo}
             disabled={!canAddInsumos}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
           >
             <Plus className="size-3.5" strokeWidth={2} />
             Agregar insumo
@@ -568,25 +587,22 @@ export default function PrescripcionNueva() {
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
                     Insumo
                   </label>
-                  <div className="flex gap-1.5">
-                    <select
+                  <div className="flex gap-1.5 items-center">
+                    <SelectAutocomplete
+                      className="flex-1 min-w-0"
                       value={row.idInsumo}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setInsumoRows((rows) =>
-                          rows.map((r) => (r.tempId === row.tempId ? { ...r, idInsumo: e.target.value === '' ? '' : Number(e.target.value) } : r))
+                          rows.map((r) => (r.tempId === row.tempId ? { ...r, idInsumo: Number(v) } : r))
                         )
                       }
-                      className={inputCls}
-                    >
-                      <option value="">Elegí…</option>
-                      {insumos.map((i) => (
-                        <option key={i.id} value={i.id}>{i.nombre}</option>
-                      ))}
-                    </select>
+                      options={insumos.map((i) => ({ value: i.id, label: i.nombre }))}
+                      placeholder="Elegí…"
+                    />
                     <button
                       type="button"
                       onClick={() => { setInsumoForRow(row.tempId); setShowInsumoModal(true) }}
-                      className="px-2.5 border border-border rounded-md text-muted-foreground hover:bg-accent hover:text-foreground shrink-0"
+                      className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground shrink-0 cursor-pointer"
                       title="Crear nuevo insumo"
                       aria-label="Crear nuevo insumo"
                     >
@@ -633,7 +649,7 @@ export default function PrescripcionNueva() {
                 <button
                   type="button"
                   onClick={() => removeInsumo(row.tempId)}
-                  className="p-2 rounded-md text-destructive hover:bg-destructive-soft self-end"
+                  className="p-2 rounded-md text-destructive hover:bg-destructive-soft self-end cursor-pointer"
                   aria-label="Eliminar insumo"
                 >
                   <Trash2 className="size-4" strokeWidth={1.75} />
@@ -652,7 +668,7 @@ export default function PrescripcionNueva() {
         <button
           type="button"
           onClick={() => navigate('/prescripciones')}
-          className="px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+          className="px-4 py-2 cursor-pointer border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
         >
           Cancelar
         </button>
@@ -660,7 +676,7 @@ export default function PrescripcionNueva() {
           type="button"
           onClick={handleSave}
           disabled={!canSave || saving}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="inline-flex cursor-pointer items-center justify-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           {saving && <Loader2 className="size-4 animate-spin" />}
           {saving ? 'Guardando…' : 'Guardar prescripción'}
@@ -682,16 +698,6 @@ export default function PrescripcionNueva() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className={labelCls}>Nombre</label>
-                <input
-                  type="text"
-                  value={campaniaForm.nombre}
-                  onChange={(e) => setCampaniaForm({ ...campaniaForm, nombre: e.target.value })}
-                  placeholder="Ej: Producción Soja 25/26"
-                  className={inputCls}
-                />
-              </div>
               <div className="space-y-1.5">
                 <label className={labelCls}>Campaña</label>
                 <select
@@ -761,7 +767,7 @@ export default function PrescripcionNueva() {
                 </button>
                 <button
                   type="button"
-                  disabled={!campaniaForm.nombre.trim() || campaniaForm.idLote === '' || campaniaForm.idCultivo === ''}
+                  disabled={campaniaForm.idLote === '' || campaniaForm.idCultivo === ''}
                   onClick={handleCreateCampania}
                   className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
@@ -779,7 +785,7 @@ export default function PrescripcionNueva() {
           empresaId={idEmpresa === '' ? null : Number(idEmpresa)}
           empresaNombre={empresasVisibles.find((e) => e.id === Number(idEmpresa))?.nombre}
           isAdmin={isAdmin}
-          onCreated={(insumo: any) => {
+          onCreated={(insumo) => {
             if (insumoForRow != null) {
               setInsumoRows((rows) => rows.map((r) => (r.tempId === insumoForRow ? { ...r, idInsumo: insumo.id } : r)))
             }

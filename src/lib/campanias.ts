@@ -5,6 +5,8 @@ export interface Lote {
   id: number
   idEmpresa: number
   descripcion: string | null
+  idCampo?: number | null
+  campo?: { id: number; nombre: string } | null
 }
 
 export interface Cultivo {
@@ -78,7 +80,6 @@ export interface CampaniaCostoDetalle {
 
 export interface Campania {
   id: number
-  nombre: string
   campania: string
   idLote: number
   idCultivo: number

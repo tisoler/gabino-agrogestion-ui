@@ -75,7 +75,7 @@ export default function NotificacionesBell() {
     <div className="relative">
       <button
         onClick={toggle}
-        className="relative p-2 rounded-md border border-border bg-card text-foreground hover:bg-accent transition-colors"
+        className="relative p-2 rounded-md border border-border bg-card text-foreground hover:bg-accent transition-colors cursor-pointer"
         aria-label={`Notificaciones${noLeidas > 0 ? ` (${noLeidas} nuevas)` : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}

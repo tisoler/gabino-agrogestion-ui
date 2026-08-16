@@ -3,7 +3,7 @@ import useSWR from 'swr'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X,
-  Sprout, MapPin, Calendar, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
+  Sprout, MapPin, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -25,6 +25,8 @@ interface Lote {
   id: number
   idEmpresa: number
   descripcion: string | null
+  idCampo?: number | null
+  campo?: { id: number; nombre: string } | null
 }
 interface Cultivo {
   id: number
@@ -35,7 +37,6 @@ interface Cultivo {
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
 type Cabecera = {
-  nombre: string
   campania: string
   idLote: number | null
   idCultivo: number | null
@@ -50,7 +51,6 @@ type Cabecera = {
 }
 
 const emptyCabecera = (): Cabecera => ({
-  nombre: '',
   campania: periodosCampania()[0] || '',
   idLote: null,
   idCultivo: null,
@@ -71,7 +71,6 @@ const numericFields: (keyof Cabecera)[] = [
 
 function buildPatchPayload(next: Cabecera, saved: Cabecera): Record<string, unknown> {
   const payload: Record<string, unknown> = {}
-  if (next.nombre !== saved.nombre) payload.nombre = next.nombre
   if (next.campania !== saved.campania) payload.campania = next.campania
   if (next.idLote !== saved.idLote) payload.idLote = next.idLote
   if (next.idCultivo !== saved.idCultivo) payload.idCultivo = next.idCultivo
@@ -263,6 +262,8 @@ export default function CampaniaDetalle() {
   const [empresaDestinoId, setEmpresaDestinoId] = useState<number | null>(
     isNew ? (isAdmin ? null : currentEmpresaId) : null
   )
+  // Campo: filtra el selector de lotes (no se persiste en la campaña).
+  const [idCampo, setIdCampo] = useState<number | ''>('')
 
   const [cabecera, setCabecera] = useState<Cabecera>(emptyCabecera)
   const [cabeceraSaved, setCabeceraSaved] = useState<Cabecera>(emptyCabecera)
@@ -375,7 +376,6 @@ export default function CampaniaDetalle() {
 
     setCampaniaId(campania.id)
     const next: Cabecera = {
-      nombre: campania.nombre ?? '',
       campania: campania.campania,
       idLote: campania.idLote,
       idCultivo: campania.idCultivo,
@@ -402,13 +402,38 @@ export default function CampaniaDetalle() {
     setPendingLaborDeletes(new Set())
     setPendingInsumoDeletes(new Set())
     setPendingCostoDeletes(new Set())
-    if (campania.lote) setEmpresaDestinoId(campania.lote.idEmpresa)
+    if (campania.lote) {
+      setEmpresaDestinoId(campania.lote.idEmpresa)
+      setIdCampo(campania.lote.campo ? campania.lote.campo.id : 0)
+    }
   }, [campania])
 
-  const lotesFiltrados = useMemo(() => {
+  // Lotes del productor; la lista de campos la filtra el productor y el campo
+  // seleccionado filtra la lista de lotes.
+  const lotesDeProductor = useMemo(() => {
     if (!empresaDestinoId) return []
     return lotes.filter((l) => l.idEmpresa === empresaDestinoId)
   }, [lotes, empresaDestinoId])
+
+  const camposDisponibles = useMemo(() => {
+    const seen = new Map<number, string>()
+    let sinCampo = false
+    for (const l of lotesDeProductor) {
+      if (l.campo) seen.set(l.campo.id, l.campo.nombre)
+      else sinCampo = true
+    }
+    const opciones = Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
+    if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
+    return opciones
+  }, [lotesDeProductor])
+
+  const lotesFiltrados = useMemo(() => {
+    if (idCampo === '') return lotesDeProductor
+    const target = idCampo === 0 ? null : Number(idCampo)
+    return lotesDeProductor.filter((l) => (l.idCampo ?? null) === target)
+  }, [lotesDeProductor, idCampo])
 
   const variedadesFiltradas = useMemo(() => {
     if (!cabecera.idCultivo) return []
@@ -467,7 +492,6 @@ export default function CampaniaDetalle() {
     return (
       cabecera.idLote !== null &&
       cabecera.idCultivo !== null &&
-      cabecera.nombre.trim() !== '' &&
       cabecera.campania !== ''
     )
   }, [cabecera])
@@ -478,7 +502,6 @@ export default function CampaniaDetalle() {
     setCreateError(null)
     try {
       const payload: Record<string, unknown> = {
-        nombre: cabecera.nombre.trim(),
         campania: cabecera.campania,
         idLote: cabecera.idLote,
         idCultivo: cabecera.idCultivo,
@@ -632,7 +655,6 @@ export default function CampaniaDetalle() {
       const b = parseFloat(cabeceraSaved[k] as string) || 0
       if (a !== b) return true
     }
-    if (cabecera.nombre !== cabeceraSaved.nombre) return true
     if (cabecera.campania !== cabeceraSaved.campania) return true
     if (cabecera.idLote !== cabeceraSaved.idLote) return true
     if (cabecera.idCultivo !== cabeceraSaved.idCultivo) return true
@@ -889,7 +911,7 @@ export default function CampaniaDetalle() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            {isNew ? 'Nueva producción' : cabecera.nombre || `Producción #${campaniaId}`}
+            {isNew ? 'Nueva producción' : `Producción #${campaniaId}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {isNew
@@ -946,6 +968,7 @@ export default function CampaniaDetalle() {
                 onChange={(e) => {
                   const v = e.target.value === '' ? null : Number(e.target.value)
                   setEmpresaDestinoId(v)
+                  setIdCampo('')
                   setCab('idLote', null)
                 }}
                 className={inputCls}
@@ -964,6 +987,36 @@ export default function CampaniaDetalle() {
             </Field>
           )}
 
+          <Field label="Campaña">
+            <select
+              value={cabecera.campania}
+              onChange={(e) => setCab('campania', e.target.value)}
+              className={inputCls}
+            >
+              <option value="" disabled>Seleccionar período...</option>
+              {periodosCampania().map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Campo" icon={MapPin}>
+            <select
+              value={idCampo}
+              onChange={(e) => {
+                setIdCampo(e.target.value === '' ? '' : Number(e.target.value))
+                setCab('idLote', null)
+              }}
+              disabled={!empresaDestinoId || loadingLotes}
+              className={inputCls + ' disabled:opacity-60'}
+            >
+              <option value="">Todos los campos</option>
+              {camposDisponibles.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </Field>
+
           <Field label="Lote" icon={MapPin}>
             <select
               value={cabecera.idLote ?? ''}
@@ -980,28 +1033,6 @@ export default function CampaniaDetalle() {
             </select>
           </Field>
 
-          <Field label="Identificador producción" icon={Calendar} colSpan={2}>
-            <input
-              type="text"
-              value={cabecera.nombre}
-              onChange={(e) => setCab('nombre', e.target.value)}
-              placeholder="Ej: Lote ESTE 2024-25"
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="Campaña">
-            <select
-              value={cabecera.campania}
-              onChange={(e) => setCab('campania', e.target.value)}
-              className={inputCls}
-            >
-              <option value="" disabled>Seleccionar período...</option>
-              {periodosCampania().map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </Field>
           <Field label="Cultivo" icon={Sprout}>
             <select
               value={cabecera.idCultivo ?? ''}
