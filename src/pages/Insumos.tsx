@@ -5,12 +5,13 @@ import {
   Lock, AlertCircle, Globe, X, Shield, ToggleLeft, ToggleRight, Loader2, Tag, FolderPlus
 } from 'lucide-react'
 import api, { fetcher } from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { UNIDADES_PRECIO, colorCategoria } from '../constantes'
 import { useCotizacionDolar, fmtPrecioInsumo, type Moneda } from '../lib/moneda'
 import { setMonedaGlobal } from '../lib/monedaStore'
 import MonedaToggle from '../components/MonedaToggle'
 import MultiselectFilter from '../components/MultiselectFilter'
+import SelectAutocomplete from '../components/SelectAutocomplete'
 
 interface Categoria {
   id: number
@@ -82,7 +83,7 @@ export default function Insumos() {
   const canManageCategorias = isSysAdmin || isAsesorAdmin
 
   const insumosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
@@ -94,13 +95,13 @@ export default function Insumos() {
     return res.data
   }
 
-  const swrInsumosKey = canRead
+  const swrInsumosKey: [string, number | boolean, string] | null = canRead
     ? ['insumos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
     : null
 
   const { data: insumos = [], isLoading, mutate } = useSWR<Insumo[]>(
     swrInsumosKey,
-    insumosFetcher as any,
+    insumosFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnMount: true,
@@ -271,7 +272,7 @@ export default function Insumos() {
           {canWrite && (
             <button
               onClick={() => handleOpenModal()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
             >
               <Plus className="size-4" strokeWidth={2} />
               <span>Nuevo Insumo</span>
@@ -303,19 +304,14 @@ export default function Insumos() {
             ))}
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
-            <select
-              aria-label="Productor"
-              value={scopeEmpresaId ?? ''}
-              onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-              <option value="">Seleccionar productor</option>
-              {scopeEmpresas.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre}
-                </option>
-              ))}
-            </select>
+            <div className="w-56">
+              <SelectAutocomplete
+                placeholder="Seleccionar productor"
+                value={scopeEmpresaId ?? ''}
+                onChange={(v) => setScopeEmpresaId(v === '' ? null : Number(v))}
+                options={scopeEmpresas.map((e) => ({ value: e.id, label: e.nombre }))}
+              />
+            </div>
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus insumos.</span>
@@ -404,7 +400,7 @@ export default function Insumos() {
                         <>
                           <button
                             onClick={() => handleOpenModal(insumo)}
-                            className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                            className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                             disabled={updatingIds.has(insumo.id)}
                             aria-label="Editar"
                           >
@@ -412,7 +408,7 @@ export default function Insumos() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(insumo)}
-                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${insumo.activo
+                            className={`p-1.5 rounded-md cursor-pointer transition-colors disabled:opacity-50 ${insumo.activo
                               ? 'text-success hover:bg-success-soft'
                               : 'text-muted-foreground hover:bg-muted'
                               }`}
@@ -549,7 +545,7 @@ export default function Insumos() {
                               <>
                                 <button
                                   onClick={() => handleOpenModal(insumo)}
-                                  className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                                  className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                                   title="Editar"
                                   aria-label="Editar"
                                 >
@@ -557,7 +553,7 @@ export default function Insumos() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(insumo)}
-                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${insumo.activo
+                                  className={`p-1.5 rounded-md cursor-pointer transition-colors disabled:opacity-50 ${insumo.activo
                                     ? 'text-success hover:bg-success-soft'
                                     : 'text-muted-foreground hover:bg-muted'
                                     }`}
@@ -615,7 +611,7 @@ export default function Insumos() {
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -642,32 +638,26 @@ export default function Insumos() {
                 <label htmlFor="insumo-categoria" className="text-xs font-medium text-foreground">
                   Categoría
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    id="insumo-categoria"
+                <div className="flex gap-2 items-center">
+                  <SelectAutocomplete
+                    className="flex-1 min-w-0"
                     value={formData.idCategoria ?? ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idCategoria: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    required
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  >
-                    <option value="">Seleccionar categoría...</option>
-                    {formData.idCategoria != null &&
-                      !categorias.some((c) => c.id === formData.idCategoria) && (
-                        <option value={formData.idCategoria}>Categoría nueva</option>
-                      )}
-                    {categorias
-                      .filter((c) => c.activo || c.id === formData.idCategoria)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                      ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idCategoria: v === '' ? null : parseInt(String(v), 10) })}
+                    options={[
+                      { value: '', label: 'Seleccionar categoría...' },
+                      ...(formData.idCategoria != null && !categorias.some((c) => c.id === formData.idCategoria)
+                        ? [{ value: String(formData.idCategoria), label: 'Categoría nueva' }]
+                        : []),
+                      ...categorias
+                        .filter((c) => c.activo || c.id === formData.idCategoria)
+                        .map((c) => ({ value: String(c.id), label: c.nombre })),
+                    ]}
+                  />
                   {canManageCategorias && (
                     <button
                       type="button"
                       onClick={() => { setCategoriaError(null); setIsCategoriaModalOpen(true) }}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0 cursor-pointer"
                       title="Crear nueva categoría"
                       aria-label="Crear nueva categoría"
                     >
@@ -715,17 +705,14 @@ export default function Insumos() {
                 <label htmlFor="insumo-unidad" className="text-xs font-medium text-foreground">
                   Unidad
                 </label>
-                <select
-                  id="insumo-unidad"
+                <SelectAutocomplete
                   value={formData.unidad}
-                  onChange={(e) => setFormData({ ...formData, unidad: e.target.value })}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
-                >
-                  <option value="">Sin unidad</option>
-                  {UNIDADES_PRECIO.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setFormData({ ...formData, unidad: String(v) })}
+                  options={[
+                    { value: '', label: 'Sin unidad' },
+                    ...UNIDADES_PRECIO.map((u) => ({ value: u, label: u })),
+                  ]}
+                />
               </div>
 
               {isAdmin && (
@@ -733,23 +720,17 @@ export default function Insumos() {
                   <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
                     Productor
                   </label>
-                  <select
-                    id="insumo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  >
-                    <option value="">Global (todos los productores)</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas?.map((e) => (
-                      <option key={e.id} value={String(e.id)}>{e.nombre}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : parseInt(String(v), 10) })}
+                    options={[
+                      { value: '', label: 'Global (todos los productores)' },
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa)
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...(empresas?.map((e) => ({ value: String(e.id), label: e.nombre })) ?? []),
+                    ]}
+                  />
                   <p className="text-[11px] text-muted-foreground">
                     Solo como sys-admin puedes crear insumos globales o asignarlos a otros productores.
                   </p>
@@ -760,26 +741,19 @@ export default function Insumos() {
                   <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
                     Productor
                   </label>
-                  <select
-                    id="insumo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                    required
-                  >
-                    <option value="">Seleccionar productor</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas
-                      .filter((e) => userEmpresas.includes(e.id))
-                      .map((e) => (
-                        <option key={e.id} value={String(e.id)}>{e.nombre}</option>
-                      ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : parseInt(String(v), 10) })}
+                    options={[
+                      { value: '', label: 'Seleccionar productor' },
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...(empresas
+                        .filter((e) => userEmpresas.includes(e.id))
+                        .map((e) => ({ value: String(e.id), label: e.nombre }))),
+                    ]}
+                  />
                 </div>
               )}
 
@@ -787,7 +761,7 @@ export default function Insumos() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -823,7 +797,7 @@ export default function Insumos() {
               <h2 className="text-base font-semibold text-foreground">Nueva Categoría de Insumo</h2>
               <button
                 onClick={() => setIsCategoriaModalOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -862,14 +836,14 @@ export default function Insumos() {
                 <button
                   type="button"
                   onClick={() => setIsCategoriaModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={!categoriaFormData.nombre.trim() || categoriaBusy}
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {categoriaBusy && <Loader2 className="size-4 animate-spin" />}
                   {categoriaBusy ? 'Creando...' : 'Crear categoría'}

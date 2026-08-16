@@ -22,8 +22,8 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'
-import { useTheme, type ThemeMode } from '../contexts/ThemeContext'
+import { useAuth } from '../contexts/auth-context'
+import { useTheme, type ThemeMode } from '../contexts/theme-context'
 import { getRoleLabel } from '../constantes'
 
 interface SidebarProps {

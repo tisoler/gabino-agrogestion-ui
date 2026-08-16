@@ -6,7 +6,8 @@ import {
   Layers, ChevronUp
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
+import SelectAutocomplete from '../components/SelectAutocomplete'
 
 interface Variedad {
   id: number
@@ -65,7 +66,7 @@ export default function Cultivos() {
   const canRead = permisos.includes('lectura:cultivo') && !isProductor
 
   const cultivosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
@@ -77,13 +78,13 @@ export default function Cultivos() {
     return res.data
   }
 
-  const swrCultivosKey = canRead
+  const swrCultivosKey: [string, number | boolean, string] | null = canRead
     ? ['cultivos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
     : null
 
   const { data: cultivos = [], isLoading, mutate } = useSWR<Cultivo[]>(
     swrCultivosKey,
-    cultivosFetcher as any,
+    cultivosFetcher,
     { revalidateOnFocus: false }
   )
 
@@ -142,9 +143,10 @@ export default function Cultivos() {
       }
       setIsModalOpen(false)
       mutate()
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error al guardar cultivo', err)
-      setFormError(err?.response?.data?.message || err?.message || 'No se pudo guardar el cultivo')
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      setFormError(e?.response?.data?.message || e?.message || 'No se pudo guardar el cultivo')
     } finally {
       setSaving(false)
     }
@@ -237,7 +239,7 @@ export default function Cultivos() {
         {canWrite && (
           <button
             onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
           >
             <Plus className="size-4" strokeWidth={2} />
             <span>Nuevo Cultivo</span>
@@ -268,19 +270,12 @@ export default function Cultivos() {
             ))}
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
-            <select
-              aria-label="Productor"
+            <SelectAutocomplete
               value={scopeEmpresaId ?? ''}
-              onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-              <option value="">Seleccionar productor</option>
-              {scopeEmpresas.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setScopeEmpresaId(v === '' ? null : Number(v))}
+              options={scopeEmpresas.map((e) => ({ value: e.id, label: e.nombre }))}
+              placeholder="Seleccionar productor"
+            />
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus cultivos.</span>
@@ -343,7 +338,7 @@ export default function Cultivos() {
                         {cultivo.variedades.length > 0 && (
                           <button
                             onClick={() => toggleExpand(cultivo.id)}
-                            className="p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                            className="p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                             aria-label={expandedCrops.has(cultivo.id) ? 'Contraer' : 'Expandir'}
                           >
                             {expandedCrops.has(cultivo.id) ? (
@@ -403,7 +398,7 @@ export default function Cultivos() {
                             <>
                               <button
                                 onClick={() => handleOpenVarietyModal(cultivo)}
-                                className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                                className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                                 title="Agregar variedad"
                                 aria-label="Agregar variedad"
                               >
@@ -411,7 +406,7 @@ export default function Cultivos() {
                               </button>
                               <button
                                 onClick={() => handleOpenModal(cultivo)}
-                                className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                                className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                                 title="Editar"
                                 aria-label="Editar"
                               >
@@ -419,7 +414,7 @@ export default function Cultivos() {
                               </button>
                               <button
                                 onClick={() => handleToggleActivo(cultivo, 'cultivo')}
-                                className={`p-1.5 rounded-md transition-colors ${cultivo.activo
+                                className={`p-1.5 rounded-md cursor-pointer transition-colors ${cultivo.activo
                                   ? 'text-success hover:bg-success-soft'
                                   : 'text-muted-foreground hover:bg-muted'
                                   }`}
@@ -470,7 +465,7 @@ export default function Cultivos() {
                                     <div className="flex items-center gap-0.5 shrink-0">
                                       <button
                                         onClick={() => handleOpenVarietyModal(cultivo, v)}
-                                        className="p-1 rounded text-primary hover:bg-primary-soft transition-colors"
+                                        className="p-1 rounded text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                                         title="Editar"
                                         aria-label="Editar"
                                       >
@@ -478,7 +473,7 @@ export default function Cultivos() {
                                       </button>
                                       <button
                                         onClick={() => handleToggleActivo(v, 'variedad')}
-                                        className={`p-1 rounded transition-colors ${v.activo
+                                        className={`p-1 rounded cursor-pointer transition-colors ${v.activo
                                           ? 'text-success hover:bg-success-soft'
                                           : 'text-muted-foreground hover:bg-muted'
                                           }`}
@@ -528,7 +523,7 @@ export default function Cultivos() {
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -558,60 +553,46 @@ export default function Cultivos() {
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="cultivo-tipo-cosecha" className="text-xs font-medium text-foreground">Tipo de cosecha</label>
-                <select
-                  id="cultivo-tipo-cosecha"
+                <SelectAutocomplete
                   value={formData.tipoCosecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tipoCosecha: e.target.value as '' | 'fina' | 'gruesa' })
-                  }
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                >
-                  <option value="">Sin especificar</option>
-                  <option value="fina">Fina</option>
-                  <option value="gruesa">Gruesa</option>
-                </select>
+                  onChange={(v) => setFormData({ ...formData, tipoCosecha: String(v) as '' | 'fina' | 'gruesa' })}
+                  options={[
+                    { value: '', label: 'Sin especificar' },
+                    { value: 'fina', label: 'Fina' },
+                    { value: 'gruesa', label: 'Gruesa' }
+                  ]}
+                />
               </div>
               {isAdmin && (
                 <div className="space-y-1.5">
                   <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
-                  <select
-                    id="cultivo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  >
-                    <option value="">Global (todos los productores)</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas?.map((e) => <option key={e.id} value={String(e.id)}>{e.nombre}</option>)}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    options={[
+                      { value: '', label: 'Global (todos los productores)' },
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa)
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...empresas.map((e) => ({ value: String(e.id), label: e.nombre }))
+                    ]}
+                  />
                 </div>
               )}
               {!isAdmin && userEmpresas.length > 1 && (
                 <div className="space-y-1.5">
                   <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
-                  <select
-                    id="cultivo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                    required
-                  >
-                    <option value="">Seleccionar productor</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas
-                      .filter((e) => userEmpresas.includes(e.id))
-                      .map((e) => <option key={e.id} value={String(e.id)}>{e.nombre}</option>)}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    options={[
+                      { value: '', label: 'Seleccionar productor' },
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...empresas.filter((e) => userEmpresas.includes(e.id)).map((e) => ({ value: String(e.id), label: e.nombre }))
+                    ]}
+                  />
                 </div>
               )}
               {formError && (
@@ -624,7 +605,7 @@ export default function Cultivos() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -667,7 +648,7 @@ export default function Cultivos() {
               </div>
               <button
                 onClick={() => setIsVarietyModalOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -692,13 +673,13 @@ export default function Cultivos() {
                 <button
                   type="button"
                   onClick={() => setIsVarietyModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
                 >
                   {editingVariedad ? 'Guardar' : 'Agregar'}
                 </button>

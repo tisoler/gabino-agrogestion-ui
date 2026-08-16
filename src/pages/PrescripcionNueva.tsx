@@ -6,7 +6,7 @@ import {
   Pickaxe, Package, FolderPlus, X, CheckCircle2,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { periodosCampania } from '../lib/campanias'
 import { colorCategoria } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'

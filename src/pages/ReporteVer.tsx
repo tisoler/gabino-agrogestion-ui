@@ -4,7 +4,7 @@ import {
   ArrowLeft, Printer, Pencil, AlertCircle, Loader2, Building2, Calendar, FileBarChart, ClipboardList,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import {
   TIPOS_REPORTE_LABEL, fmtPesos,
   type ReporteCalculado, type ResumenFila, type ResumenTotales,
@@ -87,7 +87,7 @@ export default function ReporteVer() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
           >
             <Printer className="size-4" strokeWidth={1.75} />
             Imprimir / PDF

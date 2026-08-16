@@ -5,9 +5,10 @@ import {
   Lock, AlertCircle, Shield, ToggleLeft, ToggleRight, Loader2, User, X
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import MultiselectFilter from '../components/MultiselectFilter'
 import MapaLote from '../components/MapaLote'
+import SelectAutocomplete from '../components/SelectAutocomplete'
 
 interface UsuarioBasico {
   uid: string
@@ -34,7 +35,7 @@ interface Lote {
   nombreUsuario: string | null
   emailUsuario: string | null
   idEmpresa: number
-  geometria?: any
+  geometria?: GeoJSON.GeoJsonObject | null
   centroide?: { lat: number; lng: number } | null
   area?: number | null
   activo: boolean
@@ -46,7 +47,7 @@ interface LoteFormData {
   descripcion: string
   idCampo: number | null
   idUsuario: string
-  geometria: any
+  geometria: GeoJSON.GeoJsonObject | null
   centroide: { lat: number; lng: number } | null
   area: string
   idEmpresa: number | null
@@ -117,7 +118,7 @@ export default function Lotes() {
   // ya no hay lotes globales y la API filtra por scope del usuario cuando no
   // se manda empresa).
   const lotesFetcher = async ([url, empresaId]: [string, number | null]) => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (empresaId) params.currentEmpresaId = empresaId
     const res = await api.get(url, { params })
     return res.data
@@ -170,10 +171,17 @@ export default function Lotes() {
     [lotes]
   )
 
+  // Conserva solo los campos que sigan existiendo entre las opciones (el
+  // productor filtrado puede cambiar los campos disponibles).
+  const camposEfectivos = useMemo(
+    () => filterCampos.filter((c) => campoNombres.includes(c)),
+    [filterCampos, campoNombres]
+  )
+
   const filteredLotes = useMemo(() => {
     return lotes
       ?.filter((l) => {
-        if (filterCampos.length > 0 && !filterCampos.includes(l.campo?.nombre ?? '')) return false
+        if (camposEfectivos.length > 0 && !camposEfectivos.includes(l.campo?.nombre ?? '')) return false
         const term = searchTerm.toLowerCase()
         if (!term) return true
         const dueno = findUsuario(l.idUsuario, l.idEmpresa)
@@ -192,7 +200,7 @@ export default function Lotes() {
         if (a.idEmpresa !== b.idEmpresa) return a.idEmpresa - b.idEmpresa
         return (a.descripcion || '').localeCompare(b.descripcion || '')
       })
-  }, [lotes, searchTerm, findUsuario, filterCampos])
+  }, [lotes, searchTerm, findUsuario, camposEfectivos])
 
   const loteSeleccionado = useMemo(() => {
     if (filteredLotes.length === 0) return undefined
@@ -239,10 +247,11 @@ export default function Lotes() {
       setCampoNombre('')
       setIsCampoModalOpen(false)
       await mutateCampos()
-    } catch (err: any) {
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
       setCampoError(
-        err?.response?.data?.message ||
-        err?.message ||
+        e?.response?.data?.message ||
+        e?.message ||
         'No se pudo crear el campo',
       )
     } finally {
@@ -255,7 +264,7 @@ export default function Lotes() {
     if (saving) return
     setSaving(true)
     const duenoSel = usuarios.find((u) => u.uid === formData.idUsuario)
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       descripcion: formData.descripcion || null,
       idCampo: formData.idCampo,
       idUsuario: formData.idUsuario,
@@ -363,44 +372,39 @@ export default function Lotes() {
             />
           </div>
           {(listEmpresas.length > 0 && (isAdmin || userEmpresas.length > 1)) && (
-            <select
-              aria-label="Filtrar por productor"
-              value={filterEmpresaId ?? 'all'}
-              onChange={(e) => setFilterEmpresaId(e.target.value === 'all' ? null : Number(e.target.value))}
-              className="sm:w-64 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
-            >
-              <option value="all">
-                {isAdmin
+            <SelectAutocomplete
+              value={filterEmpresaId ?? ''}
+              onChange={(v) => setFilterEmpresaId(v === '' ? null : Number(v))}
+              options={listEmpresas.map((e) => ({ value: e.id, label: e.nombre }))}
+              clearable
+              placeholder={
+                isAdmin
                   ? 'Todos los productores'
                   : userEmpresas.length > 1
                     ? 'Todos mis productores'
-                    : 'Mi productor'}
-              </option>
-              {listEmpresas.map((e) => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
-          )}
-          {campoNombres.length > 0 && (
-            <MultiselectFilter
-              value={filterCampos}
-              opciones={campoNombres.map((n) => ({ value: n, label: n }))}
-              onChange={setFilterCampos}
-              placeholder="Todos los campos"
-              etiqueta="campo"
-              vacio="Sin campos cargados."
-              widthCls="w-full sm:w-64"
+                    : 'Mi productor'
+              }
+              className="sm:w-64"
             />
           )}
+          <MultiselectFilter
+            value={camposEfectivos}
+            opciones={campoNombres.map((n) => ({ value: n, label: n }))}
+            onChange={setFilterCampos}
+            placeholder="Todos los campos"
+            etiqueta="campo"
+            vacio="Sin campos cargados."
+            widthCls="w-full sm:w-64"
+          />
         </div>
         {filterEmpresaLabel && (
           <p className="text-[11px] text-muted-foreground mt-2 px-1">
             Filtrando por <span className="font-medium text-foreground">{filterEmpresaLabel}</span>
           </p>
         )}
-        {filterCampos.length > 0 && (
+        {camposEfectivos.length > 0 && (
           <p className="text-[11px] text-muted-foreground mt-1 px-1">
-            Campos: <span className="font-medium text-foreground">{filterCampos.join(', ')}</span>
+            Campos: <span className="font-medium text-foreground">{camposEfectivos.join(', ')}</span>
           </p>
         )}
       </div>
@@ -638,7 +642,7 @@ export default function Lotes() {
                 <div className="p-12 text-center">
                   <MapPin className="size-10 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1.5} />
                   <p className="text-sm text-muted-foreground">
-                    {searchTerm || filterEmpresaId || filterCampos.length > 0
+                    {searchTerm || filterEmpresaId || camposEfectivos.length > 0
                       ? 'No se encontraron lotes con esos criterios.'
                       : 'Aún no hay lotes cargados.'}
                   </p>
@@ -702,30 +706,30 @@ export default function Lotes() {
                     <label htmlFor="lote-empresa" className="text-xs font-medium text-foreground">
                       Productor
                     </label>
-                    <select
-                      id="lote-empresa"
+                    <SelectAutocomplete
                       value={formData.idEmpresa ?? ''}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setFormData({
                           ...formData,
-                          idEmpresa: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                          idEmpresa: v === '' ? null : Number(v),
                           idUsuario: '',
                         })
                       }
-                      className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
                       disabled={!!editingLote}
-                    >
-                      {editingLote && formData.idEmpresa && (
-                        <option value={formData.idEmpresa}>
-                          {empresas.find((e) => e.id === formData.idEmpresa)?.nombre || 'Productor'} (no editable)
-                        </option>
-                      )}
-                      {!editingLote && empresas.length === 0 && <option value="">Sin productores</option>}
-                      {!editingLote &&
-                        empresas.map((e) => (
-                          <option key={e.id} value={e.id}>{e.nombre}</option>
-                        ))}
-                    </select>
+                      placeholder="Seleccionar productor"
+                      options={
+                        editingLote && formData.idEmpresa
+                          ? [
+                              {
+                                value: formData.idEmpresa,
+                                label:
+                                  (empresas.find((e) => e.id === formData.idEmpresa)?.nombre || 'Productor') +
+                                  ' (no editable)',
+                              },
+                            ]
+                          : empresas.map((e) => ({ value: e.id, label: e.nombre }))
+                      }
+                    />
                   </div>
                 )}
 
@@ -734,24 +738,18 @@ export default function Lotes() {
                     <label htmlFor="lote-empresa-nuevo" className="text-xs font-medium text-foreground">
                       Productor
                     </label>
-                    <select
-                      id="lote-empresa-nue"
+                    <SelectAutocomplete
                       value={formData.idEmpresa ?? ''}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setFormData({
                           ...formData,
-                          idEmpresa: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                          idEmpresa: v === '' ? null : Number(v),
                           idUsuario: '',
                         })
                       }
-                      className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
-                      required
-                    >
-                      <option value="">Seleccionar productor</option>
-                      {listEmpresas.map((e) => (
-                        <option key={e.id} value={e.id}>{e.nombre}</option>
-                      ))}
-                    </select>
+                      placeholder="Seleccionar productor"
+                      options={listEmpresas.map((e) => ({ value: e.id, label: e.nombre }))}
+                    />
                   </div>
                 )}
 
@@ -759,29 +757,25 @@ export default function Lotes() {
                   <label htmlFor="lote-dueno" className="text-xs font-medium text-foreground">
                     Dueño del lote
                   </label>
-                  <select
-                    id="lote-dueno"
+                  <SelectAutocomplete
                     value={formData.idUsuario}
-                    onChange={(e) => setFormData({ ...formData, idUsuario: e.target.value })}
-                    required
+                    onChange={(v) => setFormData({ ...formData, idUsuario: String(v) })}
                     disabled={loadingUsuarios || !!usuariosError}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer disabled:opacity-60"
-                  >
-                    <option value="" disabled>
-                      {loadingUsuarios
+                    placeholder={
+                      loadingUsuarios
                         ? 'Cargando usuarios…'
                         : usuariosError
                           ? 'No se pudieron cargar los usuarios'
-                          : 'Seleccionar usuario'}
-                    </option>
-                    {usuarios.map((u) => (
-                      <option key={u.uid} value={u.uid}>
-                        {u.nombreUsuario || u.email || u.uid}
-                        {u.roles.includes('asesor') ? ' (asesor)' : ''}
-                        {u.roles.includes('productor') ? ' (productor)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                          : 'Seleccionar usuario'
+                    }
+                    options={usuarios.map((u) => ({
+                      value: u.uid,
+                      label:
+                        (u.nombreUsuario || u.email || u.uid) +
+                        (u.roles.includes('asesor') ? ' (asesor)' : '') +
+                        (u.roles.includes('productor') ? ' (productor)' : ''),
+                    }))}
+                  />
 
                   {usuariosError ? (
                     <p className="text-[11px] text-destructive">
@@ -800,27 +794,22 @@ export default function Lotes() {
                   <label htmlFor="lote-campo" className="text-xs font-medium text-foreground">
                     Campo <span className="text-destructive">*</span>
                   </label>
-                  <div className="flex gap-2">
-                    <select
-                      id="lote-campo"
+                  <div className="flex gap-2 items-center">
+                    <SelectAutocomplete
                       value={formData.idCampo ?? ''}
-                      onChange={(e) =>
-                        setFormData({ ...formData, idCampo: e.target.value === '' ? null : parseInt(e.target.value) })
+                      onChange={(v) =>
+                        setFormData({ ...formData, idCampo: v === '' ? null : Number(v) })
                       }
-                      required
-                      className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
-                    >
-                      <option value="" disabled>
-                        {campos.filter((c) => c.idEmpresa === modalEmpresaId).length === 0
+                      placeholder={
+                        campos.filter((c) => c.idEmpresa === modalEmpresaId).length === 0
                           ? 'Sin campos para este productor'
-                          : 'Seleccionar campo...'}
-                      </option>
-                      {campos
+                          : 'Seleccionar campo...'
+                      }
+                      options={campos
                         .filter((c) => c.idEmpresa === modalEmpresaId && (c.activo || c.id === formData.idCampo))
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>{c.nombre}</option>
-                        ))}
-                    </select>
+                        .map((c) => ({ value: c.id, label: c.nombre }))}
+                      className="flex-1 min-w-0"
+                    />
                     <button
                       type="button"
                       onClick={() => { setCampoError(null); setCampoNombre(''); setIsCampoModalOpen(true) }}
@@ -905,7 +894,13 @@ export default function Lotes() {
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center gap-2"
-                  disabled={!formData.idUsuario || !formData.idCampo || saving}
+                  disabled={
+                    !formData.idUsuario ||
+                    !formData.idCampo ||
+                    !formData.descripcion.trim() ||
+                    ((isAdmin || userEmpresas.length > 1) && !formData.idEmpresa) ||
+                    saving
+                  }
                 >
                   {saving ? (
                     <>

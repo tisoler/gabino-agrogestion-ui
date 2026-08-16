@@ -69,3 +69,46 @@ export function colorCategoria(
   if (idx < 0) return 'bg-accent text-foreground border-border'
   return CATEGORIA_COLORS[idx % CATEGORIA_COLORS.length]
 }
+
+/**
+ * Tintes de fondo para agrupar las filas (labor + insumos) que provienen de
+ * una misma prescripción. Asignados por posición de la prescripción entre las
+ * prescripciones presentes en la producción: estables mientras esas tablas
+ * no cambien.
+ */
+export const PRESCRIPCION_ROW_COLORS: string[] = [
+  'bg-red-100 hover:bg-red-200',
+  'bg-orange-100 hover:bg-orange-200',
+  'bg-amber-100 hover:bg-amber-200',
+  'bg-yellow-100 hover:bg-yellow-200',
+  'bg-lime-100 hover:bg-lime-200',
+  'bg-green-100 hover:bg-green-200',
+  'bg-emerald-100 hover:bg-emerald-200',
+  'bg-teal-100 hover:bg-teal-200',
+  'bg-cyan-100 hover:bg-cyan-200',
+  'bg-sky-100 hover:bg-sky-200',
+  'bg-blue-100 hover:bg-blue-200',
+  'bg-indigo-100 hover:bg-indigo-200',
+  'bg-violet-100 hover:bg-violet-200',
+  'bg-purple-100 hover:bg-purple-200',
+  'bg-fuchsia-100 hover:bg-fuchsia-200',
+  'bg-pink-100 hover:bg-pink-200',
+  'bg-rose-100 hover:bg-rose-200',
+]
+
+/**
+ * Color de fila (background) de una prescripción según su posición entre las
+ * prescripciones de la producción. Devuelve '' si no tiene prescripción.
+ */
+export function colorPrescripcion(
+  idPrescripcion: number | null | undefined,
+  prescripciones: Array<number | null | undefined>,
+): string {
+  if (idPrescripcion == null) return ''
+  const ids = Array.from(
+    new Set(prescripciones.filter((p): p is number => p != null)),
+  ).sort((a, b) => a - b)
+  const idx = ids.indexOf(idPrescripcion)
+  if (idx < 0) return ''
+  return PRESCRIPCION_ROW_COLORS[idx % PRESCRIPCION_ROW_COLORS.length]
+}

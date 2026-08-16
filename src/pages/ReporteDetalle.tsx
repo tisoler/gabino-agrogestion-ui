@@ -5,7 +5,8 @@ import {
   Plus, Trash2, Loader2, ArrowLeft, AlertCircle, ClipboardList, MapPin, Sprout,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import SelectAutocomplete from '../components/SelectAutocomplete'
+import { useAuth } from '../contexts/auth-context'
 import { periodosCampania } from '../lib/campanias'
 import {
   getProducciones, crearReporte, actualizarReporte,
@@ -214,7 +215,7 @@ export default function ReporteDetalle() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/reportes')}
-            className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="p-2 cursor-pointer rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Volver"
           >
             <ArrowLeft className="size-4" strokeWidth={1.75} />
@@ -239,41 +240,31 @@ export default function ReporteDetalle() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Productor</label>
-                <select
+                <SelectAutocomplete
                   value={empresaId}
-                  onChange={(e) => { setEmpresaId(e.target.value === '' ? '' : Number(e.target.value)); setFilas([]) }}
-                  className={inputCls}
-                >
-                  <option value="">Seleccionar productor...</option>
-                  {empresas.map((e) => (
-                    <option key={e.id} value={e.id}>{e.nombre}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setEmpresaId(v === '' ? '' : Number(v)); setFilas([]) }}
+                  placeholder="Seleccionar productor..."
+                  options={[{ value: '', label: 'Seleccionar productor...' }, ...empresas.map((e) => ({ value: e.id, label: e.nombre }))]}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Campaña</label>
-                <select
+                <SelectAutocomplete
                   value={campania}
-                  onChange={(e) => { setCampania(e.target.value); setFilas([]) }}
-                  className={inputCls}
-                >
-                  {periodosCampania().map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setCampania(String(v)); setFilas([]) }}
+                  options={periodosCampania().map((p) => ({ value: p, label: p }))}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Tipo de cosecha</label>
-                <select
+                <SelectAutocomplete
                   value={tipoCosecha}
-                  onChange={(e) => { setTipoCosecha(e.target.value as TipoCosecha | ''); setFilas([]) }}
-                  className={inputCls}
-                >
-                  <option value="">Seleccionar...</option>
-                  {(Object.keys(TIPO_COSECHA_LABEL) as TipoCosecha[]).map((t) => (
-                    <option key={t} value={t}>{TIPO_COSECHA_LABEL[t]}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setTipoCosecha(v as TipoCosecha | ''); setFilas([]) }}
+                  options={[
+                    { value: '', label: 'Seleccionar...' },
+                    ...(Object.keys(TIPO_COSECHA_LABEL) as TipoCosecha[]).map((t) => ({ value: t, label: TIPO_COSECHA_LABEL[t] })),
+                  ]}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">% asesoramiento general</label>
@@ -296,7 +287,7 @@ export default function ReporteDetalle() {
                 onClick={() => setAplicaIva((v) => !v)}
                 role="switch"
                 aria-checked={aplicaIva}
-                className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${aplicaIva ? 'bg-primary' : 'bg-muted border border-border'}`}
+                className={`relative inline-flex cursor-pointer items-center h-6 w-11 rounded-full transition-colors ${aplicaIva ? 'bg-primary' : 'bg-muted border border-border'}`}
               >
                 <span className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${aplicaIva ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
@@ -315,29 +306,23 @@ export default function ReporteDetalle() {
                   <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end bg-muted/30 border border-border rounded-md p-2">
                     <div className="space-y-1">
                       <label className={labelCls}><MapPin className="size-3" strokeWidth={2} /> Lote</label>
-                      <select
+                      <SelectAutocomplete
                         value={f.idLote}
-                        onChange={(e) => handleLoteChange(idx, e.target.value === '' ? '' : Number(e.target.value))}
-                        className={inputCls}
-                      >
-                        <option value="">Seleccionar lote...</option>
-                        {(producciones?.lotes || []).map((l) => (
-                          <option key={l.id} value={l.id}>{l.descripcion || `Lote #${l.id}`}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => handleLoteChange(idx, v === '' ? '' : Number(v))}
+                        placeholder="Seleccionar lote..."
+                        options={[{ value: '', label: 'Seleccionar lote...' }, ...(producciones?.lotes || []).map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))]}
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción</label>
-                      <select
+                      <SelectAutocomplete
                         value={f.idProduccion}
-                        onChange={(e) => updateFila(idx, { idProduccion: e.target.value === '' ? '' : Number(e.target.value) })}
-                        className={inputCls}
-                      >
-                        <option value="">Seleccionar producción...</option>
-                        {produccionesDeLote(f.idLote).map((p) => (
-                          <option key={p.id} value={p.id}>{p.cultivoNombre}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => updateFila(idx, { idProduccion: v === '' ? '' : Number(v) })}
+                        options={[
+                          { value: '', label: 'Seleccionar producción...' },
+                          ...produccionesDeLote(f.idLote).map((p) => ({ value: p.id, label: p.cultivoNombre })),
+                        ]}
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className={labelCls}>% asesoramiento</label>
@@ -355,7 +340,7 @@ export default function ReporteDetalle() {
                         </div>
                         <button
                           onClick={() => removeFila(idx)}
-                          className="p-2 rounded-md text-destructive hover:bg-destructive-soft transition-colors shrink-0"
+                          className="p-2 cursor-pointer rounded-md text-destructive hover:bg-destructive-soft transition-colors shrink-0"
                           aria-label="Quitar lote"
                           title="Quitar lote"
                         >
@@ -371,7 +356,7 @@ export default function ReporteDetalle() {
             <button
               onClick={addFila}
               disabled={empresaId === '' || tipoCosecha === '' || loadingProducciones}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              className="inline-flex cursor-pointer items-center gap-2 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             >
               <Plus className="size-3.5" strokeWidth={1.75} />
               Agregar lote
@@ -389,7 +374,7 @@ export default function ReporteDetalle() {
                 <button
                   onClick={handleGuardar}
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="inline-flex cursor-pointer items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   {saving && <Loader2 className="size-4 animate-spin" />}
                   <ClipboardList className="size-4" strokeWidth={1.75} />

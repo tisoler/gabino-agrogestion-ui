@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import {
@@ -9,39 +9,7 @@ import {
 import { auth } from '../lib/firebase'
 import api, { fetcher } from '../lib/api'
 import { Roles } from '../constantes'
-
-interface Empresa {
-  id: number
-  nombre: string
-}
-
-interface User {
-  id: string
-  nombreUsuario: string
-  email?: string | null
-  idEmpresas: number[]
-  roles: string[]
-  permisos: string[]
-}
-
-interface AuthContextType {
-  user: User | null
-  firebaseUser: FirebaseUser | null
-  loading: boolean
-  permisos: string[]
-  currentEmpresaId: number | null
-  currentEmpresa: string | null
-  isSysAdmin: boolean
-  isAsesor: boolean
-  isAsesorAdmin: boolean
-  isProductor: boolean
-  empresas: Empresa[]
-  isLoadingEmpresas: boolean
-  setCurrentEmpresaId: (id: number | null) => void
-  logout: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+import { AuthContext, type User } from './auth-context'
 
 const STORAGE_KEY = 'currentEmpresaId'
 
@@ -70,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Empresas visibles para el usuario (sys-admin y asesor-admin: todas;
   // resto: sus idEmpresas)
-  const { data: listadoEmpresas, isLoading: isLoadingEmpresas } = useSWR<Empresa[]>(
+  const { data: listadoEmpresas, isLoading: isLoadingEmpresas } = useSWR<{ id: number; nombre: string }[]>(
     user ? '/empresas' : null,
     fetcher
   )
@@ -88,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // - Si la guardada no está en la lista visible, la reemplaza.
   useEffect(() => {
     if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hidrata estado desde localStorage (sistema externo)
       setCurrentEmpresaIdState(null)
       return
     }
@@ -133,6 +102,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const navigate = useNavigate()
 
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const response = await api.get('/auth/me')
+      const userData = response.data
+      setUser({
+        id: userData.id,
+        nombreUsuario: userData.nombreUsuario,
+        email: userData.email,
+        idEmpresas: Array.isArray(userData.idEmpresas)
+          ? userData.idEmpresas.map((e: unknown) => Number(e)).filter((n: number) => Number.isFinite(n) && n > 0)
+          : [],
+        roles: userData.roles || [],
+        permisos: userData.permisos || [],
+      })
+      setPermisos(userData.permisos || [])
+    } catch (error) {
+      console.error('Error obteniendo perfil del backend', error)
+      setUser(null)
+      setPermisos([])
+    }
+  }, [])
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentFirebaseUser) => {
       setLoading(true)
@@ -154,29 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => unsubscribe()
-  }, [])
-
-  const fetchUserProfile = async () => {
-    try {
-      const response = await api.get('/auth/me')
-      const userData = response.data
-      setUser({
-        id: userData.id,
-        nombreUsuario: userData.nombreUsuario,
-        email: userData.email,
-        idEmpresas: Array.isArray(userData.idEmpresas)
-          ? userData.idEmpresas.map((e: unknown) => Number(e)).filter((n: number) => Number.isFinite(n) && n > 0)
-          : [],
-        roles: userData.roles || [],
-        permisos: userData.permisos || [],
-      })
-      setPermisos(userData.permisos || [])
-    } catch (error) {
-      console.error('Error obteniendo perfil del backend', error)
-      setUser(null)
-      setPermisos([])
-    }
-  }
+  }, [fetchUserProfile])
 
   const setCurrentEmpresaId = (id: number | null) => {
     if (id === null) {
@@ -233,12 +202,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }

@@ -31,10 +31,10 @@ interface MapaLoteProps {
   /** En modo dibujo habilita trazar/editar polígonos (Geoman). */
   dibujar?: boolean
   /** Polígono GeoJSON existente para mostrar/editar. */
-  geometria?: any
+  geometria?: GeoJSON.GeoJsonObject | null
   /** Centroide (lat/lng) para mostrar como marcador cuando no hay geometría. */
   centroide?: Centroide | null
-  onChange?: (geometria: any, centroide: Centroide | null, areaHa: number) => void
+  onChange?: (geometria: GeoJSON.GeoJsonObject | null, centroide: Centroide | null, areaHa: number) => void
   altura?: string
 }
 
@@ -119,7 +119,7 @@ export default function MapaLote({
         cutPolygon: false,
         removalMode: true,
       })
-      map.on('pm:create', (e: any) => reemplazar(e.layer))
+      map.on('pm:create', (e) => reemplazar(e.layer))
       map.on('pm:remove', () => {
         layerRef.current = null
         internalChangeRef.current = true
@@ -176,11 +176,11 @@ export default function MapaLote({
   const emitir = (layer: L.Layer) => {
     const poly = layer as L.Polygon
     const feature = poly.toGeoJSON()
-    const c = turf.centroid(feature as any)
+    const c = turf.centroid(feature)
     const coords = c.geometry.coordinates // [lng, lat]
-    const areaHa = turf.area(feature as any) / 10000
+    const areaHa = turf.area(feature) / 10000
     internalChangeRef.current = true
-    onChangeRef.current?.((feature as any).geometry, { lat: coords[1], lng: coords[0] }, areaHa)
+    onChangeRef.current?.(feature.geometry, { lat: coords[1], lng: coords[0] }, areaHa)
   }
 
   return <div ref={contRef} className={`${altura} w-full rounded-md overflow-hidden`} />

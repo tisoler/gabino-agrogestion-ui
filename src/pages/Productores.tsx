@@ -6,7 +6,7 @@ import {
   UserPlus, UserMinus, Search, Check,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { Roles, getRoleLabel } from '../constantes'
 
 interface UsuarioBasico {
@@ -169,10 +169,11 @@ export default function Productores() {
     try {
       await api.patch(`/usuarios/${uid}/empresas`, payload)
       await mutate()
-    } catch (err: any) {
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
       const message =
-        err?.response?.data?.message ||
-        err?.message ||
+        e?.response?.data?.message ||
+        e?.message ||
         'No se pudo actualizar la asociación'
       setActionError(message)
     } finally {
@@ -284,7 +285,7 @@ export default function Productores() {
         {canWrite && (
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
           >
             <Plus className="size-4" strokeWidth={2} />
             <span>Nuevo Productor</span>
@@ -302,7 +303,7 @@ export default function Productores() {
           <button
             type="button"
             onClick={() => setActionError(null)}
-            className="text-destructive/70 hover:text-destructive"
+            className="text-destructive/70 hover:text-destructive cursor-pointer"
             aria-label="Cerrar"
           >
             <X className="size-3.5" strokeWidth={2} />
@@ -365,7 +366,7 @@ export default function Productores() {
                 <button
                   type="button"
                   onClick={() => toggleExpand(empresa.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left cursor-pointer"
                   aria-expanded={isOpen}
                 >
                   <div className="size-9 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
@@ -476,7 +477,7 @@ export default function Productores() {
                         <button
                           type="button"
                           onClick={() => openAddModal(empresa.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-card border border-dashed border-border rounded-md text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-card border border-dashed border-border rounded-md text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
                         >
                           <UserPlus className="size-3.5" strokeWidth={1.75} />
                           Agregar usuario
@@ -504,7 +505,7 @@ export default function Productores() {
               <h2 className="text-base font-semibold text-foreground">Nuevo Productor</h2>
               <button
                 onClick={() => setIsCreateOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 disabled={creating}
                 aria-label="Cerrar"
               >
@@ -565,7 +566,7 @@ export default function Productores() {
                           key={u.uid}
                           type="button"
                           onClick={() => toggleCreateUser(u.uid)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/30 transition-colors ${selected ? 'bg-primary-soft/40' : ''
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-left cursor-pointer hover:bg-muted/30 transition-colors ${selected ? 'bg-primary-soft/40' : ''
                             }`}
                         >
                           <div
@@ -608,14 +609,14 @@ export default function Productores() {
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                   disabled={creating}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   disabled={creating || !newName.trim()}
                 >
                   {creating ? 'Creando…' : 'Crear productor'}
@@ -644,7 +645,7 @@ export default function Productores() {
               </div>
               <button
                 onClick={closeAddModal}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -706,7 +707,7 @@ export default function Productores() {
                         type="button"
                         onClick={() => handleAdd(u.uid)}
                         disabled={pendingUid === u.uid}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0 cursor-pointer"
                       >
                         {pendingUid === u.uid ? (
                           <Activity className="size-3 animate-spin" />
@@ -772,7 +773,7 @@ function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
           type="button"
           onClick={onRemove}
           disabled={isPending}
-          className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive-soft hover:text-destructive transition-colors disabled:opacity-50 shrink-0"
+          className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive-soft hover:text-destructive transition-colors disabled:opacity-50 shrink-0 cursor-pointer"
           title="Desasociar de este productor"
           aria-label="Desasociar de este productor"
         >

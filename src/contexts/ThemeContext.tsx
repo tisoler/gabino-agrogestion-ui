@@ -1,18 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-
-export type ThemeMode = 'light' | 'dark' | 'system'
-export type ResolvedTheme = 'light' | 'dark'
-
-interface ThemeContextType {
-  mode: ThemeMode
-  resolved: ResolvedTheme
-  setMode: (mode: ThemeMode) => void
-  cycle: () => void
-}
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import {
+  ThemeContext,
+  type ThemeMode,
+  type ResolvedTheme,
+} from './theme-context'
 
 const STORAGE_KEY = 'gabino-theme'
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 const getSystemPreference = (): ResolvedTheme =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -78,12 +71,4 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  const context = useContext(ThemeContext)
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
-  return context
 }

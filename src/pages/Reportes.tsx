@@ -6,9 +6,11 @@ import {
   Building2, Calendar,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import {
   TIPOS_REPORTE_LABEL,
+  TIPO_REPORTE_TAG_COLORS,
+  TIPO_REPORTE_BUTTON_COLORS,
   eliminarReporte,
   type ReporteListItem,
 } from '../lib/reportes'
@@ -72,17 +74,17 @@ export default function Reportes() {
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => navigate('/reportes/resumen')}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
+              className={`inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm font-medium transition-opacity cursor-pointer ${TIPO_REPORTE_BUTTON_COLORS.resumen_campania}`}
             >
               <FileBarChart className="size-4" strokeWidth={1.75} />
-              Resumen Campaña
+              Nuevo Resumen Campaña
             </button>
             <button
               onClick={() => navigate('/reportes/detalle')}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
+              className={`inline-flex items-center gap-2 px-4 py-2 border rounded-md text-sm font-medium transition-opacity cursor-pointer ${TIPO_REPORTE_BUTTON_COLORS.detalle_asesoramiento}`}
             >
               <ClipboardList className="size-4" strokeWidth={1.75} />
-              Detalle asesoramiento
+              Nuevo Detalle asesoramiento
             </button>
           </div>
         )}
@@ -120,8 +122,12 @@ export default function Reportes() {
                     className="hover:bg-muted/40 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
-                        <FileBarChart className="size-3" strokeWidth={1.75} />
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border rounded text-[11px] font-medium ${TIPO_REPORTE_TAG_COLORS[r.tipo]}`}>
+                        {r.tipo === 'detalle_asesoramiento' ? (
+                          <ClipboardList className="size-3" strokeWidth={1.75} />
+                        ) : (
+                          <FileBarChart className="size-3" strokeWidth={1.75} />
+                        )}
                         {TIPOS_REPORTE_LABEL[r.tipo]}
                       </span>
                       {r.tipo === 'detalle_asesoramiento' && r.tipoCosecha && (
@@ -150,7 +156,7 @@ export default function Reportes() {
                       <div className="inline-flex justify-end gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); goToEditar(r) }}
-                          className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                          className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                           title="Editar"
                           aria-label="Editar"
                         >
@@ -160,7 +166,7 @@ export default function Reportes() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handleEliminar(r) }}
                             disabled={deletingId === r.id}
-                            className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors disabled:opacity-50"
+                            className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors disabled:opacity-50 cursor-pointer"
                             title="Eliminar"
                             aria-label="Eliminar"
                           >

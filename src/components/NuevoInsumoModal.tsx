@@ -17,7 +17,12 @@ interface NuevoInsumoModalProps {
   empresaNombre?: string
   isAdmin: boolean
   /** Recibe el insumo creado (respuesta del POST). */
-  onCreated: (insumo: any) => void
+  onCreated: (insumo: {
+    id: number
+    nombre: string
+    idEmpresa?: number | null
+    precioUnitario?: number | null
+  }) => void
   onClose: () => void
 }
 
@@ -70,10 +75,11 @@ export default function NuevoInsumoModal({
       setCategoriaNombre('')
       setShowCategoriaCreate(false)
       await mutateCategorias()
-    } catch (e: any) {
-      setCategoriaError(
-        e?.response?.data?.message || e?.message || 'No se pudo crear la categoría.'
-      )
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } }; message?: string }
+      const msg = err?.response?.data?.message
+      const detalle = Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : ''
+      setCategoriaError(detalle || err?.message || 'No se pudo crear la categoría.')
     } finally {
       setCategoriaBusy(false)
     }
@@ -94,8 +100,11 @@ export default function NuevoInsumoModal({
       payload.idEmpresa = isAdmin ? idEmpresa : empresaId
       const { data } = await api.post('/insumos', payload)
       onCreated(data)
-    } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'No se pudo crear el insumo.')
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } }; message?: string }
+      const msg = err?.response?.data?.message
+      const detalle = Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : ''
+      setError(detalle || err?.message || 'No se pudo crear el insumo.')
     } finally {
       setBusy(false)
     }

@@ -33,9 +33,10 @@ export default function Login() {
       await sendPasswordResetEmail(auth, email)
       setSuccess('Te hemos enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.')
       setIsForgot(false)
-    } catch (err: any) {
+    } catch (err) {
       console.error(err)
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+      const e = err as { code?: string }
+      if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email') {
         setError('No encontramos una cuenta con ese correo electrónico.')
       } else {
         setError('Error al enviar el correo de recuperación. Inténtalo de nuevo.')
@@ -74,18 +75,19 @@ export default function Login() {
 
         navigate('/')
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err)
+      const e = err as { code?: string }
       if (isRegister) {
-        if (err.code === 'auth/email-already-in-use') {
+        if (e.code === 'auth/email-already-in-use') {
           setError('El email ya está en uso.')
-        } else if (err.code === 'auth/weak-password') {
+        } else if (e.code === 'auth/weak-password') {
           setError('La contraseña es demasiado débil.')
         } else {
           setError('Error al crear la cuenta. Inténtalo de nuevo.')
         }
       } else {
-        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
           setError('Email o contraseña incorrectos.')
         } else {
           setError('Error al iniciar sesión. Inténtalo de nuevo.')

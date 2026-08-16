@@ -5,8 +5,8 @@ import {
   Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
-import { fmtFecha, fmtHa, fmtCantidad, type Prescripcion } from '../lib/prescripciones'
+import { useAuth } from '../contexts/auth-context'
+import { fmtFecha, fmtHa, fmtCantidad, convertirUnidadImpresion, type Prescripcion } from '../lib/prescripciones'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
@@ -281,14 +281,17 @@ export default function PrescripcionDetalle() {
                   <td colSpan={4}>Esta prescripción no tiene insumos.</td>
                 </tr>
               ) : (
-                prescripcion.insumos.map((i) => (
-                  <tr key={i.id}>
-                    <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
-                    <td>{i.insumo?.unidad || '—'}</td>
-                    <td className="text-right">{fmtCantidad(i.cantidadPorHa, 3)}</td>
-                    <td className="text-right">{fmtCantidad(i.cantidadTotal)}</td>
-                  </tr>
-                ))
+                prescripcion.insumos.map((i) => {
+                  const c = convertirUnidadImpresion(i.cantidadPorHa, i.cantidadTotal, i.insumo?.unidad)
+                  return (
+                    <tr key={i.id}>
+                      <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
+                      <td>{c.unidad || '—'}</td>
+                      <td className="text-right">{fmtCantidad(c.cantidadPorHa, 3)}</td>
+                      <td className="text-right">{fmtCantidad(c.cantidadTotal)}</td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

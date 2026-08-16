@@ -59,6 +59,7 @@ export interface CampaniaLaborDetalle {
   superficieLaboreada: number
   costoLaborHa: number
   observaciones?: string | null
+  idPrescripcion?: number | null
   labor?: LaborItem
 }
 
@@ -69,6 +70,7 @@ export interface CampaniaInsumoDetalle {
   unidadesHa: number
   costoUnidad: number
   superficieAplicada: number
+  idPrescripcion?: number | null
   insumo?: InsumoItem
 }
 

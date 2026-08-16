@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, Loader2, RefreshCcw, CheckCircle2 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 
 export default function Configuracion() {
   const { isSysAdmin } = useAuth()

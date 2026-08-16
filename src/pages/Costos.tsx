@@ -5,11 +5,12 @@ import {
   Lock, AlertCircle, Globe, X, Shield, ToggleLeft, ToggleRight, Loader2, Package
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { UNIDADES_PRECIO } from '../constantes'
 import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
 import { setMonedaGlobal } from '../lib/monedaStore'
 import MonedaToggle from '../components/MonedaToggle'
+import SelectAutocomplete from '../components/SelectAutocomplete'
 
 interface Costo {
   id: number
@@ -59,7 +60,7 @@ export default function Costos() {
   const canRead = permisos.includes('lectura:costo') && !isProductor
 
   const costosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
@@ -71,13 +72,13 @@ export default function Costos() {
     return res.data
   }
 
-  const swrCostosKey = canRead
+  const swrCostosKey: [string, number | boolean, string] | null = canRead
     ? ['costos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
     : null
 
   const { data: costos = [], isLoading, mutate } = useSWR<Costo[]>(
     swrCostosKey,
-    costosFetcher as any,
+    costosFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnMount: true,
@@ -202,7 +203,7 @@ export default function Costos() {
           {canWrite && (
             <button
               onClick={() => handleOpenModal()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
             >
               <Plus className="size-4" strokeWidth={2} />
               <span>Nuevo Costo</span>
@@ -234,19 +235,13 @@ export default function Costos() {
             ))}
           </div>
           {scope === 'empresa' && scopeEmpresas.length > 0 && (
-            <select
-              aria-label="Productor"
+            <SelectAutocomplete
               value={scopeEmpresaId ?? ''}
-              onChange={(e) => setScopeEmpresaId(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="px-3 py-1.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-              <option value="">Seleccionar productor</option>
-              {scopeEmpresas.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setScopeEmpresaId(v === '' ? null : Number(v))}
+              options={scopeEmpresas.map((e) => ({ value: e.id, label: e.nombre }))}
+              placeholder="Seleccionar productor"
+              className="w-48"
+            />
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus costos.</span>
@@ -313,7 +308,7 @@ export default function Costos() {
                         <>
                           <button
                             onClick={() => handleOpenModal(costo)}
-                            className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                            className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                             disabled={updatingIds.has(costo.id)}
                             aria-label="Editar"
                           >
@@ -321,7 +316,7 @@ export default function Costos() {
                           </button>
                           <button
                             onClick={() => handleToggleActivo(costo)}
-                            className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${costo.activo
+                            className={`p-1.5 rounded-md cursor-pointer transition-colors disabled:opacity-50 ${costo.activo
                               ? 'text-success hover:bg-success-soft'
                               : 'text-muted-foreground hover:bg-muted'
                               }`}
@@ -445,7 +440,7 @@ export default function Costos() {
                               <>
                                 <button
                                   onClick={() => handleOpenModal(costo)}
-                                  className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                                  className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
                                   title="Editar"
                                   aria-label="Editar"
                                 >
@@ -453,7 +448,7 @@ export default function Costos() {
                                 </button>
                                 <button
                                   onClick={() => handleToggleActivo(costo)}
-                                  className={`p-1.5 rounded-md transition-colors disabled:opacity-50 ${costo.activo
+                                  className={`p-1.5 rounded-md cursor-pointer transition-colors disabled:opacity-50 ${costo.activo
                                     ? 'text-success hover:bg-success-soft'
                                     : 'text-muted-foreground hover:bg-muted'
                                     }`}
@@ -511,7 +506,7 @@ export default function Costos() {
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
@@ -568,17 +563,14 @@ export default function Costos() {
                 <label htmlFor="costo-unidad" className="text-xs font-medium text-foreground">
                   Unidad
                 </label>
-                <select
-                  id="costo-unidad"
+                <SelectAutocomplete
                   value={formData.unidad}
-                  onChange={(e) => setFormData({ ...formData, unidad: e.target.value })}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer"
-                >
-                  <option value="">Sin unidad</option>
-                  {UNIDADES_PRECIO.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setFormData({ ...formData, unidad: String(v) })}
+                  options={[
+                    { value: '', label: 'Sin unidad' },
+                    ...UNIDADES_PRECIO.map((u) => ({ value: u, label: u })),
+                  ]}
+                />
               </div>
 
               {isAdmin && (
@@ -586,23 +578,17 @@ export default function Costos() {
                   <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
                     Productor
                   </label>
-                  <select
-                    id="costo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  >
-                    <option value="">Global (todos los productores)</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas?.map((e) => (
-                      <option key={e.id} value={String(e.id)}>{e.nombre}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    options={[
+                      { value: '', label: 'Global (todos los productores)' },
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa)
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...(empresas?.map((e) => ({ value: String(e.id), label: e.nombre })) ?? []),
+                    ]}
+                  />
                   <p className="text-[11px] text-muted-foreground">
                     Solo como sys-admin puedes crear costos globales o asignarlos a otros productores.
                   </p>
@@ -613,26 +599,20 @@ export default function Costos() {
                   <label htmlFor="costo-empresa" className="text-xs font-medium text-foreground">
                     Productor
                   </label>
-                  <select
-                    id="costo-empresa"
+                  <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(e) =>
-                      setFormData({ ...formData, idEmpresa: e.target.value === '' ? null : parseInt(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                    required
-                  >
-                    <option value="">Seleccionar productor</option>
-                    {formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id)) && (
-                        <option value={String(formData.idEmpresa)}>Productor {formData.idEmpresa}</option>
-                      )}
-                    {empresas
-                      .filter((e) => userEmpresas.includes(e.id))
-                      .map((e) => (
-                        <option key={e.id} value={String(e.id)}>{e.nombre}</option>
-                      ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    options={[
+                      { value: '', label: 'Seleccionar productor' },
+                      ...(formData.idEmpresa != null &&
+                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
+                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                        : []),
+                      ...(empresas
+                        .filter((e) => userEmpresas.includes(e.id))
+                        .map((e) => ({ value: String(e.id), label: e.nombre })) ?? []),
+                    ]}
+                  />
                 </div>
               )}
 
@@ -640,7 +620,7 @@ export default function Costos() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>

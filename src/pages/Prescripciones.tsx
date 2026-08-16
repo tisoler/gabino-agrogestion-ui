@@ -6,7 +6,7 @@ import {
   Pickaxe, Package, Building2, Loader2, X,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { fmtFecha, fmtHa, type PrescripcionListItem } from '../lib/prescripciones'
 import { periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'

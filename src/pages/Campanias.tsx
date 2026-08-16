@@ -6,7 +6,7 @@ import {
   X, FileSpreadsheet, MapPin, Sprout, Layers
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/auth-context'
 import { fmtMoneda, fmtNumero, fmtQQHa, periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'
 
@@ -240,7 +240,7 @@ export default function Campanias() {
         {canWrite && (
           <button
             onClick={goToCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto justify-center cursor-pointer"
           >
             <Plus className="size-4" strokeWidth={2} />
             <span>Nueva producción</span>
@@ -356,7 +356,7 @@ export default function Campanias() {
           <div className="flex justify-end">
             <button
               onClick={clearFilters}
-              className="text-[11px] font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 cursor-pointer"
             >
               <X className="size-3" strokeWidth={2} />
               Limpiar filtros
@@ -378,7 +378,7 @@ export default function Campanias() {
           {canWrite && (
             <button
               onClick={goToCreate}
-              className="text-sm font-medium text-primary hover:underline mt-1"
+              className="text-sm font-medium text-primary hover:underline mt-1 cursor-pointer"
             >
               Crear la primera producción
             </button>

@@ -1,17 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import useSWR from 'swr'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X,
+  ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X, ArrowUpRight,
   Sprout, MapPin, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
 } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../contexts/AuthContext'
-import { UNIDADES_PRECIO, colorCategoria } from '../constantes'
+import { useAuth } from '../contexts/auth-context'
+import { UNIDADES_PRECIO, colorCategoria, colorPrescripcion } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
-import MonedaToggle from '../components/MonedaToggle'
 import SelectAutocomplete from '../components/SelectAutocomplete'
-import { useCotizacionDolar, fmtPrecioInsumo, type Moneda } from '../lib/moneda'
+import { useCotizacionDolar, fmtPrecioInsumo } from '../lib/moneda'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
   costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
@@ -144,8 +143,8 @@ function buildInsumoOrCostoPayload(row: {
   superficieAplicada?: number | null
 }) {
   return {
-    idInsumo: (row as any).idInsumo ?? 0,
-    idCosto: (row as any).idCosto ?? 0,
+    idInsumo: row.idInsumo ?? 0,
+    idCosto: row.idCosto ?? 0,
     unidadesHa: typeof row.unidadesHa === 'number' && !Number.isNaN(row.unidadesHa)
       ? row.unidadesHa
       : 0,
@@ -272,10 +271,9 @@ export default function CampaniaDetalle() {
   // Campo: filtra el selector de lotes (no se persiste en la campaña).
   const [idCampo, setIdCampo] = useState<number | ''>('')
 
-  // Moneda para el costo/unidad de insumos (el valor se guarda en USD; se
-  // muestra en pesos usando el dólar venta, igual que la vista Insumos).
+  // El costo/unidad de insumos se guarda en USD y se muestra siempre en pesos
+  // usando el dólar venta (sin toggle de moneda en estas vistas).
   const { venta: dolarVenta } = useCotizacionDolar()
-  const [moneda, setMoneda] = useState<Moneda>('pesos')
 
   const [cabecera, setCabecera] = useState<Cabecera>(emptyCabecera)
   const [cabeceraSaved, setCabeceraSaved] = useState<Cabecera>(emptyCabecera)
@@ -463,6 +461,15 @@ export default function CampaniaDetalle() {
     alquilerQqHa: parseFloat(cabecera.alquilerQqHa) || 0,
     labores, insumos, costos,
   }), [cabecera, labores, insumos, costos])
+
+  // Prescripciones presentes en la producción: dan el color de agrupación de
+  // las filas de labor e insumo que las originaron.
+  const prescripcionIds = useMemo(() => {
+    const ids: number[] = []
+    for (const l of labores) if (l.idPrescripcion != null) ids.push(l.idPrescripcion)
+    for (const i of insumos) if (i.idPrescripcion != null) ids.push(i.idPrescripcion)
+    return ids
+  }, [labores, insumos])
 
   // Aviso de warning cuando falta la sup. sembrada (los costos ponderados se
   // calculan dividiendo por ella).
@@ -922,7 +929,7 @@ export default function CampaniaDetalle() {
       <div className="flex items-start gap-3">
         <button
           onClick={() => navigate('/campanias')}
-          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
           aria-label="Volver"
         >
           <ArrowLeft className="size-4" strokeWidth={1.75} />
@@ -942,7 +949,7 @@ export default function CampaniaDetalle() {
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               title="Exportar a XLS"
             >
               {isExporting ? (
@@ -981,19 +988,16 @@ export default function CampaniaDetalle() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {isNew && (
             <Field label="Productor destino">
-              <select
+              <SelectAutocomplete
                 value={empresaDestinoId ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value === '' ? null : Number(e.target.value)
-                  setEmpresaDestinoId(v)
+                onChange={(v) => {
+                  setEmpresaDestinoId(Number(v))
                   setIdCampo('')
                   setCab('idLote', null)
                 }}
-                className={inputCls}
-              >
-                <option value="">Elegí productor</option>
-                {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-              </select>
+                options={empresas.map((e) => ({ value: e.id, label: e.nombre }))}
+                placeholder="Elegí productor"
+              />
             </Field>
           )}
           {(!isNew && campania?.lote) && (
@@ -1006,78 +1010,62 @@ export default function CampaniaDetalle() {
           )}
 
           <Field label="Campaña">
-            <select
+            <SelectAutocomplete
               value={cabecera.campania}
-              onChange={(e) => setCab('campania', e.target.value)}
-              className={inputCls}
-            >
-              <option value="" disabled>Seleccionar período...</option>
-              {periodosCampania().map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+              onChange={(v) => setCab('campania', String(v))}
+              options={periodosCampania().map((p) => ({ value: p, label: p }))}
+              placeholder="Seleccionar período..."
+              sort={{ by: 'alfabetico', direction: 'desc' }}
+            />
           </Field>
 
           <Field label="Campo" icon={MapPin}>
-            <select
+            <SelectAutocomplete
               value={idCampo}
-              onChange={(e) => {
-                setIdCampo(e.target.value === '' ? '' : Number(e.target.value))
+              onChange={(v) => {
+                setIdCampo(v === '' ? '' : Number(v))
                 setCab('idLote', null)
               }}
+              options={camposDisponibles.map((c) => ({ value: c.value, label: c.label }))}
+              placeholder="Todos los campos"
               disabled={!empresaDestinoId || loadingLotes}
-              className={inputCls + ' disabled:opacity-60'}
-            >
-              <option value="">Todos los campos</option>
-              {camposDisponibles.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+              clearable
+            />
           </Field>
 
           <Field label="Lote" icon={MapPin}>
-            <select
+            <SelectAutocomplete
               value={cabecera.idLote ?? ''}
-              onChange={(e) => setCab('idLote', e.target.value === '' ? null : Number(e.target.value))}
+              onChange={(v) => setCab('idLote', v === '' ? null : Number(v))}
+              options={lotesFiltrados.map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))}
+              placeholder="Elegí lote"
               disabled={!empresaDestinoId || loadingLotes}
-              className={inputCls + ' disabled:opacity-60'}
-            >
-              <option value="">Elegí lote</option>
-              {lotesFiltrados.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.descripcion || `Lote #${l.id}`}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           <Field label="Cultivo" icon={Sprout}>
-            <select
+            <SelectAutocomplete
               value={cabecera.idCultivo ?? ''}
-              onChange={(e) => {
-                const v = e.target.value === '' ? null : Number(e.target.value)
-                setCab('idCultivo', v)
+              onChange={(v) => {
+                setCab('idCultivo', v === '' ? null : Number(v))
                 setCab('idVariedad', null)
               }}
-              className={inputCls}
-            >
-              <option value="">Elegí cultivo</option>
-              {cultivos.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+              options={cultivos.map((c) => ({ value: c.id, label: c.nombre }))}
+              placeholder="Elegí cultivo"
+            />
           </Field>
 
           <Field label="Variedad / Híbrido">
-            <select
+            <SelectAutocomplete
               value={cabecera.idVariedad ?? ''}
-              onChange={(e) => setCab('idVariedad', e.target.value === '' ? null : Number(e.target.value))}
+              onChange={(v) => setCab('idVariedad', v === '' ? null : Number(v))}
+              options={[
+                { value: '', label: 'Sin variedad' },
+                ...variedadesFiltradas.map((v) => ({ value: v.id, label: v.nombre })),
+              ]}
+              placeholder={cabecera.idCultivo ? 'Sin variedad' : 'Elegí cultivo primero'}
               disabled={!cabecera.idCultivo}
-              className={inputCls + ' disabled:opacity-60'}
-            >
-              <option value="">{cabecera.idCultivo ? 'Sin variedad' : 'Elegí cultivo primero'}</option>
-              {variedadesFiltradas.map((v) => (
-                <option key={v.id} value={v.id}>{v.nombre}</option>
-              ))}
-            </select>
+            />
           </Field>
 
           <NumField label="Sup. sembrada (ha)" field="supSembrada" cabecera={cabecera} setCab={setCab} />
@@ -1097,7 +1085,7 @@ export default function CampaniaDetalle() {
             <button
               onClick={handleCreate}
               disabled={!canCreate || creating}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {creating ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               <span>{creating ? 'Creando…' : 'Crear producción'}</span>
@@ -1154,6 +1142,8 @@ export default function CampaniaDetalle() {
             computedRow={(l) => costoPonderadoHa(l, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de labores"
             totalValue={resultados.costoTotalLaboresHa}
+            rowBgOf={(row) => colorPrescripcion((row as { idPrescripcion?: number | null }).idPrescripcion, prescripcionIds)}
+            prescripcionIdOf={(row) => (row as { idPrescripcion?: number | null }).idPrescripcion ?? null}
             emptyHint={catalogLabores.length === 0 ? 'No hay labores disponibles para este productor. Creá una primero desde la sección Labores.' : undefined}
             footer={avisoSupSembrada}
           />
@@ -1161,8 +1151,6 @@ export default function CampaniaDetalle() {
           <DetalleTable
             title="Insumos"
             icon={Package}
-            moneda={moneda}
-            onChangeMoneda={setMoneda}
             dolar={dolarVenta}
             totalUsd
             optionTag={(o) => o.categoria ? (
@@ -1184,10 +1172,12 @@ export default function CampaniaDetalle() {
             onAdd={addInsumo}
             onChange={updateInsumo}
             onRemove={removeInsumo}
-            onCreateNew={(row, _onCreated) => { nuevoInsumoRowIdRef.current = row.id; setNuevoInsumoOpen(true) }}
+            onCreateNew={(row) => { nuevoInsumoRowIdRef.current = row.id; setNuevoInsumoOpen(true) }}
             computedRow={(i) => costoPonderadoInsumoRowHa(i, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de insumos"
             totalValue={resultados.costoTotalInsumosHa}
+            rowBgOf={(row) => colorPrescripcion((row as { idPrescripcion?: number | null }).idPrescripcion, prescripcionIds)}
+            prescripcionIdOf={(row) => (row as { idPrescripcion?: number | null }).idPrescripcion ?? null}
             emptyHint={catalogInsumos.length === 0 ? 'No hay insumos disponibles para este productor. Creá uno primero desde la sección Insumos.' : undefined}
             footer={avisoSupSembrada}
           />
@@ -1283,7 +1273,7 @@ export default function CampaniaDetalle() {
           empresaId={empresaDestinoId}
           empresaNombre={empresas.find((e) => e.id === empresaDestinoId)?.nombre}
           isAdmin={isAdmin}
-          onCreated={(insumo: any) => {
+          onCreated={(insumo) => {
             if (nuevoInsumoRowIdRef.current != null) {
               updateInsumo(nuevoInsumoRowIdRef.current, {
                 idInsumo: insumo.id,
@@ -1318,7 +1308,7 @@ export default function CampaniaDetalle() {
               <h2 className="text-base font-semibold text-foreground">
                 Nuevo {creatingItem.kind === 'labor' ? 'labor' : creatingItem.kind === 'insumo' ? 'insumo' : 'costo'}
               </h2>
-              <button onClick={() => { setCreatingItem(null); setCreatingItemError(null) }} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent" aria-label="Cerrar">
+              <button onClick={() => { setCreatingItem(null); setCreatingItemError(null) }} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent cursor-pointer" aria-label="Cerrar">
                 <X className="size-4" strokeWidth={1.75} />
               </button>
             </div>
@@ -1338,17 +1328,16 @@ export default function CampaniaDetalle() {
                 />
                 <div className="pt-1 space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Productor</label>
-                  <select
-                    value={isAdmin ? (creatingItem.idEmpresa ?? '') : String(empresaDestinoId ?? '')}
-                    onChange={(e) => { setCreatingItem({ ...creatingItem, idEmpresa: e.target.value === '' ? null : Number(e.target.value) }); setCreatingItemError(null) }}
+                  <SelectAutocomplete
+                    value={isAdmin ? (creatingItem.idEmpresa ?? '') : (empresaDestinoId ?? '')}
+                    onChange={(v) => { setCreatingItem({ ...creatingItem, idEmpresa: v === '' ? null : Number(v) }); setCreatingItemError(null) }}
                     disabled={!isAdmin}
-                    className={inputCls + (isAdmin ? '' : ' cursor-not-allowed opacity-80')}
-                  >
-                    {isAdmin && <option value="">Global (todas las empresas)</option>}
-                    <option value={empresaDestinoId ?? ''}>
-                      {empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'Productor'}
-                    </option>
-                  </select>
+                    options={[
+                      ...(isAdmin ? [{ value: '' as const, label: 'Global (todas las empresas)' }] : []),
+                      ...(empresaDestinoId != null ? [{ value: empresaDestinoId, label: empresas.find((e) => e.id === empresaDestinoId)?.nombre || 'Productor' }] : []),
+                    ]}
+                    placeholder="Productor"
+                  />
                 </div>
                 <div className="pt-1 space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Descripción</label>
@@ -1375,41 +1364,36 @@ export default function CampaniaDetalle() {
                 {creatingItem.kind !== 'labor' && (
                   <div className="pt-1 space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Unidad</label>
-                    <select
+                    <SelectAutocomplete
                       value={creatingItem.unidad}
-                      onChange={(e) => { setCreatingItem({ ...creatingItem, unidad: e.target.value }); setCreatingItemError(null) }}
-                      className={inputCls}
-                    >
-                      <option value="">Sin unidad</option>
-                      {UNIDADES_PRECIO.map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => { setCreatingItem({ ...creatingItem, unidad: String(v) }); setCreatingItemError(null) }}
+                      options={[
+                        { value: '', label: 'Sin unidad' },
+                        ...UNIDADES_PRECIO.map((u) => ({ value: u, label: u })),
+                      ]}
+                      placeholder="Sin unidad"
+                    />
                   </div>
                 )}
                 {creatingItem.kind === 'insumo' && (
                   <div className="pt-1 space-y-2 border border-dashed border-border rounded-sm p-2">
                     <label className="text-xs font-medium text-foreground">Categoría</label>
                     {!creatingCategoriaOpen ? (
-                      <div className="flex gap-2">
-                        <select
+                      <div className="flex gap-2 items-center">
+                        <SelectAutocomplete
+                          className="flex-1 min-w-0"
                           value={creatingItem.categoriaId ?? ''}
-                          onChange={(e) => { setCreatingItem({ ...creatingItem, categoriaId: e.target.value ? Number(e.target.value) : null }); setCreatingItemError(null) }}
-                          required
-                          className={inputCls}
-                        >
-                          <option value="">Seleccionar categoría...</option>
-                          {catalogCategorias
+                          onChange={(v) => { setCreatingItem({ ...creatingItem, categoriaId: v === '' ? null : Number(v) }); setCreatingItemError(null) }}
+                          options={catalogCategorias
                             .filter((c) => c.activo !== false)
-                            .map((c) => (
-                              <option key={c.id} value={c.id}>{c.nombre}</option>
-                            ))}
-                        </select>
+                            .map((c) => ({ value: c.id, label: c.nombre }))}
+                          placeholder="Seleccionar categoría..."
+                        />
                         {canManageCategorias && !creatingItem.categoriaId && (
                           <button
                             type="button"
                             onClick={() => { setCreatingCategoriaError(null); setCreatingCategoriaOpen(true) }}
-                            className="px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0"
+                            className="px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors shrink-0 cursor-pointer"
                             title="Crear nueva categoría"
                             aria-label="Crear nueva categoría"
                           >
@@ -1437,7 +1421,7 @@ export default function CampaniaDetalle() {
                           <button
                             type="button"
                             onClick={() => { setCreatingCategoriaOpen(false); setCreatingCategoriaError(null) }}
-                            className="flex-1 px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                            className="flex-1 px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
                           >
                             Cancelar
                           </button>
@@ -1445,7 +1429,7 @@ export default function CampaniaDetalle() {
                             type="button"
                             onClick={handleCreateCategoria}
                             disabled={!creatingCategoriaNombre.trim() || creatingCategoriaBusy}
-                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             {creatingCategoriaBusy && <Loader2 className="size-3 animate-spin" />}
                             Crear categoría
@@ -1463,10 +1447,10 @@ export default function CampaniaDetalle() {
                 )}
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => { setCreatingItem(null); setCreatingItemError(null) }} className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent">
+                <button type="button" onClick={() => { setCreatingItem(null); setCreatingItemError(null) }} className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent cursor-pointer">
                   Cancelar
                 </button>
-                <button type="submit" disabled={!creatingItem.nombre.trim() || creatingItemBusy || (creatingItem.kind === 'insumo' && !creatingItem.categoriaId)} className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                <button type="submit" disabled={!creatingItem.nombre.trim() || creatingItemBusy || (creatingItem.kind === 'insumo' && !creatingItem.categoriaId)} className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2 cursor-pointer">
                   {creatingItemBusy && <Loader2 className="size-4 animate-spin" />}
                   {creatingItemBusy ? 'Creando…' : 'Crear'}
                 </button>
@@ -1565,6 +1549,7 @@ function NumberInput2({
   // referencia al seleccionar un ítem) sólo cuando el input no está enfocado,
   // para no pisar lo que el usuario está escribiendo.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el display con el value del padre sólo si el usuario no está escribiendo (evita pisar lo tipeado)
     if (!focusedRef.current) setDisplay(fmt(value))
   }, [value, fmt])
   return (
@@ -1606,7 +1591,7 @@ function SaveButton({
       <button
         type="button"
         disabled
-        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm opacity-80 cursor-not-allowed"
+        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm opacity-80 cursor-not-allowed cursor-pointer"
       >
         <Loader2 className="size-4 animate-spin" />
         <span>Guardando…</span>
@@ -1618,7 +1603,7 @@ function SaveButton({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
       >
         <Save className="size-4" />
         <span>Guardar</span>
@@ -1629,7 +1614,7 @@ function SaveButton({
     <button
       type="button"
       disabled
-      className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border bg-muted/40 text-muted-foreground rounded-md text-sm font-medium cursor-not-allowed"
+      className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border bg-muted/40 text-muted-foreground rounded-md text-sm font-medium cursor-not-allowed cursor-pointer"
       title="Todos los cambios están guardados"
     >
       <Check className="size-4" />
@@ -1719,18 +1704,19 @@ interface DetalleTableProps<T extends { id: number }> {
   footer?: React.ReactNode
   /** Etiqueta (p.ej. categoría) que se muestra junto a cada opción del selector. */
   optionTag?: (o: CatalogOption) => React.ReactNode
-  /** Moneda para columnas `precio-insumo` y total en USD (insumos). */
-  moneda?: Moneda
-  onChangeMoneda?: (m: Moneda) => void
+  /** Clase de fondo de la fila según la fila (p.ej. color por prescripción). */
+  rowBgOf?: (row: T) => string
+  /** Devuelve el id de prescripción de la fila (si viene de una) para enlazarla. */
+  prescripcionIdOf?: (row: T) => number | null
   dolar?: number
-  /** Si el total está en USD, se formatea con la moneda activa (insumos). */
+  /** Si el total está en USD, se muestra convertido a pesos (insumos). */
   totalUsd?: boolean
 }
 
 function DetalleTable<T extends { id: number }>({
   title, icon: Icon, columns, rows, catalogOptions, addLabel, canAdd,
   onAdd, onChange, onRemove, onCreateNew, computedRow, totalLabel, totalValue, emptyHint, footer,
-  optionTag, moneda, onChangeMoneda, dolar, totalUsd,
+  optionTag, dolar, totalUsd, rowBgOf, prescripcionIdOf,
 }: DetalleTableProps<T>) {
   // Fusiona las opciones activas del catálogo con los ítems ya referenciados
   // por filas guardadas (que pueden estar inactivos) para no perder su nombre
@@ -1757,8 +1743,6 @@ function DetalleTable<T extends { id: number }>({
     return Array.from(map.values())
   }, [catalogOptions, rows])
 
-  const tienePrecioInsumo = columns.some((c) => c.kind === 'precio-insumo')
-
   return (
     <section className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
@@ -1767,13 +1751,10 @@ function DetalleTable<T extends { id: number }>({
           {title}
         </h2>
         <div className="flex items-center gap-2 shrink-0">
-          {tienePrecioInsumo && moneda && onChangeMoneda && (
-            <MonedaToggle value={moneda} onChange={onChangeMoneda} />
-          )}
           {canAdd && (
             <button
               onClick={onAdd}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity cursor-pointer"
             >
               <Plus className="size-3.5" strokeWidth={2} />
               {addLabel}
@@ -1808,28 +1789,46 @@ function DetalleTable<T extends { id: number }>({
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-muted/30">
-                    {columns.map((c) => (
+                rows.map((row) => {
+                  const rowCls = rowBgOf ? rowBgOf(row) : ''
+                  return (
+                    <tr key={row.id} className={`${rowCls}${rowCls ? '' : ' hover:bg-muted/30'}`}>
+                      {columns.map((c) => (
                       <td
                         key={c.key}
                         className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}
                       >
-                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow, moneda, dolar, totalUsd, optionTag })}
+                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow, dolar, totalUsd, optionTag })}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right">
-                      <button
-                        onClick={() => onRemove(row.id)}
-                        className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors"
-                        title="Eliminar"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 className="size-3.5" strokeWidth={1.75} />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        {(() => {
+                          const pid = prescripcionIdOf ? prescripcionIdOf(row) : null
+                          return pid != null ? (
+                            <Link
+                              to={`/prescripciones/${pid}`}
+                              className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-primary transition-colors"
+                              title="Ver prescripción"
+                              aria-label="Ver prescripción"
+                            >
+                              <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                            </Link>
+                          ) : null
+                        })()}
+                        <button
+                          onClick={() => onRemove(row.id)}
+                          className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors cursor-pointer"
+                          title="Eliminar"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
             {rows.length > 0 && (
@@ -1843,7 +1842,7 @@ function DetalleTable<T extends { id: number }>({
                   </td>
                   <td className="px-3 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
                     {totalUsd
-                      ? fmtPrecioInsumo(totalValue, moneda ?? 'pesos', dolar ?? 0)
+                      ? fmtPrecioInsumo(totalValue, 'pesos', dolar ?? 0)
                       : fmtMoneda(totalValue, 2)}
                   </td>
                   <td className="w-10" />
@@ -1863,7 +1862,6 @@ interface CellCtx<T> {
   onChange: (id: number, patch: Partial<T>) => void | Promise<void>
   onCreateNew: (row: T, onCreated: (id: number) => void) => void
   computedRow: (row: T) => number
-  moneda?: Moneda
   dolar?: number
   totalUsd?: boolean
   optionTag?: (o: CatalogOption) => React.ReactNode
@@ -1952,19 +1950,17 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
     )
   }
   if (col.kind === 'precio-insumo') {
-    // El valor se guarda en USD; se muestra/edita en la moneda activa usando el
-    // dólar venta. Al editar en pesos se convierte de vuelta a USD.
+    // El valor se guarda en USD; se muestra y edita siempre en pesos usando el
+    // dólar venta. Al editar se convierte de vuelta a USD para el guardado.
     const v = cellValue(col.key) as number | undefined
     const raw = typeof v === 'number' && Number.isFinite(v) ? v : 0
     const d = ctx.dolar && ctx.dolar > 0 ? ctx.dolar : 1
-    const enPesos = (ctx.moneda ?? 'pesos') === 'pesos'
     return (
       <NumberInput2
-        value={enPesos ? raw * d : raw}
+        value={raw * d}
         min={0}
         onCommit={(n) => {
-          const stored = enPesos ? n / d : n
-          ctx.onChange(row.id, { [col.key]: stored } as Partial<T>)
+          ctx.onChange(row.id, { [col.key]: n / d } as Partial<T>)
         }}
         className="w-full px-2 py-1 bg-background border border-border rounded text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
       />
@@ -1975,7 +1971,7 @@ function renderCell<T extends Record<string, unknown> & { id: number }>(
     return (
       <span className="tabular-nums text-sm text-foreground">
         {ctx.totalUsd
-          ? fmtPrecioInsumo(v, ctx.moneda ?? 'pesos', ctx.dolar ?? 0)
+          ? fmtPrecioInsumo(v, 'pesos', ctx.dolar ?? 0)
           : fmtMoneda(v, 2)}
       </span>
     )

@@ -8,6 +8,18 @@ export const TIPOS_REPORTE_LABEL: Record<TipoReporte, string> = {
   detalle_asesoramiento: 'Detalle asesoramiento',
 }
 
+/** Colores de tag por tipo de reporte (coinciden con los botones "Nuevo"). */
+export const TIPO_REPORTE_TAG_COLORS: Record<TipoReporte, string> = {
+  resumen_campania: 'bg-blue-100 text-blue-700 border-blue-200',
+  detalle_asesoramiento: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+}
+
+/** Colores de botón "Nuevo" por tipo de reporte (misma base que el tag). */
+export const TIPO_REPORTE_BUTTON_COLORS: Record<TipoReporte, string> = {
+  resumen_campania: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200',
+  detalle_asesoramiento: 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200',
+}
+
 export const TIPO_COSECHA_LABEL: Record<TipoCosecha, string> = {
   fina: 'Fina (invierno)',
   gruesa: 'Gruesa (verano)',
