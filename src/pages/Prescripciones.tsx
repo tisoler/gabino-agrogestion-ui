@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, AlertCircle, Activity, ClipboardList, MapPin, Calendar,
@@ -162,6 +162,16 @@ export default function Prescripciones() {
       })
       setConfirmTarget(null)
       await revalidarPrescripciones()
+      // Anular/recuperar agrega o quita labor/insumos a la producción
+      // (campania_insumo / campania_labor): revalidar la cache SWR de
+      // producciones (listado "campanias" y detalle /campanias/{id}).
+      await mutate(
+        (key) =>
+          (typeof key === 'string' && key.startsWith('/campanias')) ||
+          (Array.isArray(key) && key[0] === 'campanias'),
+        undefined,
+        { revalidate: true },
+      )
     } catch (e) {
       const err = e as { response?: { data?: { message?: string | string[] } } }
       const msg = err?.response?.data?.message
@@ -415,21 +425,21 @@ export default function Prescripciones() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Fecha
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Productor
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Campaña
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Campo
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Lote
-                  </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Fecha
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Productor
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Campaña
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Campo
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Lote
+                    </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Labor
                     </th>
@@ -453,44 +463,44 @@ export default function Prescripciones() {
                       onClick={() => goToDetail(p.id)}
                       className={`cursor-pointer transition-colors ${p.anulada ? 'bg-destructive/10 hover:bg-destructive/20 text-muted-foreground' : 'hover:bg-muted/40'}`}
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="flex flex-col items-center px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Calendar className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
                           <span className="text-sm text-foreground">{fmtFecha(p.fecha)}</span>
-                          {p.anulada && (
-                            <span className="inline-flex items-center px-2 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 rounded text-[10px] font-semibold uppercase tracking-wider">
-                              Anulada
-                            </span>
-                          )}
+                        </div>
+                        {p.anulada && (
+                          <span className="mt-1 inline-flex items-center px-1.5 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 rounded text-[9px] font-semibold uppercase tracking-wider">
+                            Anulada
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                          <span className="text-sm text-foreground truncate">
+                            {empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre
+                              || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
+                          </span>
                         </div>
                       </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                        <span className="text-sm text-foreground truncate">
-                          {empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre
-                            || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-foreground">
+                          {p.campania?.campania || '—'}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-foreground">
-                        {p.campania?.campania || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-foreground">
-                        {p.campania?.lote?.campo?.nombre || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <MapPin className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                        <span className="text-sm text-foreground truncate">
-                          {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-foreground">
+                          {p.campania?.lote?.campo?.nombre || '—'}
                         </span>
-                      </div>
-                    </td>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <MapPin className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                          <span className="text-sm text-foreground truncate">
+                            {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                          </span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Pickaxe className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />

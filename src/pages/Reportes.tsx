@@ -101,7 +101,90 @@ export default function Reportes() {
           <p className="text-sm text-muted-foreground">No hay reportes cargados todavía.</p>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <>
+          {/* Mobile: cards */}
+          <div className="grid grid-cols-1 gap-3 sm:hidden">
+            {reportes.map((r) => (
+              <div
+                key={r.id}
+                onClick={() => goToVer(r)}
+                className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40"
+              >
+                <div className="flex justify-between items-start gap-3">
+                  <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border rounded text-[11px] font-medium ${TIPO_REPORTE_TAG_COLORS[r.tipo]}`}>
+                      {r.tipo === 'detalle_asesoramiento' ? (
+                        <ClipboardList className="size-3" strokeWidth={1.75} />
+                      ) : (
+                        <FileBarChart className="size-3" strokeWidth={1.75} />
+                      )}
+                      {TIPOS_REPORTE_LABEL[r.tipo]}
+                    </span>
+                    {r.tipo === 'detalle_asesoramiento' && r.tipoCosecha && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-primary-soft text-primary">
+                        {r.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
+                      </span>
+                    )}
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 gap-1">
+                    <button
+                      onClick={() => goToEditar(r)}
+                      className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
+                      title="Editar"
+                      aria-label="Editar"
+                    >
+                      <Pencil className="size-3.5" strokeWidth={1.75} />
+                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => handleEliminar(r)}
+                        disabled={deletingId === r.id}
+                        className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors disabled:opacity-50 cursor-pointer"
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                      >
+                        {deletingId === r.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3.5" strokeWidth={1.75} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Productor</dt>
+                    <dd className="text-foreground truncate flex items-center gap-1.5">
+                      <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                      {r.empresaNombre}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaña</dt>
+                    <dd className="text-foreground flex items-center gap-1.5">
+                      <Calendar className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                      {r.campania}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Filas</dt>
+                    <dd className="text-foreground tabular-nums">{r.filaCount}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actualizado</dt>
+                    <dd className="text-foreground">
+                      {new Date(r.updatedAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: tabla */}
+          <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -185,6 +268,7 @@ export default function Reportes() {
             </table>
           </div>
         </div>
+        </>
       )}
     </div>
   )

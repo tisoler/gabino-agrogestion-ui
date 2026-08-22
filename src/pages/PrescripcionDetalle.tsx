@@ -1,12 +1,13 @@
-import useSWR from 'swr'
+import { useState } from 'react'
+import useSWR, { mutate } from 'swr'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Building2, MapPin,
-  Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot,
+  Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot, RotateCcw,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
-import { fmtFecha, fmtHa, fmtCantidad, convertirUnidadImpresion, type Prescripcion } from '../lib/prescripciones'
+import { fmtFecha, fmtHa, fmtDosisCantidad, type Prescripcion } from '../lib/prescripciones'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
@@ -14,6 +15,8 @@ export default function PrescripcionDetalle() {
   const params = useParams<{ id: string }>()
   const { permisos, empresas } = useAuth()
   const canRead = permisos.includes('lectura:prescripcion')
+  const canWrite = permisos.includes('escritura:prescripcion')
+  const [toggling, setToggling] = useState(false)
 
   const { data: prescripcion, error, isLoading } = useSWR<Prescripcion>(
     canRead && params.id ? `/prescripciones/${params.id}` : null,
@@ -57,12 +60,41 @@ export default function PrescripcionDetalle() {
     ? { id: idEmpresa, nombre: empresas.find((e) => e.id === idEmpresa)?.nombre || `Productor #${idEmpresa}` }
     : null
 
+  const handleToggleAnulada = async () => {
+    if (!canWrite || toggling) return
+    if (typeof window !== 'undefined' && !window.confirm(
+      prescripcion.anulada
+        ? `¿Desea recuperar la prescripción #${prescripcion.id}?`
+        : `¿Desea anular la prescripción #${prescripcion.id}?`,
+    )) return
+    setToggling(true)
+    try {
+      await api.patch(`/prescripciones/${prescripcion.id}/anulada`, {
+        anulada: !prescripcion.anulada,
+      })
+      await mutate(`/prescripciones/${prescripcion.id}`)
+      // Al anular/recuperar se quitan/reincorporan labor e insumos a la
+      // producción: revalidar la cache SWR de producciones.
+      await mutate(
+        (key) =>
+          (typeof key === 'string' && key.startsWith('/campanias')) ||
+          (Array.isArray(key) && key[0] === 'campanias'),
+        undefined,
+        { revalidate: true },
+      )
+    } catch (e) {
+      console.error('No se pudo actualizar la prescripción', e)
+    } finally {
+      setToggling(false)
+    }
+  }
+
   return (
     <>
       <style>{'@page { margin: 0; }'}</style>
       <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0 print-hide">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Link
               to="/prescripciones"
@@ -71,7 +103,7 @@ export default function PrescripcionDetalle() {
             >
               <ArrowLeft className="size-4" strokeWidth={1.75} />
             </Link>
-            <div>
+            <div className="flex gap-3">
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
                 Prescripción #{prescripcion.id}
               </h1>
@@ -81,12 +113,31 @@ export default function PrescripcionDetalle() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap justify-end items-center gap-2">
             {prescripcion.anulada && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md text-[10px] font-semibold uppercase tracking-wider text-destructive">
                 <Ban className="size-3" strokeWidth={2} />
                 Anulada
               </span>
+            )}
+            {canWrite && (
+              <button
+                onClick={handleToggleAnulada}
+                disabled={toggling}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${prescripcion.anulada
+                  ? 'text-primary border-primary/30 hover:bg-primary/10'
+                  : 'text-destructive border-destructive/30 hover:bg-destructive/10'
+                  }`}
+              >
+                {toggling ? (
+                  <Activity className="size-3.5 animate-spin" strokeWidth={2} />
+                ) : prescripcion.anulada ? (
+                  <RotateCcw className="size-3.5" strokeWidth={2} />
+                ) : (
+                  <Ban className="size-3.5" strokeWidth={2} />
+                )}
+                {toggling ? 'Procesando…' : prescripcion.anulada ? 'Recuperar' : 'Anular'}
+              </button>
             )}
             <button
               onClick={() => window.print()}
@@ -108,7 +159,7 @@ export default function PrescripcionDetalle() {
             <Calendar className="size-4 text-primary" strokeWidth={1.75} />
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Datos de la producción</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                 <Calendar className="size-3 shrink-0" strokeWidth={2} />
@@ -126,6 +177,13 @@ export default function PrescripcionDetalle() {
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                 <MapPin className="size-3 shrink-0" strokeWidth={2} />
+                Campo
+              </p>
+              <p className="text-sm text-foreground">{prescripcion.campania?.lote?.campo?.nombre || '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <LandPlot className="size-3 shrink-0" strokeWidth={2} />
                 Lote
               </p>
               <p className="text-sm text-foreground">
@@ -141,7 +199,7 @@ export default function PrescripcionDetalle() {
             </div>
 
             {prescripcion.campania && (
-              <div className="sm:col-start-2 flex justify-end">
+              <div className="flex justify-end">
                 <Link
                   to={`/campanias/${prescripcion.campania.id}`}
                   className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity cursor-pointer"
@@ -196,11 +254,8 @@ export default function PrescripcionDetalle() {
                     <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-left">
                       Insumo
                     </th>
-                    <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-left">
-                      Unidad
-                    </th>
                     <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
-                      Cantidad / ha
+                      Dosis
                     </th>
                     <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
                       Cantidad total
@@ -213,9 +268,8 @@ export default function PrescripcionDetalle() {
                       <td className="px-4 py-3 font-medium text-foreground">
                         {i.insumo?.nombre || `Insumo #${i.idInsumo}`}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{i.insumo?.unidad || '—'}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadPorHa, 3)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmtCantidad(i.cantidadTotal)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 3)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtDosisCantidad(i.cantidadTotal, i.insumo?.unidad)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -243,6 +297,10 @@ export default function PrescripcionDetalle() {
               <dd>{empresa?.nombre || '—'}</dd>
             </div>
             <div>
+              <dt>Campo</dt>
+              <dd>{prescripcion.campania?.lote?.campo?.nombre || '—'}</dd>
+            </div>
+            <div>
               <dt>Lote</dt>
               <dd>
                 {prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`}
@@ -251,10 +309,6 @@ export default function PrescripcionDetalle() {
             <div>
               <dt>Cultivo</dt>
               <dd>{prescripcion.campania?.cultivo?.nombre || '—'}</dd>
-            </div>
-            <div>
-              <dt>Campaña</dt>
-              <dd>{prescripcion.campania?.campania || '—'}</dd>
             </div>
             <div>
               <dt>Labor</dt>
@@ -270,28 +324,23 @@ export default function PrescripcionDetalle() {
             <thead>
               <tr>
                 <th>Insumo</th>
-                <th>Unidad</th>
-                <th className="text-right">Cantidad / ha</th>
+                <th className="text-right">Dosis</th>
                 <th className="text-right">Cantidad total</th>
               </tr>
             </thead>
             <tbody>
               {prescripcion.insumos.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>Esta prescripción no tiene insumos.</td>
+                  <td colSpan={3}>Esta prescripción no tiene insumos.</td>
                 </tr>
               ) : (
-                prescripcion.insumos.map((i) => {
-                  const c = convertirUnidadImpresion(i.cantidadPorHa, i.cantidadTotal, i.insumo?.unidad)
-                  return (
-                    <tr key={i.id}>
-                      <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
-                      <td>{c.unidad || '—'}</td>
-                      <td className="text-right">{fmtCantidad(c.cantidadPorHa, 3)}</td>
-                      <td className="text-right">{fmtCantidad(c.cantidadTotal)}</td>
-                    </tr>
-                  )
-                })
+                prescripcion.insumos.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
+                    <td className="text-right">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 2)}</td>
+                    <td className="text-right">{fmtDosisCantidad(i.cantidadTotal, i.insumo?.unidad, 2)}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

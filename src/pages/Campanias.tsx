@@ -385,9 +385,85 @@ export default function Campanias() {
           )}
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+        <>
+          {/* Mobile: cards */}
+          <div className="grid grid-cols-1 gap-3 sm:hidden">
+            {campanias.map((c) => {
+              const margenNegativo = c.totales.margenBrutoSAlquilerLote < 0
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => goToDetail(c.id)}
+                  className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-foreground leading-tight truncate">
+                        {c.lote?.descripcion || `Lote #${c.idLote}`}
+                      </h3>
+                    </div>
+                    <span className="shrink-0 inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
+                      {c.campania}
+                    </span>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Productor</dt>
+                      <dd className="text-foreground truncate">
+                        {empresas.find((e) => e.id === c.lote?.idEmpresa)?.nombre
+                          || `Productor #${c.lote?.idEmpresa ?? '—'}`}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</dt>
+                      <dd className="text-foreground truncate">{c.lote?.campo?.nombre || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo</dt>
+                      <dd className="text-foreground truncate">
+                        {c.cultivo?.nombre || `Cultivo #${c.idCultivo}`}
+                        {c.variedad && (
+                          <span className="block text-[11px] text-muted-foreground truncate">{c.variedad.nombre}</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="pt-3 border-t border-border grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sup. Sem.</span>
+                      <span className="tabular-nums text-foreground">
+                        {fmtNumero(c.totales.supSembrada, 2)}
+                        <span className="text-[10px] text-muted-foreground ml-0.5">ha</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rend.</span>
+                      <span className="tabular-nums text-foreground">{fmtQQHa(c.totales.rendimientoQqHa, 2)}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Margen / ha</span>
+                      <span className={`tabular-nums font-medium ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
+                        {fmtMoneda(c.totales.margenBrutoSAlquilerHa, 0)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Margen lote</span>
+                      <span className={`tabular-nums font-medium ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
+                        {fmtMoneda(c.totales.margenBrutoSAlquilerLote, 0)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop: tabla */}
+          <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -481,7 +557,8 @@ export default function Campanias() {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   )

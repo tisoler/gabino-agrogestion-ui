@@ -42,38 +42,40 @@ export const fmtCantidad = (v: number | null | undefined, decimales = 2): string
   v == null || Number.isNaN(v) ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: decimales })
 
 /**
- * Convierte cantidad y unidad de un insumo para la impresión.
- * La decisión se toma por fila según la cantidad por ha:
- *  - si la cantidad/ha es < 1 y la unidad es "kg" → ambas cantidades se muestran
- *    en gramos (×1000, "gr").
- *  - si la cantidad/ha es < 1 y la unidad es "lt" → ambas cantidades se muestran
- *    en cc (×1000, "cc").
- * Así la fila queda consistente (misma unidad para cantidad/ha y total).
- * Solo afecta la impresión; la vista conserva los valores originales.
+ * Conversión de cantidad y unidad para mostrar (columna "Dosis" y
+ * "Cantidad total").
+ *
+ * La conversión a gr/cc (×1000) se evalúa de forma INDEPENDIENTE para cada
+ * valor: si el valor es < 1 y la unidad original es "kg" o "lt", se muestra
+ * en gramos/cc. Así una dosis de 0,5 lt se ve "500 cc" aunque el total sea
+ * 150 lt (que se sigue viendo "150 lt").
  */
-export function convertirUnidadImpresion(
-  cantidadPorHa: number | null | undefined,
-  cantidadTotal: number | null | undefined,
+export function convertirUnidadImpresionValor(
+  valor: number | null | undefined,
   unidad: string | null | undefined,
-): { cantidadPorHa: number | null; cantidadTotal: number | null; unidad: string | null } {
+): { valor: number | null; unidad: string | null } {
   const u = (unidad || '').toLowerCase()
-  const convertir =
-    cantidadPorHa != null && Number.isFinite(cantidadPorHa) && cantidadPorHa < 1 && (u === 'kg' || u === 'lt')
-
-  if (!convertir) {
-    return {
-      cantidadPorHa: cantidadPorHa ?? null,
-      cantidadTotal: cantidadTotal ?? null,
-      unidad: unidad ?? null,
-    }
+  if (u !== 'kg' && u !== 'lt') {
+    return { valor: valor ?? null, unidad: u ? (unidad ?? null) : null }
   }
-
-  const factor = 1000
-  return {
-    cantidadPorHa: cantidadPorHa != null ? cantidadPorHa * factor : null,
-    cantidadTotal: cantidadTotal != null ? cantidadTotal * factor : null,
-    unidad: u === 'kg' ? 'gr' : 'cc',
+  if (valor != null && Number.isFinite(valor) && valor < 1) {
+    return { valor: valor * 1000, unidad: u === 'kg' ? 'gr' : 'cc' }
   }
+  return { valor: valor ?? null, unidad: u }
+}
+
+/**
+ * Formatea un valor con su unidad (ej. "0,5 kg" o "500 cc"). Sin unidad
+ * devuelve sólo el número.
+ */
+export function fmtDosisCantidad(
+  valor: number | null | undefined,
+  unidad: string | null | undefined,
+  decimales = 2,
+): string {
+  const c = convertirUnidadImpresionValor(valor, unidad)
+  const numero = fmtCantidad(c.valor, decimales)
+  return c.unidad ? `${numero} ${c.unidad}` : numero
 }
 
 export const fmtFecha = (fecha: string | undefined | null): string => {

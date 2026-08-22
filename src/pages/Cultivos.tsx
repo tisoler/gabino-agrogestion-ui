@@ -302,7 +302,180 @@ export default function Cultivos() {
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Cargando cultivos...</p>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <>
+          {/* Mobile: cards */}
+          <div className="grid grid-cols-1 gap-3 sm:hidden">
+            {filteredCultivos?.map((cultivo) => (
+              <div
+                key={cultivo.id}
+                className={`bg-card border border-border rounded-lg p-4 space-y-3 ${!cultivo.activo ? 'bg-muted/20 opacity-60' : ''
+                  }`}
+              >
+                <div className="flex justify-between items-start gap-3">
+                  <h3 className="text-base font-semibold text-foreground leading-tight truncate min-w-0">
+                    {cultivo.nombre}
+                  </h3>
+                  {cultivo.variedades.length > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleExpand(cultivo.id) }}
+                      className="p-1 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                      aria-label={expandedCrops.has(cultivo.id) ? 'Contraer' : 'Expandir'}
+                    >
+                      {expandedCrops.has(cultivo.id) ? (
+                        <ChevronUp className="size-4" strokeWidth={1.75} />
+                      ) : (
+                        <ChevronDown className="size-4" strokeWidth={1.75} />
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${cultivo.activo
+                      ? 'bg-success-soft text-success'
+                      : 'bg-destructive-soft text-destructive'
+                      }`}
+                  >
+                    {cultivo.activo ? 'Activo' : 'Inactivo'}
+                  </span>
+                  {cultivo.idEmpresa === null ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
+                      <Globe className="size-3" strokeWidth={2} />
+                      Global
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning-soft text-warning-foreground text-[10px] font-semibold uppercase tracking-wider rounded">
+                      <Sprout className="size-3" strokeWidth={2} />
+                      {isAdmin || isAsesor
+                        ? `${empresas.find((e) => e.id === cultivo.idEmpresa)?.nombre || 'Productor'} · ${cultivo.idEmpresa}`
+                        : 'Mi productor'}
+                    </span>
+                  )}
+                  {cultivo.tipoCosecha && (
+                    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${cultivo.tipoCosecha === 'fina'
+                      ? 'bg-info-soft text-info'
+                      : 'bg-warning-soft text-warning-foreground'
+                      }`}>
+                      {cultivo.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
+                    </span>
+                  )}
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Variedades</dt>
+                    <dd>
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                        {cultivo.variedades.length} {cultivo.variedades.length === 1 ? 'variedad' : 'variedades'}
+                      </span>
+                    </dd>
+                  </div>
+                </dl>
+
+                {expandedCrops.has(cultivo.id) && (
+                  <div className="space-y-2 border-l-2 border-primary/30 pl-4 py-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Variedades de {cultivo.nombre}
+                    </h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      {cultivo.variedades.map((v) => (
+                        <div
+                          key={v.id}
+                          className={`flex items-center justify-between p-2.5 bg-card border border-border rounded-md ${!v.activo ? 'opacity-60' : ''
+                            }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Layers className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                            <span className="text-sm font-medium text-foreground truncate">{v.nombre}</span>
+                            {!v.activo && (
+                              <span className="px-1.5 py-0.5 bg-destructive-soft text-destructive text-[9px] font-semibold uppercase tracking-wider rounded">
+                                Inactivo
+                              </span>
+                            )}
+                          </div>
+                          {isEditable(cultivo) && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleOpenVarietyModal(cultivo, v) }}
+                                className="p-1 rounded text-primary hover:bg-primary-soft transition-colors cursor-pointer"
+                                title="Editar"
+                                aria-label="Editar"
+                              >
+                                <Pencil className="size-3" strokeWidth={1.75} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleToggleActivo(v, 'variedad') }}
+                                className={`p-1 rounded cursor-pointer transition-colors ${v.activo
+                                  ? 'text-success hover:bg-success-soft'
+                                  : 'text-muted-foreground hover:bg-muted'
+                                  }`}
+                                title={v.activo ? 'Desactivar' : 'Activar'}
+                                aria-label={v.activo ? 'Desactivar' : 'Activar'}
+                              >
+                                {v.activo ? (
+                                  <ToggleRight className="size-4" strokeWidth={1.75} />
+                                ) : (
+                                  <ToggleLeft className="size-4" strokeWidth={1.75} />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-border flex justify-between items-center">
+                  {isEditable(cultivo) ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenVarietyModal(cultivo) }}
+                        className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
+                        title="Agregar variedad"
+                        aria-label="Agregar variedad"
+                      >
+                        <Plus className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenModal(cultivo) }}
+                        className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer"
+                        title="Editar"
+                        aria-label="Editar"
+                      >
+                        <Pencil className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleActivo(cultivo, 'cultivo') }}
+                        className={`p-1.5 rounded-md cursor-pointer transition-colors ${cultivo.activo
+                          ? 'text-success hover:bg-success-soft'
+                          : 'text-muted-foreground hover:bg-muted'
+                          }`}
+                        title={cultivo.activo ? 'Desactivar' : 'Activar'}
+                        aria-label={cultivo.activo ? 'Desactivar' : 'Activar'}
+                      >
+                        {updatingIds.has(cultivo.id) ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : cultivo.activo ? (
+                          <ToggleRight className="size-4" strokeWidth={1.75} />
+                        ) : (
+                          <ToggleLeft className="size-4" strokeWidth={1.75} />
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="p-1.5 rounded-md bg-muted text-muted-foreground inline-flex" title="Solo lectura">
+                      <Lock className="size-3.5" strokeWidth={1.75} />
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: tabla */}
+          <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -507,6 +680,7 @@ export default function Cultivos() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {isModalOpen && (
