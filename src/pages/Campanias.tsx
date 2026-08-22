@@ -183,7 +183,7 @@ export default function Campanias() {
 
   // Totales globales (para el header del dashboard)
   const totalesGlobales = useMemo(() => {
-    const superficie = campanias.reduce((acc, c) => acc + (c.totales.supCosechada || 0), 0)
+    const superficie = campanias.reduce((acc, c) => acc + (c.totales.supSembrada || 0), 0)
     const margen = campanias.reduce((acc, c) => acc + (c.totales.margenBrutoSAlquilerLote || 0), 0)
     return { superficie, margen, cantidad: campanias.length }
   }, [campanias])
@@ -463,7 +463,7 @@ export default function Campanias() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {fmtNumero(c.totales.supCosechada, 2)}
+                        {fmtNumero(c.totales.supSembrada, 2)}
                         <span className="text-[10px] text-muted-foreground ml-0.5">ha</span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-sm">
