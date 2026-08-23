@@ -67,4 +67,14 @@ api.interceptors.response.use(
 // fetcher para SWR
 export const fetcher = (url: string) => api.get(url).then(res => res.data)
 
+/**
+ * Detecta errores de acceso (401 sin sesión, 403 sin permiso sobre la
+ * empresa/emisor, 404 inexistente). Las vistas de detalle lo usan para
+ * redirigir al listado en esos casos.
+ */
+export const esErrorDeAcceso = (e: unknown): boolean => {
+  const status = (e as AxiosError)?.response?.status
+  return status === 401 || status === 403 || status === 404
+}
+
 export default api

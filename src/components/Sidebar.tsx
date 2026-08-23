@@ -20,6 +20,7 @@ import {
   ClipboardList,
   FileBarChart,
   Settings,
+  MessagesSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/auth-context'
@@ -68,6 +69,7 @@ const NAV_GROUPS: NavItem[][] = [
     { to: '/costos', label: 'Costos', icon: DollarSign, permission: 'lectura:costo', ocultarParaProductor: true },
   ],
   [
+    { to: '/mensajes-masivos', label: 'Mensajes', icon: MessagesSquare, permission: 'lectura:mensaje-masivo' },
     { to: '/configuracion', label: 'Configuración', icon: Settings, soloSysAdmin: true },
   ],
 ]

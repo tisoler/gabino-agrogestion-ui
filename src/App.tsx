@@ -21,6 +21,9 @@ import ReporteResumen from './pages/ReporteResumen'
 import ReporteDetalle from './pages/ReporteDetalle'
 import ReporteVer from './pages/ReporteVer'
 import Configuracion from './pages/Configuracion'
+import MensajesMasivos from './pages/MensajesMasivos'
+import MensajeMasivoNuevo from './pages/MensajeMasivoNuevo'
+import MensajeMasivoDetalle from './pages/MensajeMasivoDetalle'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -65,6 +68,9 @@ function App() {
               <Route path="/reportes/detalle" element={<ReporteDetalle />} />
               <Route path="/reportes/ver/:id" element={<ReporteVer />} />
               <Route path="/configuracion" element={<Configuracion />} />
+              <Route path="/mensajes-masivos" element={<MensajesMasivos />} />
+              <Route path="/mensajes-masivos/nueva" element={<MensajeMasivoNuevo />} />
+              <Route path="/mensajes-masivos/:id" element={<MensajeMasivoDetalle />} />
               {/* Add more routes here */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

@@ -5,7 +5,7 @@ import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X, ArrowUpRight,
   Sprout, MapPin, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { UNIDADES_PRECIO, colorCategoria, colorPrescripcion } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
@@ -364,11 +364,17 @@ export default function CampaniaDetalle() {
   // este flag, el useEffect de abajo re-sincronizaría TODO el state desde
   // el servidor — pisando los deletes pendientes, las ediciones sin guardar
   // y haciendo que la fila borrada "vuelva".
-  const { data: campania, isLoading: loadingCampania } = useSWR<Campania>(
+  const { data: campania, isLoading: loadingCampania, error: errorCampania } = useSWR<Campania>(
     canRead && !isNew ? `/campanias/${params.id}` : null,
     fetcher,
     { revalidateOnFocus: false }
   )
+
+  // Sin permiso sobre la empresa (403), inexistente (404) o sin sesión (401):
+  // volver al listado (también aplica a admins con un id inválido).
+  useEffect(() => {
+    if (errorCampania && esErrorDeAcceso(errorCampania)) navigate('/campanias', { replace: true })
+  }, [errorCampania, navigate])
 
   // Además del flag de SWR, el effect de abajo se protege con un ref para
   // que una re-validación posterior (por ejemplo, después de un PATCH

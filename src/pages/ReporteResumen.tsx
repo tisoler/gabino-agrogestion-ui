@@ -4,7 +4,7 @@ import useSWR from 'swr'
 import {
   Loader2, ArrowLeft, AlertCircle, FileBarChart, Sprout,
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { esErrorDeAcceso } from '../lib/api'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useAuth } from '../contexts/auth-context'
 import { periodosCampania } from '../lib/campanias'
@@ -108,10 +108,19 @@ export default function ReporteResumen() {
         setCampania(d.campania)
         setEditFilas(d.filas)
       })
-      .catch((e) => setError(mensajeError(e, 'No se pudo cargar el reporte.')))
+      .catch((e) => {
+        if (cancelled) return
+        // Sin permiso sobre la empresa (403), inexistente (404) o sin sesión
+        // (401): volver al listado.
+        if (esErrorDeAcceso(e)) {
+          navigate('/reportes', { replace: true })
+          return
+        }
+        setError(mensajeError(e, 'No se pudo cargar el reporte.'))
+      })
       .finally(() => !cancelled && setCargandoEdit(false))
     return () => { cancelled = true }
-  }, [editId])
+  }, [editId, navigate])
 
   // Auto-agregar todos los sets campo+lote al elegir productor + campaña
   // (o al cargar la edición). Se reconstruye una vez por combinación.

@@ -1,9 +1,10 @@
-import { useParams, Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import {
   ArrowLeft, Printer, Pencil, AlertCircle, Loader2, Building2, Calendar, FileBarChart, ClipboardList, ArrowUpRight,
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import {
   TIPOS_REPORTE_LABEL, fmtPesos,
@@ -17,6 +18,7 @@ const decimalAPct = (v: number): string => String(Math.round(v * 10000) / 100)
 
 export default function ReporteVer() {
   const params = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { permisos } = useAuth()
   const canRead = permisos.includes('lectura:reporte')
   const canWrite = permisos.includes('escritura:reporte')
@@ -25,6 +27,12 @@ export default function ReporteVer() {
     canRead && params.id ? `/reportes/${params.id}` : null,
     fetcher,
   )
+
+  // Sin permiso sobre la empresa (403), inexistente (404) o sin sesión (401):
+  // volver al listado.
+  useEffect(() => {
+    if (error && esErrorDeAcceso(error)) navigate('/reportes', { replace: true })
+  }, [error, navigate])
 
   if (!canRead) {
     return (
@@ -46,6 +54,7 @@ export default function ReporteVer() {
   }
 
   if (error || !reporte) {
+    if (error && esErrorDeAcceso(error)) return null // redirigiendo al listado
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
         <AlertCircle className="size-10 text-destructive mb-4" strokeWidth={1.5} />

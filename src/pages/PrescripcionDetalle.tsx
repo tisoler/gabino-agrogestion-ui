@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR, { mutate } from 'swr'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Building2, MapPin,
   Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot, RotateCcw,
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { fmtFecha, fmtHa, fmtDosisCantidad, type Prescripcion } from '../lib/prescripciones'
 
@@ -13,6 +13,7 @@ const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
 export default function PrescripcionDetalle() {
   const params = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { permisos, empresas } = useAuth()
   const canRead = permisos.includes('lectura:prescripcion')
   const canWrite = permisos.includes('escritura:prescripcion')
@@ -22,6 +23,12 @@ export default function PrescripcionDetalle() {
     canRead && params.id ? `/prescripciones/${params.id}` : null,
     fetcher
   )
+
+  // Sin permiso sobre la empresa (403), inexistente (404) o sin sesión (401):
+  // volver al listado.
+  useEffect(() => {
+    if (error && esErrorDeAcceso(error)) navigate('/prescripciones', { replace: true })
+  }, [error, navigate])
 
   if (!canRead) {
     return (
@@ -43,6 +50,7 @@ export default function PrescripcionDetalle() {
   }
 
   if (error || !prescripcion) {
+    if (error && esErrorDeAcceso(error)) return null // redirigiendo al listado
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
         <AlertCircle className="size-10 text-destructive mb-4" strokeWidth={1.5} />
