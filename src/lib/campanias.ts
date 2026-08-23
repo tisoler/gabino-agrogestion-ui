@@ -193,16 +193,21 @@ export function costoTotalCostoRowHa(item: CampaniaCostoDetalle): number {
  *  * Costos: por ha basada en sup. sembrada (labores, insumos, costos varios)
  *  * Alquiler: alquiler (qq/ha) × precio, también por ha
  *
- * Los multiplicadores para los totales por lote respetan el área relevante:
- *  * Ingreso neto, cosecha y alquiler se multiplican por sup. cosechada
- *  * Labores / insumos / costos varios se multiplican por sup. sembrada
- *  * Si las dos superficies son iguales (caso del .xls), el resultado coincide.
+ * Los costos de insumos se guardan en USD (el campo `costoUnidad` de
+ * campania_insumo es USD). Para que los indicadores queden en pesos (como el
+ * resto), `dolarInsumo` (dólar venta) convierte los totales de insumos.
+ *
+ * Todas las columnas $/lote se obtienen multiplicando el $/ha de su ítem por
+ * la superficie sembrada.
  */
-export function calcularResultados(c: Pick<Campania,
-  'supSembrada' | 'supCosechada' | 'prodNetaTotalQq' | 'precioXQq' |
-  'comercializacionPct' | 'cosechaXHa' | 'alquilerQqHa' |
-  'labores' | 'insumos' | 'costos'
->): ResultadosCampania {
+export function calcularResultados(
+  c: Pick<Campania,
+    'supSembrada' | 'supCosechada' | 'prodNetaTotalQq' | 'precioXQq' |
+    'comercializacionPct' | 'cosechaXHa' | 'alquilerQqHa' |
+    'labores' | 'insumos' | 'costos'
+  >,
+  dolarInsumo = 1,
+): ResultadosCampania {
   const supSembrada = num(c.supSembrada)
   const supCosechada = num(c.supCosechada)
   const prodNeta = num(c.prodNetaTotalQq)
@@ -210,6 +215,7 @@ export function calcularResultados(c: Pick<Campania,
   const comercPct = num(c.comercializacionPct)
   const cosechaHa = num(c.cosechaXHa)
   const alquilerQqHa = num(c.alquilerQqHa)
+  const dInsumo = num(dolarInsumo) || 1
 
   const rendimientoQqHa = supCosechada > 0 ? prodNeta / supCosechada : 0
   const ingresoNetoHa = rendimientoQqHa * precio * (1 - comercPct / 100)
@@ -219,7 +225,7 @@ export function calcularResultados(c: Pick<Campania,
   )
   const costoTotalInsumosHa = (c.insumos || []).reduce(
     (acc, i) => acc + costoPonderadoInsumoRowHa(i, supSembrada), 0
-  )
+  ) * dInsumo
   const costoTotalCostosHa = (c.costos || []).reduce(
     (acc, k) => acc + costoTotalCostoRowHa(k), 0
   )
@@ -234,10 +240,10 @@ export function calcularResultados(c: Pick<Campania,
     rendimientoQqHa,
 
     ingresoNetoHa,
-    ingresoNetoLote: ingresoNetoHa * supCosechada,
+    ingresoNetoLote: ingresoNetoHa * supSembrada,
 
     costoCosechaHa: cosechaHa,
-    costoCosechaLote: cosechaHa * supCosechada,
+    costoCosechaLote: cosechaHa * supSembrada,
 
     costoTotalLaboresHa,
     costoTotalLaboresLote: costoTotalLaboresHa * supSembrada,
@@ -249,20 +255,16 @@ export function calcularResultados(c: Pick<Campania,
     costoTotalCostosLote: costoTotalCostosHa * supSembrada,
 
     totalCostosDirectosHa,
-    totalCostosDirectosLote:
-      cosechaHa * supCosechada +
-      costoTotalLaboresHa * supSembrada +
-      costoTotalInsumosHa * supSembrada +
-      costoTotalCostosHa * supSembrada,
+    totalCostosDirectosLote: totalCostosDirectosHa * supSembrada,
 
     costoAlquilerHa,
-    costoAlquilerLote: costoAlquilerHa * supCosechada,
+    costoAlquilerLote: costoAlquilerHa * supSembrada,
 
     margenBrutoSAlquilerHa,
-    margenBrutoSAlquilerLote: margenBrutoSAlquilerHa * supCosechada,
+    margenBrutoSAlquilerLote: margenBrutoSAlquilerHa * supSembrada,
 
     margenBrutoCAlquilerHa,
-    margenBrutoCAlquilerLote: margenBrutoCAlquilerHa * supCosechada,
+    margenBrutoCAlquilerLote: margenBrutoCAlquilerHa * supSembrada,
   }
 }
 

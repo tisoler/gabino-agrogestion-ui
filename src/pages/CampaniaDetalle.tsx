@@ -460,7 +460,15 @@ export default function CampaniaDetalle() {
     cosechaXHa: parseFloat(cabecera.cosechaXHa) || 0,
     alquilerQqHa: parseFloat(cabecera.alquilerQqHa) || 0,
     labores, insumos, costos,
-  }), [cabecera, labores, insumos, costos])
+  }, dolarVenta > 0 ? dolarVenta : 1), [cabecera, labores, insumos, costos, dolarVenta])
+
+  // Total de insumos por ha en USD: la tabla lo convierte a pesos con el dólar
+  // venta para su footer (resultados.costoTotalInsumosHa ya incluye el dólar).
+  const supSembradaNum = parseFloat(cabecera.supSembrada) || 0
+  const insumosTotalUsdHa = useMemo(
+    () => insumos.reduce((acc, i) => acc + costoPonderadoInsumoRowHa(i, supSembradaNum), 0),
+    [insumos, supSembradaNum],
+  )
 
   // Prescripciones presentes en la producción: dan el color de agrupación de
   // las filas de labor e insumo que las originaron.
@@ -1175,7 +1183,7 @@ export default function CampaniaDetalle() {
             onCreateNew={(row) => { nuevoInsumoRowIdRef.current = row.id; setNuevoInsumoOpen(true) }}
             computedRow={(i) => costoPonderadoInsumoRowHa(i, parseFloat(cabecera.supSembrada) || 0)}
             totalLabel="Costo total de insumos"
-            totalValue={resultados.costoTotalInsumosHa}
+            totalValue={insumosTotalUsdHa}
             rowBgOf={(row) => colorPrescripcion((row as { idPrescripcion?: number | null }).idPrescripcion, prescripcionIds)}
             prescripcionIdOf={(row) => (row as { idPrescripcion?: number | null }).idPrescripcion ?? null}
             emptyHint={catalogInsumos.length === 0 ? 'No hay insumos disponibles para este productor. Creá uno primero desde la sección Insumos.' : undefined}
