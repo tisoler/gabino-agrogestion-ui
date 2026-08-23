@@ -47,6 +47,7 @@ export interface ResumenFila {
   id: number | null
   idLote: number
   loteNombre: string
+  campoNombre: string | null
   idProduccionFina: number | null
   cultivoFinaNombre: string | null
   idProduccionGruesa: number | null
@@ -67,6 +68,7 @@ export interface DetalleFila {
   id: number | null
   idLote: number
   loteNombre: string
+  campoNombre: string | null
   idProduccion: number | null
   cultivoNombre: string
   produccionQq: number | null
@@ -114,6 +116,7 @@ export interface ProduccionCandidata {
   id: number
   idLote: number
   loteDescripcion: string
+  campoNombre: string | null
   idCultivo: number
   cultivoNombre: string
   tipoCosecha: TipoCosecha | null
@@ -123,8 +126,14 @@ export interface ProduccionCandidata {
   precioXQq: number
 }
 
+export interface ProduccionLote {
+  id: number
+  descripcion: string | null
+  campoNombre: string | null
+}
+
 export interface ProduccionesReporte {
-  lotes: Array<{ id: number; descripcion: string | null }>
+  lotes: ProduccionLote[]
   producciones: ProduccionCandidata[]
 }
 

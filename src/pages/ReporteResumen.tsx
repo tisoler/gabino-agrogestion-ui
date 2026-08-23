@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 import {
-  Plus, Trash2, Loader2, ArrowLeft, AlertCircle, FileBarChart, MapPin, Sprout,
+  Loader2, ArrowLeft, AlertCircle, FileBarChart, Sprout,
 } from 'lucide-react'
 import api from '../lib/api'
 import SelectAutocomplete from '../components/SelectAutocomplete'
@@ -11,13 +11,63 @@ import { periodosCampania } from '../lib/campanias'
 import {
   getProducciones, crearReporte, actualizarReporte,
   fmtPesos, mensajeError,
-  type ProduccionesReporte, type ResumenFila, type ResumenTotales,
+  type ProduccionesReporte, type ProduccionCandidata, type ResumenFila, type ResumenTotales,
 } from '../lib/reportes'
 
 interface FilaResumen {
   idLote: number | ''
   idProduccionFina: number | ''
   idProduccionGruesa: number | ''
+  incluido: boolean
+}
+
+interface ResumenSavedFila {
+  idLote: number
+  idProduccionFina: number | null
+  idProduccionGruesa: number | null
+}
+
+/**
+ * Arma las filas automáticas: un set campo+lote por cada lote con al menos una
+ * producción fina y/o gruesa. En creación todos quedan incluidos; en edición
+ * sólo los que tiene el reporte guardado.
+ */
+function buildFilasResumen(
+  prods: ProduccionesReporte,
+  saved?: ResumenSavedFila[],
+): FilaResumen[] {
+  const porLote = new Map<number, ProduccionCandidata[]>()
+  for (const p of prods.producciones) {
+    if (p.tipoCosecha !== 'fina' && p.tipoCosecha !== 'gruesa') continue
+    if (!porLote.has(p.idLote)) porLote.set(p.idLote, [])
+    porLote.get(p.idLote)!.push(p)
+  }
+  const incluidos = new Set((saved || []).map((s) => s.idLote))
+  return prods.lotes
+    .filter((l) => porLote.has(l.id))
+    .map((l): FilaResumen | null => {
+      const finas = (porLote.get(l.id) || []).filter((p) => p.tipoCosecha === 'fina')
+      const gruesas = (porLote.get(l.id) || []).filter((p) => p.tipoCosecha === 'gruesa')
+      if (finas.length === 0 && gruesas.length === 0) return null
+      const savedRow = saved?.find((s) => s.idLote === l.id)
+      return {
+        idLote: l.id,
+        idProduccionFina:
+          savedRow?.idProduccionFina != null && finas.some((p) => p.id === savedRow.idProduccionFina)
+            ? savedRow.idProduccionFina
+            : finas.length === 1
+              ? finas[0].id
+              : '',
+        idProduccionGruesa:
+          savedRow?.idProduccionGruesa != null && gruesas.some((p) => p.id === savedRow.idProduccionGruesa)
+            ? savedRow.idProduccionGruesa
+            : gruesas.length === 1
+              ? gruesas[0].id
+              : '',
+        incluido: saved ? incluidos.has(l.id) : true,
+      }
+    })
+    .filter((x): x is FilaResumen => x !== null)
 }
 
 const labelCls = 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1'
@@ -33,9 +83,11 @@ export default function ReporteResumen() {
   const [empresaId, setEmpresaId] = useState<number | ''>('')
   const [campania, setCampania] = useState(() => periodosCampania()[0] || '')
   const [filas, setFilas] = useState<FilaResumen[]>([])
+  const [editFilas, setEditFilas] = useState<ResumenSavedFila[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cargandoEdit, setCargandoEdit] = useState(false)
+  const autoBuildRef = useRef<string | null>(null)
 
   const { data: producciones, isLoading: loadingProducciones } = useSWR<ProduccionesReporte>(
     empresaId !== '' ? ['reportes/producciones', empresaId, campania] : null,
@@ -51,71 +103,69 @@ export default function ReporteResumen() {
       .get(`/reportes/${editId}`)
       .then((r) => {
         if (cancelled) return
-        const d = r.data as { idEmpresa: number; campania: string; filas: ResumenFila[] }
+        const d = r.data as { idEmpresa: number; campania: string; filas: ResumenSavedFila[] }
         setEmpresaId(d.idEmpresa)
         setCampania(d.campania)
-        setFilas(
-          d.filas.map((f) => ({
-            idLote: f.idLote,
-            idProduccionFina: f.idProduccionFina ?? '',
-            idProduccionGruesa: f.idProduccionGruesa ?? '',
-          })),
-        )
+        setEditFilas(d.filas)
       })
       .catch((e) => setError(mensajeError(e, 'No se pudo cargar el reporte.')))
       .finally(() => !cancelled && setCargandoEdit(false))
     return () => { cancelled = true }
   }, [editId])
 
+  // Auto-agregar todos los sets campo+lote al elegir productor + campaña
+  // (o al cargar la edición). Se reconstruye una vez por combinación.
+  useEffect(() => {
+    if (empresaId === '' || !producciones) return
+    const key = `${empresaId}|${campania}|${editId ?? ''}|${editFilas?.length ?? -1}`
+    if (autoBuildRef.current === key) return
+    autoBuildRef.current = key
+    setFilas(buildFilasResumen(producciones, editFilas ?? undefined))
+  }, [producciones, empresaId, campania, editFilas, editId])
+
   const produccionesDeLote = (loteId: number | '', tipo: 'fina' | 'gruesa') =>
     loteId === '' || !producciones
       ? []
       : producciones.producciones.filter((p) => p.idLote === Number(loteId) && p.tipoCosecha === tipo)
 
-  const addFila = () => {
-    setFilas((prev) => [...prev, { idLote: '', idProduccionFina: '', idProduccionGruesa: '' }])
-  }
-
   const updateFila = (idx: number, patch: Partial<FilaResumen>) => {
     setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...patch } : f)))
   }
 
-  const removeFila = (idx: number) => {
-    setFilas((prev) => prev.filter((_, i) => i !== idx))
+  const toggleFila = (idx: number) => {
+    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, incluido: !f.incluido } : f)))
   }
 
-  // Al elegir el lote, si hay una sola producción de un tipo, se auto-carga.
-  const handleLoteChange = (idx: number, value: number | '') => {
-    const finas = produccionesDeLote(value, 'fina')
-    const gruesas = produccionesDeLote(value, 'gruesa')
-    updateFila(idx, {
-      idLote: value,
-      idProduccionFina: finas.length === 1 ? finas[0].id : '',
-      idProduccionGruesa: gruesas.length === 1 ? gruesas[0].id : '',
-    })
+  // Al elegir otra producción de un tipo, si hay una sola opción se auto-elige.
+  const handleProduccionChange = (idx: number, tipo: 'fina' | 'gruesa', valor: number | '') => {
+    updateFila(idx, tipo === 'fina' ? { idProduccionFina: valor } : { idProduccionGruesa: valor })
   }
 
   // Tabla calculada en vivo a partir de las producciones seleccionadas.
   const derivado = useMemo<{ filas: ResumenFila[]; totales: ResumenTotales } | null>(() => {
     if (!producciones) return null
-    const filasCalc: ResumenFila[] = filas.map((f) => {
-      const fina = producciones.producciones.find((p) => p.id === f.idProduccionFina)
-      const gruesa = producciones.producciones.find((p) => p.id === f.idProduccionGruesa)
-      const superficie = fina?.supSembrada ?? gruesa?.supSembrada ?? 0
-      const margenLote = (fina?.margenBrutoSAlquilerLote ?? 0) + (gruesa?.margenBrutoSAlquilerLote ?? 0)
-      return {
-        id: null,
-        idLote: f.idLote === '' ? 0 : Number(f.idLote),
-        loteNombre: fina?.loteDescripcion ?? gruesa?.loteDescripcion ?? `Lote #${f.idLote || '—'}`,
-        idProduccionFina: f.idProduccionFina === '' ? null : f.idProduccionFina,
-        cultivoFinaNombre: fina?.cultivoNombre ?? null,
-        idProduccionGruesa: f.idProduccionGruesa === '' ? null : f.idProduccionGruesa,
-        cultivoGruesaNombre: gruesa?.cultivoNombre ?? null,
-        margenBrutoHa: superficie > 0 ? margenLote / superficie : null,
-        superficie: superficie || null,
-        margenBrutoLote: margenLote || null,
-      }
-    })
+    const filasCalc: ResumenFila[] = filas
+      .filter((f) => f.incluido)
+      .map((f) => {
+        const fina = producciones.producciones.find((p) => p.id === f.idProduccionFina)
+        const gruesa = producciones.producciones.find((p) => p.id === f.idProduccionGruesa)
+        const lote = producciones.lotes.find((l) => l.id === Number(f.idLote))
+        const superficie = fina?.supSembrada ?? gruesa?.supSembrada ?? 0
+        const margenLote = (fina?.margenBrutoSAlquilerLote ?? 0) + (gruesa?.margenBrutoSAlquilerLote ?? 0)
+        return {
+          id: null,
+          idLote: f.idLote === '' ? 0 : Number(f.idLote),
+          loteNombre: lote?.descripcion || fina?.loteDescripcion || gruesa?.loteDescripcion || `Lote #${f.idLote || '—'}`,
+          campoNombre: lote?.campoNombre ?? fina?.campoNombre ?? gruesa?.campoNombre ?? null,
+          idProduccionFina: f.idProduccionFina === '' ? null : f.idProduccionFina,
+          cultivoFinaNombre: fina?.cultivoNombre ?? null,
+          idProduccionGruesa: f.idProduccionGruesa === '' ? null : f.idProduccionGruesa,
+          cultivoGruesaNombre: gruesa?.cultivoNombre ?? null,
+          margenBrutoHa: superficie > 0 ? margenLote / superficie : null,
+          superficie: superficie || null,
+          margenBrutoLote: margenLote || null,
+        }
+      })
 
     let superficieTotal = 0
     let margenTotal = 0
@@ -141,11 +191,13 @@ export default function ReporteResumen() {
 
   const check = (): { ok: boolean; error?: string } => {
     if (empresaId === '') return { ok: false, error: 'Seleccioná un productor.' }
-    if (filas.length === 0) return { ok: false, error: 'Agregá al menos un lote.' }
-    for (const f of filas) {
+    if (filas.length === 0) return { ok: false, error: 'No hay producciones para el productor y campaña seleccionados.' }
+    const incluidas = filas.filter((f) => f.incluido)
+    if (incluidas.length === 0) return { ok: false, error: 'Incluí al menos un lote en el reporte.' }
+    for (const f of incluidas) {
       if (f.idLote === '') return { ok: false, error: 'Cada fila debe tener un lote.' }
       if (f.idProduccionFina === '' && f.idProduccionGruesa === '') {
-        return { ok: false, error: 'Cada lote debe tener al menos una producción (fina o gruesa).' }
+        return { ok: false, error: 'Cada lote incluido debe tener al menos una producción (fina o gruesa).' }
       }
     }
     return { ok: true }
@@ -155,11 +207,13 @@ export default function ReporteResumen() {
     idEmpresa: Number(empresaId),
     campania,
     tipo: 'resumen_campania' as const,
-    filas: filas.map((f) => ({
-      idLote: Number(f.idLote),
-      idProduccionFina: f.idProduccionFina === '' ? undefined : Number(f.idProduccionFina),
-      idProduccionGruesa: f.idProduccionGruesa === '' ? undefined : Number(f.idProduccionGruesa),
-    })),
+    filas: filas
+      .filter((f) => f.incluido)
+      .map((f) => ({
+        idLote: Number(f.idLote),
+        idProduccionFina: f.idProduccionFina === '' ? undefined : Number(f.idProduccionFina),
+        idProduccionGruesa: f.idProduccionGruesa === '' ? undefined : Number(f.idProduccionGruesa),
+      })),
   })
 
   const handleGuardar = async () => {
@@ -247,60 +301,72 @@ export default function ReporteResumen() {
                 <p className="text-xs text-muted-foreground text-center py-2">
                   {loadingProducciones
                     ? 'Cargando producciones del productor...'
-                    : 'Agregá un lote para elegir sus producciones de fina y gruesa.'}
+                    : 'Seleccioná un productor y campaña para cargar los lotes disponibles.'}
                 </p>
               ) : (
-                filas.map((f, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end bg-muted/30 border border-border rounded-md p-2">
-                    <div className="space-y-1">
-                      <label className={labelCls}><MapPin className="size-3" strokeWidth={2} /> Lote</label>
-                      <SelectAutocomplete
-                        value={f.idLote}
-                        onChange={(v) => handleLoteChange(idx, v === '' ? '' : Number(v))}
-                        options={[{ value: '', label: 'Seleccionar lote...' }, ...(producciones?.lotes || []).map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))]}
-                        placeholder="Seleccionar lote..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción fina (invierno)</label>
-                      <SelectAutocomplete
-                        value={f.idProduccionFina}
-                        onChange={(v) => updateFila(idx, { idProduccionFina: v === '' ? '' : Number(v) })}
-                        options={[{ value: '', label: 'Sin producción' }, ...produccionesDeLote(f.idLote, 'fina').map((p) => ({ value: p.id, label: p.cultivoNombre }))]}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción gruesa (verano)</label>
-                      <div className="flex gap-2 items-center">
-                        <SelectAutocomplete
-                          className="flex-1 min-w-0"
-                          value={f.idProduccionGruesa}
-                          onChange={(v) => updateFila(idx, { idProduccionGruesa: v === '' ? '' : Number(v) })}
-                          options={[{ value: '', label: 'Sin producción' }, ...produccionesDeLote(f.idLote, 'gruesa').map((p) => ({ value: p.id, label: p.cultivoNombre }))]}
-                        />
-                        <button
-                          onClick={() => removeFila(idx)}
-                          className="p-2 rounded-md text-destructive hover:bg-destructive-soft transition-colors shrink-0 cursor-pointer"
-                          aria-label="Quitar lote"
-                          title="Quitar lote"
-                        >
-                          <Trash2 className="size-4" strokeWidth={1.75} />
-                        </button>
+                filas.map((f, idx) => {
+                  const lote = producciones?.lotes.find((l) => l.id === Number(f.idLote))
+                  const excluido = !f.incluido
+                  return (
+                    <div
+                      key={f.idLote}
+                      className={`rounded-md p-3 space-y-2 transition-colors border ${excluido
+                        ? 'border-destructive/30 bg-muted/30 opacity-60'
+                        : 'border-border bg-muted/30'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-sm min-w-0">
+                          <Sprout className="size-4 text-muted-foreground shrink-0" strokeWidth={1.75} />
+                          <span className="font-medium text-foreground truncate">{lote?.campoNombre || '—'}</span>
+                          <span className="text-muted-foreground shrink-0">·</span>
+                          <span className="text-foreground truncate">{lote?.descripcion || `Lote #${f.idLote}`}</span>
+                          {excluido && (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-destructive-soft text-destructive text-[10px] font-semibold uppercase tracking-wider rounded">
+                              No incluido
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[11px] font-medium ${excluido ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {excluido ? 'No incluido' : 'Incluido'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleFila(idx)}
+                            role="switch"
+                            aria-checked={f.incluido}
+                            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors cursor-pointer ${f.incluido ? 'bg-primary' : 'bg-muted border border-border'}`}
+                          >
+                            <span className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${f.incluido ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción fina (invierno)</label>
+                          <SelectAutocomplete
+                            disabled={excluido}
+                            value={f.idProduccionFina}
+                            onChange={(v) => handleProduccionChange(idx, 'fina', v === '' ? '' : Number(v))}
+                            options={[{ value: '', label: 'Sin producción' }, ...produccionesDeLote(f.idLote, 'fina').map((p) => ({ value: p.id, label: p.cultivoNombre }))]}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción gruesa (verano)</label>
+                          <SelectAutocomplete
+                            disabled={excluido}
+                            value={f.idProduccionGruesa}
+                            onChange={(v) => handleProduccionChange(idx, 'gruesa', v === '' ? '' : Number(v))}
+                            options={[{ value: '', label: 'Sin producción' }, ...produccionesDeLote(f.idLote, 'gruesa').map((p) => ({ value: p.id, label: p.cultivoNombre }))]}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
-
-            <button
-              onClick={addFila}
-              disabled={empresaId === '' || loadingProducciones}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <Plus className="size-3.5" strokeWidth={1.75} />
-              Agregar lote
-            </button>
 
             {error && (
               <p className="text-[11px] text-destructive inline-flex items-center gap-1">
@@ -336,6 +402,7 @@ export default function ReporteResumen() {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/20">
+                      <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo invierno</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo verano</th>
@@ -347,6 +414,7 @@ export default function ReporteResumen() {
                   <tbody className="divide-y divide-border">
                     {derivado.filas.map((r, i) => (
                       <tr key={i}>
+                        <td className="px-4 py-3 text-foreground">{r.campoNombre || '—'}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{r.loteNombre}</td>
                         <td className="px-4 py-3 text-foreground">{r.cultivoFinaNombre || '—'}</td>
                         <td className="px-4 py-3 text-foreground">{r.cultivoGruesaNombre || '—'}</td>

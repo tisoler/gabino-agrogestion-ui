@@ -3,7 +3,7 @@ import useSWR from 'swr'
 import {
   Plus, Building2, ChevronDown, ChevronRight, Mail,
   UserCog, Tractor, AlertCircle, Activity, X, Shield,
-  UserPlus, UserMinus, Search, Check,
+  UserPlus, UserMinus, Search, Check, Pencil, Phone,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
@@ -14,6 +14,7 @@ interface UsuarioBasico {
   email: string | null
   nombreUsuario: string | null
   photoURL: string | null
+  celular: string | null
   roles: string[]
   idEmpresas: number[]
 }
@@ -46,6 +47,23 @@ function getRoleBadge(roles: string[]) {
   return { label: getRoleLabel(roles) || '—', cls: 'bg-muted text-muted-foreground' }
 }
 
+/**
+ * Ícono de WhatsApp para el botón de chat. El link `wa.me` abre WhatsApp Web
+ * en desktop y la app nativa en celular.
+ */
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.297-.497.1-.198.05-.371-.025-.52-.074-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+      />
+    </svg>
+  )
+}
+
+const waLink = (celular: string) => `https://wa.me/${celular.replace(/\D/g, '')}`
+
 export default function Productores() {
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -60,6 +78,11 @@ export default function Productores() {
   const [addSearch, setAddSearch] = useState('')
   const [pendingUid, setPendingUid] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  // Modal de edición de celular (WhatsApp)
+  const [celularModal, setCelularModal] = useState<{ uid: string; nombre: string; celular: string } | null>(null)
+  const [celularValue, setCelularValue] = useState('')
+  const [celularSaving, setCelularSaving] = useState(false)
 
   const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresa, user } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -208,6 +231,39 @@ export default function Productores() {
     updateUserEmpresas(uid, { add: [addModalEmpresaId] })
   }
 
+  const openCelularModal = (u: UsuarioBasico) => {
+    setCelularModal({
+      uid: u.uid,
+      nombre: u.nombreUsuario || u.email || u.uid,
+      celular: u.celular || '',
+    })
+    setCelularValue(u.celular || '')
+    setActionError(null)
+  }
+
+  const closeCelularModal = () => {
+    setCelularModal(null)
+    setCelularValue('')
+  }
+
+  const saveCelular = async (valor: string) => {
+    if (!celularModal) return
+    setCelularSaving(true)
+    setActionError(null)
+    try {
+      await api.patch(`/usuarios/${celularModal.uid}/celular`, { celular: valor })
+      closeCelularModal()
+      await mutate()
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      setActionError(
+        e?.response?.data?.message || e?.message || 'No se pudo guardar el celular',
+      )
+    } finally {
+      setCelularSaving(false)
+    }
+  }
+
   const matchesSearch = (u: UsuarioBasico, term: string) => {
     if (!term) return true
     return (
@@ -297,7 +353,7 @@ export default function Productores() {
         <div role="alert" className="bg-destructive-soft border border-destructive/20 text-destructive text-sm rounded-md p-3 flex items-start gap-2">
           <AlertCircle className="size-4 shrink-0 mt-0.5" strokeWidth={1.75} />
           <div className="flex-1">
-            <p className="font-medium">No se pudo actualizar la asociación</p>
+            <p className="font-medium">No se pudo completar la acción</p>
             <p className="text-xs mt-0.5">{actionError}</p>
           </div>
           <button
@@ -421,6 +477,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -440,6 +497,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -459,6 +517,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
+                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -730,6 +789,80 @@ export default function Productores() {
           </div>
         </div>
       )}
+
+      {/* Modal: Editar celular (WhatsApp) */}
+      {celularModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+            onClick={() => !celularSaving && closeCelularModal()}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Celular (WhatsApp)</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  Usuario: <span className="font-medium text-foreground">{celularModal.nombre}</span>
+                </p>
+              </div>
+              <button
+                onClick={closeCelularModal}
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                disabled={celularSaving}
+                aria-label="Cerrar"
+              >
+                <X className="size-4" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <form
+              className="p-5 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                saveCelular(celularValue.trim())
+              }}
+            >
+              <div className="space-y-1.5">
+                <label htmlFor="celular-edit" className="text-xs font-medium text-foreground">
+                  Número con código de país
+                </label>
+                <input
+                  id="celular-edit"
+                  type="tel"
+                  value={celularValue}
+                  onChange={(e) => setCelularValue(e.target.value)}
+                  placeholder="+54 9 11 1234 5678"
+                  maxLength={32}
+                  autoFocus
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Se usa para abrir un chat de WhatsApp. Dejar vacío y guardar para borrarlo.
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeCelularModal}
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
+                  disabled={celularSaving}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={celularSaving}
+                >
+                  {celularSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -738,11 +871,13 @@ interface UsuarioCardProps {
   usuario: UsuarioBasico
   empresaId: number
   onRemove?: () => void
+  onEdit?: () => void
   isPending: boolean
 }
 
-function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
+function UsuarioCard({ usuario, onRemove, onEdit, isPending }: UsuarioCardProps) {
   const badge = getRoleBadge(usuario.roles)
+  const nombreVisible = usuario.nombreUsuario || usuario.email || usuario.uid
   return (
     <div className="flex items-center gap-3 p-2.5 bg-card border border-border rounded-md">
       <div
@@ -753,7 +888,7 @@ function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-sm font-medium text-foreground truncate">
-            {usuario.nombreUsuario || usuario.email || usuario.uid}
+            {nombreVisible}
           </p>
           <span
             className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}
@@ -767,7 +902,46 @@ function UsuarioCard({ usuario, onRemove, isPending }: UsuarioCardProps) {
             <span className="truncate">{usuario.email}</span>
           </p>
         )}
+        {usuario.celular && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+            <Phone className="size-3 shrink-0" strokeWidth={1.75} />
+            <span className="truncate">{usuario.celular}</span>
+          </p>
+        )}
       </div>
+      {usuario.celular ? (
+        <a
+          href={waLink(usuario.celular)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-1.5 rounded-md text-muted-foreground hover:bg-success-soft hover:text-success transition-colors shrink-0"
+          title={`Enviar mensaje de WhatsApp a ${nombreVisible}`}
+          aria-label={`Enviar mensaje de WhatsApp a ${nombreVisible}`}
+        >
+          <WhatsAppIcon className="size-3.5" />
+        </a>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="p-1.5 rounded-md text-muted-foreground/40 shrink-0 cursor-not-allowed"
+          title="Sin celular cargado"
+          aria-label={`Enviar mensaje de WhatsApp a ${nombreVisible} (sin celular cargado)`}
+        >
+          <WhatsAppIcon className="size-3.5" />
+        </button>
+      )}
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
+          title="Editar celular (WhatsApp)"
+          aria-label={`Editar celular de ${nombreVisible}`}
+        >
+          <Pencil className="size-3.5" strokeWidth={1.75} />
+        </button>
+      )}
       {onRemove && (
         <button
           type="button"

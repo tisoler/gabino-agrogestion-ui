@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 import {
-  Plus, Trash2, Loader2, ArrowLeft, AlertCircle, ClipboardList, MapPin, Sprout,
+  Loader2, ArrowLeft, AlertCircle, ClipboardList, Sprout, MapPin,
+  LandPlot,
 } from 'lucide-react'
 import api from '../lib/api'
 import SelectAutocomplete from '../components/SelectAutocomplete'
@@ -11,13 +12,60 @@ import { periodosCampania } from '../lib/campanias'
 import {
   getProducciones, crearReporte, actualizarReporte,
   fmtPesos, mensajeError, TIPO_COSECHA_LABEL,
-  type ProduccionesReporte, type DetalleFila, type DetalleTotales, type TipoCosecha,
+  type ProduccionesReporte, type ProduccionCandidata, type DetalleFila, type DetalleTotales, type TipoCosecha,
 } from '../lib/reportes'
 
 interface FilaDetalle {
   idLote: number | ''
   idProduccion: number | ''
   porcentaje: number
+  incluido: boolean
+}
+
+interface DetalleSavedFila {
+  idLote: number
+  idProduccion: number | null
+  porcentajeAsesoramiento: number
+}
+
+/**
+ * Arma las filas automáticas: un set campo+lote por cada lote que tenga al
+ * menos una producción del tipo de cosecha elegido. En creación todos quedan
+ * incluidos; en edición sólo los que tiene el reporte guardado.
+ */
+function buildFilasDetalle(
+  prods: ProduccionesReporte,
+  tipo: TipoCosecha,
+  pctGeneral: number,
+  saved?: DetalleSavedFila[],
+): FilaDetalle[] {
+  const porLote = new Map<number, ProduccionCandidata[]>()
+  for (const p of prods.producciones) {
+    if (p.tipoCosecha !== tipo) continue
+    if (!porLote.has(p.idLote)) porLote.set(p.idLote, [])
+    porLote.get(p.idLote)!.push(p)
+  }
+  const incluidos = new Set((saved || []).map((s) => s.idLote))
+  return prods.lotes
+    .filter((l) => porLote.has(l.id))
+    .map((l): FilaDetalle | null => {
+      const ops = (porLote.get(l.id) || []).sort((a, b) =>
+        a.cultivoNombre.localeCompare(b.cultivoNombre, 'es'),
+      )
+      const savedRow = saved?.find((s) => s.idLote === l.id)
+      return {
+        idLote: l.id,
+        idProduccion:
+          savedRow?.idProduccion != null && ops.some((p) => p.id === savedRow.idProduccion)
+            ? savedRow.idProduccion
+            : ops.length === 1
+              ? ops[0].id
+              : '',
+        porcentaje: savedRow?.porcentajeAsesoramiento ?? pctGeneral,
+        incluido: saved ? incluidos.has(l.id) : true,
+      }
+    })
+    .filter((x): x is FilaDetalle => x !== null)
 }
 
 const inputCls =
@@ -43,9 +91,11 @@ export default function ReporteDetalle() {
   const generalRef = useRef(pctADecimal(generalPct))
   const [aplicaIva, setAplicaIva] = useState(false)
   const [filas, setFilas] = useState<FilaDetalle[]>([])
+  const [editFilas, setEditFilas] = useState<DetalleSavedFila[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cargandoEdit, setCargandoEdit] = useState(false)
+  const autoBuildRef = useRef<string | null>(null)
 
   const { data: producciones, isLoading: loadingProducciones } = useSWR<ProduccionesReporte>(
     empresaId !== '' ? ['reportes/producciones', empresaId, campania] : null,
@@ -66,7 +116,7 @@ export default function ReporteDetalle() {
           tipoCosecha: TipoCosecha | null
           asesoramientoPorcentaje: number | null
           aplicaIva: boolean
-          filas: DetalleFila[]
+          filas: DetalleSavedFila[]
         }
         setEmpresaId(d.idEmpresa)
         setCampania(d.campania)
@@ -74,39 +124,34 @@ export default function ReporteDetalle() {
         setGeneralPct(decimalAPct(d.asesoramientoPorcentaje ?? 0.015))
         generalRef.current = d.asesoramientoPorcentaje ?? 0.015
         setAplicaIva(d.aplicaIva)
-        setFilas(
-          d.filas.map((f) => ({
-            idLote: f.idLote,
-            idProduccion: f.idProduccion ?? '',
-            porcentaje: f.porcentajeAsesoramiento,
-          })),
-        )
+        setEditFilas(d.filas)
       })
       .catch((e) => setError(mensajeError(e, 'No se pudo cargar el reporte.')))
       .finally(() => !cancelled && setCargandoEdit(false))
     return () => { cancelled = true }
   }, [editId])
 
+  // Auto-agregar todos los sets campo+lote al elegir productor + campaña +
+  // tipo de cosecha (o al cargar la edición). Una vez por combinación.
+  useEffect(() => {
+    if (empresaId === '' || tipoCosecha === '' || !producciones) return
+    const key = `${empresaId}|${campania}|${tipoCosecha}|${editId ?? ''}|${editFilas?.length ?? -1}`
+    if (autoBuildRef.current === key) return
+    autoBuildRef.current = key
+    setFilas(buildFilasDetalle(producciones, tipoCosecha, generalRef.current, editFilas ?? undefined))
+  }, [producciones, empresaId, campania, tipoCosecha, editFilas, editId])
+
   const produccionesDeLote = (loteId: number | '') =>
     loteId === '' || !producciones || tipoCosecha === ''
       ? []
       : producciones.producciones.filter((p) => p.idLote === Number(loteId) && p.tipoCosecha === tipoCosecha)
 
-  const addFila = () => {
-    setFilas((prev) => [...prev, { idLote: '', idProduccion: '', porcentaje: generalRef.current }])
-  }
-
   const updateFila = (idx: number, patch: Partial<FilaDetalle>) => {
     setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...patch } : f)))
   }
 
-  const removeFila = (idx: number) => {
-    setFilas((prev) => prev.filter((_, i) => i !== idx))
-  }
-
-  const handleLoteChange = (idx: number, value: number | '') => {
-    const opciones = produccionesDeLote(value)
-    updateFila(idx, { idLote: value, idProduccion: opciones.length === 1 ? opciones[0].id : '' })
+  const toggleFila = (idx: number) => {
+    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, incluido: !f.incluido } : f)))
   }
 
   const handleGeneralChange = (value: string) => {
@@ -120,23 +165,27 @@ export default function ReporteDetalle() {
 
   const derivado = useMemo<{ filas: DetalleFila[]; totales: DetalleTotales } | null>(() => {
     if (!producciones) return null
-    const filasCalc: DetalleFila[] = filas.map((f) => {
-      const prod = producciones.producciones.find((p) => p.id === f.idProduccion)
-      const produccionQq = prod ? prod.produccionQq : null
-      const precioQq = prod ? prod.precioXQq : null
-      const total = produccionQq != null && precioQq != null ? produccionQq * precioQq * f.porcentaje : null
-      return {
-        id: null,
-        idLote: f.idLote === '' ? 0 : Number(f.idLote),
-        loteNombre: prod?.loteDescripcion ?? `Lote #${f.idLote || '—'}`,
-        idProduccion: f.idProduccion === '' ? null : f.idProduccion,
-        cultivoNombre: prod?.cultivoNombre ?? '—',
-        produccionQq,
-        precioQq,
-        porcentajeAsesoramiento: f.porcentaje,
-        totalAsesoramiento: total,
-      }
-    })
+    const filasCalc: DetalleFila[] = filas
+      .filter((f) => f.incluido)
+      .map((f) => {
+        const prod = producciones.producciones.find((p) => p.id === f.idProduccion)
+        const lote = producciones.lotes.find((l) => l.id === Number(f.idLote))
+        const produccionQq = prod ? prod.produccionQq : null
+        const precioQq = prod ? prod.precioXQq : null
+        const total = produccionQq != null && precioQq != null ? produccionQq * precioQq * f.porcentaje : null
+        return {
+          id: null,
+          idLote: f.idLote === '' ? 0 : Number(f.idLote),
+          loteNombre: lote?.descripcion || prod?.loteDescripcion || `Lote #${f.idLote || '—'}`,
+          campoNombre: lote?.campoNombre ?? prod?.campoNombre ?? null,
+          idProduccion: f.idProduccion === '' ? null : f.idProduccion,
+          cultivoNombre: prod?.cultivoNombre ?? '—',
+          produccionQq,
+          precioQq,
+          porcentajeAsesoramiento: f.porcentaje,
+          totalAsesoramiento: total,
+        }
+      })
 
     let totalSinIva = 0
     for (const r of filasCalc) {
@@ -158,10 +207,12 @@ export default function ReporteDetalle() {
   const check = (): { ok: boolean; error?: string } => {
     if (empresaId === '') return { ok: false, error: 'Seleccioná un productor.' }
     if (tipoCosecha === '') return { ok: false, error: 'Seleccioná el tipo de cosecha.' }
-    if (filas.length === 0) return { ok: false, error: 'Agregá al menos un lote.' }
-    for (const f of filas) {
+    if (filas.length === 0) return { ok: false, error: 'No hay producciones para el productor, campaña y tipo seleccionados.' }
+    const incluidas = filas.filter((f) => f.incluido)
+    if (incluidas.length === 0) return { ok: false, error: 'Incluí al menos un lote en el reporte.' }
+    for (const f of incluidas) {
       if (f.idLote === '') return { ok: false, error: 'Cada fila debe tener un lote.' }
-      if (f.idProduccion === '') return { ok: false, error: 'Cada lote debe tener una producción.' }
+      if (f.idProduccion === '') return { ok: false, error: 'Cada lote incluido debe tener una producción.' }
     }
     return { ok: true }
   }
@@ -173,11 +224,13 @@ export default function ReporteDetalle() {
     tipoCosecha: tipoCosecha as TipoCosecha,
     asesoramientoPorcentaje: generalRef.current,
     aplicaIva,
-    filas: filas.map((f) => ({
-      idLote: Number(f.idLote),
-      idProduccion: Number(f.idProduccion),
-      porcentajeAsesoramiento: f.porcentaje,
-    })),
+    filas: filas
+      .filter((f) => f.incluido)
+      .map((f) => ({
+        idLote: Number(f.idLote),
+        idProduccion: Number(f.idProduccion),
+        porcentajeAsesoramiento: f.porcentaje,
+      })),
   })
 
   const handleGuardar = async () => {
@@ -299,68 +352,92 @@ export default function ReporteDetalle() {
                 <p className="text-xs text-muted-foreground text-center py-2">
                   {loadingProducciones
                     ? 'Cargando producciones del productor...'
-                    : 'Agregá un lote para elegir su producción.'}
+                    : 'Seleccioná productor, campaña y tipo de cosecha para cargar los lotes.'}
                 </p>
               ) : (
-                filas.map((f, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end bg-muted/30 border border-border rounded-md p-2">
-                    <div className="space-y-1">
-                      <label className={labelCls}><MapPin className="size-3" strokeWidth={2} /> Lote</label>
-                      <SelectAutocomplete
-                        value={f.idLote}
-                        onChange={(v) => handleLoteChange(idx, v === '' ? '' : Number(v))}
-                        placeholder="Seleccionar lote..."
-                        options={[{ value: '', label: 'Seleccionar lote...' }, ...(producciones?.lotes || []).map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))]}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción</label>
-                      <SelectAutocomplete
-                        value={f.idProduccion}
-                        onChange={(v) => updateFila(idx, { idProduccion: v === '' ? '' : Number(v) })}
-                        options={[
-                          { value: '', label: 'Seleccionar producción...' },
-                          ...produccionesDeLote(f.idLote).map((p) => ({ value: p.id, label: p.cultivoNombre })),
-                        ]}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}>% asesoramiento</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={decimalAPct(f.porcentaje)}
-                            onChange={(e) => updateFila(idx, { porcentaje: pctADecimal(e.target.value) })}
-                            className={inputCls + ' pr-8'}
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                filas.map((f, idx) => {
+                  const lote = producciones?.lotes.find((l) => l.id === Number(f.idLote))
+                  const excluido = !f.incluido
+                  return (
+                    <div
+                      key={f.idLote}
+                      className={`rounded-md p-3 space-y-2 transition-colors border ${excluido
+                        ? 'border-destructive/30 bg-muted/30 opacity-60'
+                        : 'border-border bg-muted/30'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 text-sm min-w-0">
+                          <div className="flex gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <MapPin className="size-4 shrink-0" strokeWidth={2} />
+                              Campo
+                            </p>
+                            <span className="font-medium text-foreground truncate">{lote?.campoNombre || '—'}</span>
+                          </div>
+                          <span className="text-muted-foreground shrink-0">·</span>
+                          <div className="flex gap-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <LandPlot className="size-4 shrink-0" strokeWidth={2} />
+                              Lote
+                            </p>
+                            <span className="text-foreground truncate">{lote?.descripcion || `Lote #${f.idLote}`}</span>
+                          </div>
+                          {excluido && (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-destructive-soft text-destructive text-[10px] font-semibold uppercase tracking-wider rounded">
+                              No incluido
+                            </span>
+                          )}
                         </div>
-                        <button
-                          onClick={() => removeFila(idx)}
-                          className="p-2 cursor-pointer rounded-md text-destructive hover:bg-destructive-soft transition-colors shrink-0"
-                          aria-label="Quitar lote"
-                          title="Quitar lote"
-                        >
-                          <Trash2 className="size-4" strokeWidth={1.75} />
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[11px] font-medium ${excluido ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {excluido ? 'No incluido' : 'Incluido'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleFila(idx)}
+                            role="switch"
+                            aria-checked={f.incluido}
+                            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors cursor-pointer ${f.incluido ? 'bg-primary' : 'bg-muted border border-border'}`}
+                          >
+                            <span className={`inline-block size-4 rounded-full bg-white shadow transform transition-transform ${f.incluido ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <label className={labelCls}><Sprout className="size-3" strokeWidth={2} /> Producción</label>
+                          <SelectAutocomplete
+                            disabled={excluido}
+                            value={f.idProduccion}
+                            onChange={(v) => updateFila(idx, { idProduccion: v === '' ? '' : Number(v) })}
+                            options={[
+                              { value: '', label: 'Seleccionar producción...' },
+                              ...produccionesDeLote(f.idLote).map((p) => ({ value: p.id, label: p.cultivoNombre })),
+                            ]}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className={labelCls}>% asesoramiento</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              disabled={excluido}
+                              value={decimalAPct(f.porcentaje)}
+                              onChange={(e) => updateFila(idx, { porcentaje: pctADecimal(e.target.value) })}
+                              className={inputCls + ' pr-8 disabled:opacity-50 disabled:cursor-not-allowed'}
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
-
-            <button
-              onClick={addFila}
-              disabled={empresaId === '' || tipoCosecha === '' || loadingProducciones}
-              className="inline-flex cursor-pointer items-center gap-2 px-3 py-2 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            >
-              <Plus className="size-3.5" strokeWidth={1.75} />
-              Agregar lote
-            </button>
 
             {error && (
               <p className="text-[11px] text-destructive inline-flex items-center gap-1">
@@ -397,6 +474,7 @@ export default function ReporteDetalle() {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/20">
+                      <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo</th>
                       <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Producción (QQ)</th>
@@ -408,6 +486,7 @@ export default function ReporteDetalle() {
                   <tbody className="divide-y divide-border">
                     {derivado.filas.map((r, i) => (
                       <tr key={i}>
+                        <td className="px-4 py-3 text-foreground">{r.campoNombre || '—'}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{r.loteNombre}</td>
                         <td className="px-4 py-3 text-foreground">{r.cultivoNombre}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{r.produccionQq != null ? r.produccionQq : '—'}</td>

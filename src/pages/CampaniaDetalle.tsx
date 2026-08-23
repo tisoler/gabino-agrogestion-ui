@@ -1802,39 +1802,39 @@ function DetalleTable<T extends { id: number }>({
                   return (
                     <tr key={row.id} className={`${rowCls}${rowCls ? '' : ' hover:bg-muted/30'}`}>
                       {columns.map((c) => (
-                      <td
-                        key={c.key}
-                        className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}
-                      >
-                        {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow, dolar, totalUsd, optionTag })}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        {(() => {
-                          const pid = prescripcionIdOf ? prescripcionIdOf(row) : null
-                          return pid != null ? (
-                            <Link
-                              to={`/prescripciones/${pid}`}
-                              className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-primary transition-colors"
-                              title="Ver prescripción"
-                              aria-label="Ver prescripción"
-                            >
-                              <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
-                            </Link>
-                          ) : null
-                        })()}
-                        <button
-                          onClick={() => onRemove(row.id)}
-                          className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors cursor-pointer"
-                          title="Eliminar"
-                          aria-label="Eliminar"
+                        <td
+                          key={c.key}
+                          className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}
                         >
-                          <Trash2 className="size-3.5" strokeWidth={1.75} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                          {renderCell(c, row, { catalogOptions: catalogWithSaved, onChange, onCreateNew, computedRow, dolar, totalUsd, optionTag })}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {(() => {
+                            const pid = prescripcionIdOf ? prescripcionIdOf(row) : null
+                            return pid != null ? (
+                              <Link
+                                to={`/prescripciones/${pid}`}
+                                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-primary transition-colors"
+                                title="Ver prescripción"
+                                aria-label="Ver prescripción"
+                              >
+                                <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                              </Link>
+                            ) : null
+                          })()}
+                          <button
+                            onClick={() => onRemove(row.id)}
+                            className="p-1.5 rounded-md text-destructive hover:bg-destructive-soft transition-colors cursor-pointer"
+                            title="Eliminar"
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 className="size-3.5" strokeWidth={1.75} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   )
                 })
               )}

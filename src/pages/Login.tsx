@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth'
 import { auth, googleProvider } from '../lib/firebase'
 import { asegurarUsuarioFirestore } from '../lib/signup'
-import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2, KeyRound } from 'lucide-react'
+import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2, KeyRound, Phone } from 'lucide-react'
 
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false)
@@ -18,6 +18,7 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [celular, setCelular] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,7 +61,7 @@ export default function Login() {
     try {
       if (isRegister) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-        await asegurarUsuarioFirestore()
+        await asegurarUsuarioFirestore(celular.trim() || undefined)
         await sendEmailVerification(userCredential.user)
         setSuccess('¡Cuenta creada! Por favor, verifica tu email para poder ingresar.')
         await signOut(auth)
@@ -220,6 +221,29 @@ export default function Login() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
+                      className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {isRegister && (
+                <div className="space-y-1.5">
+                  <label htmlFor="celular" className="text-sm font-medium text-foreground">
+                    Celular (WhatsApp) <span className="font-normal text-muted-foreground">— opcional</span>
+                  </label>
+                  <div className="relative group">
+                    <Phone
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors"
+                      strokeWidth={1.75}
+                    />
+                    <input
+                      id="celular"
+                      type="tel"
+                      placeholder="+54 9 11 1234 5678"
+                      value={celular}
+                      onChange={(e) => setCelular(e.target.value)}
+                      maxLength={32}
                       className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                     />
                   </div>

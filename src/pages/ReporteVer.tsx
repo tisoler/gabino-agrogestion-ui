@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import {
-  ArrowLeft, Printer, Pencil, AlertCircle, Loader2, Building2, Calendar, FileBarChart, ClipboardList,
+  ArrowLeft, Printer, Pencil, AlertCircle, Loader2, Building2, Calendar, FileBarChart, ClipboardList, ArrowUpRight,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
@@ -71,76 +71,76 @@ export default function ReporteVer() {
     <>
       <style>{'@page { margin: 0; }'}</style>
       <div className="max-w-5xl mx-auto space-y-6 pb-20 md:pb-0 print:px-6 print:py-4">
-      <div className="print-hide flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/reportes"
-            className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Volver"
-          >
-            <ArrowLeft className="size-4" strokeWidth={1.75} />
-          </Link>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight">
-            {TIPOS_REPORTE_LABEL[reporte.tipo]}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            <Printer className="size-4" strokeWidth={1.75} />
-            Imprimir / PDF
-          </button>
-          {canWrite && (
+        <div className="print-hide flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <Link
-              to={editUrl}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
+              to="/reportes"
+              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Volver"
             >
-              <Pencil className="size-4" strokeWidth={1.75} />
-              Editar
+              <ArrowLeft className="size-4" strokeWidth={1.75} />
             </Link>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold text-foreground tracking-tight">{titulo}</h2>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <Building2 className="size-3.5" strokeWidth={1.75} />
-              {reporte.empresaNombre}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="size-3.5" strokeWidth={1.75} />
-              Campaña {reporte.campania}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              {esResumen ? (
-                <FileBarChart className="size-3.5" strokeWidth={1.75} />
-              ) : (
-                <ClipboardList className="size-3.5" strokeWidth={1.75} />
-              )}
+            <h1 className="text-xl font-semibold text-foreground tracking-tight">
               {TIPOS_REPORTE_LABEL[reporte.tipo]}
-              {!esResumen && reporte.tipoCosecha && (
-                <span className="text-primary font-medium">
-                  · {reporte.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
-                </span>
-              )}
-            </span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              <Printer className="size-4" strokeWidth={1.75} />
+              Imprimir / PDF
+            </button>
+            {canWrite && (
+              <Link
+                to={editUrl}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
+              >
+                <Pencil className="size-4" strokeWidth={1.75} />
+                Editar
+              </Link>
+            )}
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {esResumen ? (
-            <ResumenTabla reporte={reporte} />
-          ) : (
-            <DetalleTabla reporte={reporte} />
-          )}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="px-5 py-4 border-b border-border">
+            <h2 className="text-base font-semibold text-foreground tracking-tight">{titulo}</h2>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Building2 className="size-3.5" strokeWidth={1.75} />
+                {reporte.empresaNombre}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="size-3.5" strokeWidth={1.75} />
+                Campaña {reporte.campania}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                {esResumen ? (
+                  <FileBarChart className="size-3.5" strokeWidth={1.75} />
+                ) : (
+                  <ClipboardList className="size-3.5" strokeWidth={1.75} />
+                )}
+                {TIPOS_REPORTE_LABEL[reporte.tipo]}
+                {!esResumen && reporte.tipoCosecha && (
+                  <span className="text-primary font-medium">
+                    · {reporte.tipoCosecha === 'fina' ? 'Fina' : 'Gruesa'}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            {esResumen ? (
+              <ResumenTabla reporte={reporte} />
+            ) : (
+              <DetalleTabla reporte={reporte} />
+            )}
+          </div>
         </div>
       </div>
-    </div>
     </>
   )
 }
@@ -151,6 +151,7 @@ function ResumenTabla({ reporte }: { reporte: ReporteCalculado }) {
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-border bg-muted/20">
+          <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo invierno</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo verano</th>
@@ -164,9 +165,46 @@ function ResumenTabla({ reporte }: { reporte: ReporteCalculado }) {
           const r = f as ResumenFila
           return (
             <tr key={i}>
+              <td className="px-4 py-3 text-foreground">{r.campoNombre || '—'}</td>
               <td className="px-4 py-3 font-medium text-foreground">{r.loteNombre}</td>
-              <td className="px-4 py-3 text-foreground">{r.cultivoFinaNombre || '—'}</td>
-              <td className="px-4 py-3 text-foreground">{r.cultivoGruesaNombre || '—'}</td>
+              <td className="px-4 py-3 text-foreground">
+                <div className="flex items-center gap-1.5">
+                  <span>{r.cultivoFinaNombre || '—'}</span>
+                  {r.idProduccionFina != null ? (
+                    <Link
+                      to={`/campanias/${r.idProduccionFina}`}
+                      className="p-1 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                      title="Ir a la producción"
+                      aria-label={`Ir a la producción ${r.cultivoFinaNombre || ''}`}
+                    >
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </Link>
+                  ) : (
+                    <span className="p-1 rounded-md text-muted-foreground/40" title="Sin producción">
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-3 text-foreground">
+                <div className="flex items-center gap-1.5">
+                  <span>{r.cultivoGruesaNombre || '—'}</span>
+                  {r.idProduccionGruesa != null ? (
+                    <Link
+                      to={`/campanias/${r.idProduccionGruesa}`}
+                      className="p-1 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                      title="Ir a la producción"
+                      aria-label={`Ir a la producción ${r.cultivoGruesaNombre || ''}`}
+                    >
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </Link>
+                  ) : (
+                    <span className="p-1 rounded-md text-muted-foreground/40" title="Sin producción">
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </span>
+                  )}
+                </div>
+              </td>
               <td className="px-4 py-3 text-right tabular-nums">{fmtPesos(r.margenBrutoHa)}</td>
               <td className="px-4 py-3 text-right tabular-nums">{r.superficie != null ? r.superficie : '—'}</td>
               <td className="px-4 py-3 text-right tabular-nums font-medium">{fmtPesos(r.margenBrutoLote)}</td>
@@ -176,19 +214,19 @@ function ResumenTabla({ reporte }: { reporte: ReporteCalculado }) {
       </tbody>
       <tfoot>
         <tr className="border-t border-border bg-muted/30">
-          <td colSpan={5} className="px-4 py-3 text-sm text-muted-foreground">Superficie total</td>
+          <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">Superficie total</td>
           <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{totales.superficieTotal}</td>
         </tr>
         <tr className="bg-muted/30">
-          <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">Margen bruto total</td>
+          <td colSpan={6} className="px-4 py-2 text-sm text-muted-foreground">Margen bruto total</td>
           <td className="px-4 py-2 text-right text-sm tabular-nums font-medium">{fmtPesos(totales.margenBrutoTotal)}</td>
         </tr>
         <tr className="bg-muted/30">
-          <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">Margen bruto medio / ha</td>
+          <td colSpan={6} className="px-4 py-2 text-sm text-muted-foreground">Margen bruto medio / ha</td>
           <td className="px-4 py-2 text-right text-sm tabular-nums font-medium">{fmtPesos(totales.margenBrutoMedioHa)}</td>
         </tr>
         <tr className="bg-muted/30">
-          <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">EQ Soja</td>
+          <td colSpan={6} className="px-4 py-2 text-sm text-muted-foreground">EQ Soja</td>
           <td className="px-4 py-2 text-right text-sm tabular-nums font-medium">{totales.eqSoja != null ? totales.eqSoja : '—'}</td>
         </tr>
       </tfoot>
@@ -202,6 +240,7 @@ function DetalleTabla({ reporte }: { reporte: ReporteCalculado }) {
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-border bg-muted/20">
+          <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo</th>
           <th className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Producción (QQ)</th>
@@ -215,8 +254,27 @@ function DetalleTabla({ reporte }: { reporte: ReporteCalculado }) {
           const r = f as DetalleFila
           return (
             <tr key={i}>
+              <td className="px-4 py-3 text-foreground">{r.campoNombre || '—'}</td>
               <td className="px-4 py-3 font-medium text-foreground">{r.loteNombre}</td>
-              <td className="px-4 py-3 text-foreground">{r.cultivoNombre}</td>
+              <td className="px-4 py-3 text-foreground">
+                <div className="flex items-center gap-1.5">
+                  <span>{r.cultivoNombre}</span>
+                  {r.idProduccion != null ? (
+                    <Link
+                      to={`/campanias/${r.idProduccion}`}
+                      className="p-1 rounded-md text-primary hover:bg-primary-soft transition-colors"
+                      title="Ir a la producción"
+                      aria-label={`Ir a la producción ${r.cultivoNombre}`}
+                    >
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </Link>
+                  ) : (
+                    <span className="p-1 rounded-md text-muted-foreground/40" title="Sin producción">
+                      <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+                    </span>
+                  )}
+                </div>
+              </td>
               <td className="px-4 py-3 text-right tabular-nums">{r.produccionQq != null ? r.produccionQq : '—'}</td>
               <td className="px-4 py-3 text-right tabular-nums">{fmtPesos(r.precioQq)}</td>
               <td className="px-4 py-3 text-right tabular-nums">{decimalAPct(r.porcentajeAsesoramiento)}%</td>
@@ -227,17 +285,17 @@ function DetalleTabla({ reporte }: { reporte: ReporteCalculado }) {
       </tbody>
       <tfoot>
         <tr className="border-t border-border bg-muted/30">
-          <td colSpan={5} className="px-4 py-3 text-sm text-muted-foreground">Total s/ IVA</td>
+          <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">Total s/ IVA</td>
           <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPesos(totales.totalSinIva)}</td>
         </tr>
         {totales.aplicaIva && (
           <>
             <tr className="bg-muted/30">
-              <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">IVA (21%)</td>
+              <td colSpan={6} className="px-4 py-2 text-sm text-muted-foreground">IVA (21%)</td>
               <td className="px-4 py-2 text-right text-sm tabular-nums font-medium">{fmtPesos(totales.iva)}</td>
             </tr>
             <tr className="bg-muted/30">
-              <td colSpan={5} className="px-4 py-2 text-sm font-medium text-foreground">Total c/ IVA</td>
+              <td colSpan={6} className="px-4 py-2 text-sm font-medium text-foreground">Total c/ IVA</td>
               <td className="px-4 py-2 text-right text-sm tabular-nums font-bold">{fmtPesos(totales.totalConIva)}</td>
             </tr>
           </>
