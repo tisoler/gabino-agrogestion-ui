@@ -512,10 +512,10 @@ export default function Lotes() {
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Nombre del lote
+                        Campo
                       </th>
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Campo
+                        Nombre del lote
                       </th>
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
                         Área (ha)
@@ -550,13 +550,13 @@ export default function Lotes() {
                             }`}
                         >
                           <td className="px-4 py-3">
-                            <span className={`font-medium ${lote.activo ? 'text-foreground' : 'text-muted-foreground'}`}>
-                              {lote.descripcion || '—'}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                              {lote.campo?.nombre || '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
-                              {lote.campo?.nombre || '—'}
+                            <span className={`font-medium ${lote.activo ? 'text-foreground' : 'text-muted-foreground'}`}>
+                              {lote.descripcion || '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
@@ -652,7 +652,7 @@ export default function Lotes() {
           </div>
 
           {/* Mapa del lote seleccionado */}
-          <div className="w-full xl:w-[400px] xl:sticky xl:top-4">
+          <div className="w-full xl:w-[320px] xl:sticky xl:top-4">
             <div className="bg-card border border-border rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">Mapa del lote</h3>

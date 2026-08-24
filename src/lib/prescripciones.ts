@@ -56,7 +56,10 @@ export function convertirUnidadImpresionValor(
 ): { valor: number | null; unidad: string | null } {
   const u = (unidad || '').toLowerCase()
   if (u !== 'kg' && u !== 'lt') {
-    return { valor: valor ?? null, unidad: u ? (unidad ?? null) : null }
+    return {
+      valor: valor ?? null,
+      unidad: u ? (u === 'unidad' ? 'u' : (unidad ?? null)) : null,
+    }
   }
   if (valor != null && Number.isFinite(valor) && valor < 1) {
     return { valor: valor * 1000, unidad: u === 'kg' ? 'gr' : 'cc' }
@@ -66,16 +69,19 @@ export function convertirUnidadImpresionValor(
 
 /**
  * Formatea un valor con su unidad (ej. "0,5 kg" o "500 cc"). Sin unidad
- * devuelve sólo el número.
+ * devuelve sólo el número. Con `perHa` agrega "/ha" a la unidad (columna
+ * Dosis: cantidad por hectárea).
  */
 export function fmtDosisCantidad(
   valor: number | null | undefined,
   unidad: string | null | undefined,
   decimales = 2,
+  perHa = false,
 ): string {
   const c = convertirUnidadImpresionValor(valor, unidad)
   const numero = fmtCantidad(c.valor, decimales)
-  return c.unidad ? `${numero} ${c.unidad}` : numero
+  if (!c.unidad) return numero
+  return `${numero} ${c.unidad}${perHa ? '/ha' : ''}`
 }
 
 export const fmtFecha = (fecha: string | undefined | null): string => {

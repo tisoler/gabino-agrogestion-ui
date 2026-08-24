@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import useSWR from 'swr'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Sprout, User, Phone, Mail,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import { fmtFechaHora, waLink, type MensajeMasivoDetalle } from '../lib/mensajes-masivos'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
@@ -13,6 +14,7 @@ const fetcher = (url: string) => api.get(url).then((r) => r.data)
 export default function MensajeMasivoDetalle() {
   const params = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const volver = useVolver('/mensajes-masivos')
   const { permisos } = useAuth()
   const canRead = permisos.includes('lectura:mensaje-masivo')
 
@@ -55,13 +57,13 @@ export default function MensajeMasivoDetalle() {
     <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link
-          to="/mensajes-masivos"
-          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="Volver"
-        >
-          <ArrowLeft className="size-4" strokeWidth={1.75} />
-        </Link>
+        <button
+            onClick={volver}
+            className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+            aria-label="Volver"
+          >
+            <ArrowLeft className="size-4" strokeWidth={1.75} />
+          </button>
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
             Mensaje #{mensaje.id}

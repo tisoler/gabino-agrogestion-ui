@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import { fmtFecha, fmtHa, fmtDosisCantidad, type Prescripcion } from '../lib/prescripciones'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
@@ -17,6 +18,7 @@ export default function PrescripcionDetalle() {
   const { permisos, empresas } = useAuth()
   const canRead = permisos.includes('lectura:prescripcion')
   const canWrite = permisos.includes('escritura:prescripcion')
+  const volver = useVolver('/prescripciones')
   const [toggling, setToggling] = useState(false)
 
   const { data: prescripcion, error, isLoading } = useSWR<Prescripcion>(
@@ -104,13 +106,13 @@ export default function PrescripcionDetalle() {
         {/* Header */}
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <Link
-              to="/prescripciones"
-              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            <button
+              onClick={volver}
+              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
               aria-label="Volver"
             >
               <ArrowLeft className="size-4" strokeWidth={1.75} />
-            </Link>
+            </button>
             <div className="flex gap-3">
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
                 Prescripción #{prescripcion.id}
@@ -276,7 +278,7 @@ export default function PrescripcionDetalle() {
                       <td className="px-4 py-3 font-medium text-foreground">
                         {i.insumo?.nombre || `Insumo #${i.idInsumo}`}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 3)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 3, true)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmtDosisCantidad(i.cantidadTotal, i.insumo?.unidad)}</td>
                     </tr>
                   ))}
@@ -345,7 +347,7 @@ export default function PrescripcionDetalle() {
                 prescripcion.insumos.map((i) => (
                   <tr key={i.id}>
                     <td>{i.insumo?.nombre || `Insumo #${i.idInsumo}`}</td>
-                    <td className="text-right">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 2)}</td>
+                    <td className="text-right">{fmtDosisCantidad(i.cantidadPorHa, i.insumo?.unidad, 2, true)}</td>
                     <td className="text-right">{fmtDosisCantidad(i.cantidadTotal, i.insumo?.unidad, 2)}</td>
                   </tr>
                 ))

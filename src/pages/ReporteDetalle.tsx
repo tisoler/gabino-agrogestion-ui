@@ -8,6 +8,7 @@ import {
 import api, { esErrorDeAcceso } from '../lib/api'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import { periodosCampania } from '../lib/campanias'
 import {
   getProducciones, crearReporte, actualizarReporte,
@@ -78,6 +79,7 @@ const pctADecimal = (v: string): number => (parseFloat(v) || 0) / 100
 
 export default function ReporteDetalle() {
   const navigate = useNavigate()
+  const volver = useVolver('/reportes')
   const [searchParams] = useSearchParams()
   const editId = searchParams.get('id') ? Number(searchParams.get('id')) : null
   const { permisos, empresas } = useAuth()
@@ -276,7 +278,7 @@ export default function ReporteDetalle() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/reportes')}
+            onClick={volver}
             className="p-2 cursor-pointer rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Volver"
           >

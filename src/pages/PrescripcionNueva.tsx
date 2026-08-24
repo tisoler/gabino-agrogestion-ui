@@ -1,15 +1,18 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Calendar, Building2,
-  Pickaxe, Package, FolderPlus, X, CheckCircle2,
+  Pickaxe, Package, FolderPlus, X, CheckCircle2, Eye,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { periodosCampania } from '../lib/campanias'
 import { colorCategoria } from '../constantes'
+import { fmtHa } from '../lib/prescripciones'
+import { useVolver } from '../lib/navegacion'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
+import ProduccionDetalleModal from '../components/ProduccionDetalleModal'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
@@ -23,6 +26,7 @@ interface CampaniaOption {
   campania?: string
   lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
   cultivo?: { id: number; nombre: string } | null
+  totales?: { supSembrada?: number }
 }
 interface Lote {
   id: number
@@ -72,6 +76,7 @@ function fmtNumValue3(n: number): string {
 
 export default function PrescripcionNueva() {
   const navigate = useNavigate()
+  const volver = useVolver('/prescripciones')
   const { mutate } = useSWRConfig()
   const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
   const isAdmin = isSysAdmin || isAsesorAdmin
@@ -204,6 +209,7 @@ export default function PrescripcionNueva() {
 
   // Modales
   const [showCampaniaModal, setShowCampaniaModal] = useState(false)
+  const [showProduccionModal, setShowProduccionModal] = useState(false)
   const [campaniaForm, setCampaniaForm] = useState({
     campania: periodosCampania()[0] || '',
     idCampo: '' as number | '',
@@ -303,6 +309,21 @@ export default function PrescripcionNueva() {
     setInsumoRows((rows) => recomputeByTotalHa(rows, n))
   }
 
+  // Precarga "Total ha para aplicación" con la sup. sembrada de la producción
+  // (una sola vez por producción, sin pisar lo que el usuario cargó después).
+  const prefilledCampaniaRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (idCampania === '') return
+    if (prefilledCampaniaRef.current === idCampania) return
+    prefilledCampaniaRef.current = idCampania
+    const sup = produccionSel?.totales?.supSembrada
+    if (sup == null || !(sup > 0)) return
+    const clean = fmtNumValue(sup)
+    setTotalHa(clean)
+    setInsumoRows((rows) => recomputeByTotalHa(rows, num(clean)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idCampania])
+
   // Crear producción desde el modal
   const handleCreateCampania = async () => {
     setCampaniaError(null)
@@ -401,7 +422,7 @@ export default function PrescripcionNueva() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/prescripciones')}
+            onClick={volver}
             className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Volver"
           >
@@ -537,9 +558,26 @@ export default function PrescripcionNueva() {
               <p className="text-[12px] text-muted-foreground">Elegí un cultivo.</p>
             )
           ) : produccionSel ? (
-            <div className="flex items-center gap-2 text-sm text-success">
-              <CheckCircle2 className="size-4 shrink-0" strokeWidth={1.75} />
-              <span className="font-medium">Producción seleccionada. Ingresá la labor.</span>
+            <div className="flex items-center justify-between gap-3 flex-wrap text-sm text-success">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="size-4 shrink-0" strokeWidth={1.75} />
+                <span className="font-medium">
+                  Producción seleccionada,{' '}
+                  <span className="text-primary font-semibold">
+                    sup. sembrada: {fmtHa(produccionSel.totales?.supSembrada)}
+                  </span>
+                  . Ingresá la labor.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProduccionModal(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
+                title="Ver datos de la producción"
+              >
+                <Eye className="size-3.5" strokeWidth={1.75} />
+                Ver producción
+              </button>
             </div>
           ) : (
             <p className="text-[12px] text-muted-foreground">
@@ -857,6 +895,14 @@ export default function PrescripcionNueva() {
             setInsumoForRow(null)
           }}
           onClose={() => { setShowInsumoModal(false); setInsumoForRow(null) }}
+        />
+      )}
+
+      {/* Modal: detalle de la producción en solo lectura */}
+      {showProduccionModal && idCampania !== '' && (
+        <ProduccionDetalleModal
+          campaniaId={Number(idCampania)}
+          onClose={() => setShowProduccionModal(false)}
         />
       )}
     </div>

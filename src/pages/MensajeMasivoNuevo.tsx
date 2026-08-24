@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { periodosCampania } from '../lib/campanias'
 import { mensajeError } from '../lib/reportes'
@@ -24,6 +25,7 @@ interface Cultivo {
 
 export default function MensajeMasivoNuevo() {
   const navigate = useNavigate()
+  const volver = useVolver('/mensajes-masivos')
   const { permisos } = useAuth()
   const canWrite = permisos.includes('escritura:mensaje-masivo')
 
@@ -123,8 +125,8 @@ export default function MensajeMasivoNuevo() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate('/mensajes-masivos')}
-          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={volver}
+          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
           aria-label="Volver"
         >
           <ArrowLeft className="size-4" strokeWidth={1.75} />

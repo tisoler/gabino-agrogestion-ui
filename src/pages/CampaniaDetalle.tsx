@@ -11,6 +11,7 @@ import { UNIDADES_PRECIO, colorCategoria, colorPrescripcion } from '../constante
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useCotizacionDolar, fmtPrecioInsumo } from '../lib/moneda'
+import { useVolver } from '../lib/navegacion'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
   costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
@@ -141,6 +142,7 @@ function buildInsumoOrCostoPayload(row: {
   unidadesHa?: number | null
   costoUnidad?: number | null
   superficieAplicada?: number | null
+  observaciones?: string | null
 }) {
   return {
     idInsumo: row.idInsumo ?? 0,
@@ -154,6 +156,10 @@ function buildInsumoOrCostoPayload(row: {
     superficieAplicada: typeof row.superficieAplicada === 'number' && !Number.isNaN(row.superficieAplicada)
       ? row.superficieAplicada
       : 0,
+    // Solo los costos tienen observaciones; en insumos el DTO la descarta.
+    observaciones: typeof row.observaciones === 'string' && row.observaciones.trim() !== ''
+      ? row.observaciones
+      : null,
   }
 }
 
@@ -256,6 +262,7 @@ async function syncDetalle<T extends { id: number; idCampania: number }>(
 // ---------------------------------------------------------------------------
 export default function CampaniaDetalle() {
   const navigate = useNavigate()
+  const volver = useVolver('/campanias')
   const params = useParams<{ id: string }>()
   const isNew = !params.id || params.id === 'nueva'
 
@@ -942,7 +949,7 @@ export default function CampaniaDetalle() {
       {/* Header */}
       <div className="flex items-start gap-3">
         <button
-          onClick={() => navigate('/campanias')}
+          onClick={volver}
           className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
           aria-label="Volver"
         >
@@ -1200,9 +1207,10 @@ export default function CampaniaDetalle() {
             title="Costos varios"
             icon={DollarSign}
             columns={[
-              { key: 'idCosto', label: 'Costo', kind: 'select-with-create', preloadField: 'costoUnidad' },
+              { key: 'idCosto', label: 'Costo', kind: 'select-with-create', preloadField: 'costoUnidad', minWidth: '220px' },
               { key: 'unidadesHa', label: 'Unidades/ha', kind: 'number', align: 'right' },
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'number', align: 'right' },
+              { key: 'observaciones', label: 'Observaciones', kind: 'text' },
               { key: '__total', label: 'Costo total', kind: 'readonly-money', align: 'right' },
             ]}
             rows={costos}
@@ -1684,7 +1692,7 @@ function FilaRes({
 // Tabla de detalle genérica
 // ---------------------------------------------------------------------------
 type ColumnDef =
-  | { key: string; label: string; kind: 'select-with-create'; align?: 'right'; preloadField?: string }
+  | { key: string; label: string; kind: 'select-with-create'; align?: 'right'; preloadField?: string; minWidth?: string }
   | { key: string; label: string; kind: 'date'; align?: 'right' }
   | { key: string; label: string; kind: 'text'; align?: 'right' }
   | { key: string; label: string; kind: 'number'; align?: 'right'; precision?: number }
@@ -1784,14 +1792,18 @@ function DetalleTable<T extends { id: number }>({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/20">
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${c.align === 'right' ? 'text-right' : 'text-left'} ${c.kind === 'select-with-create' ? 'min-w-[300px]' : ''}`}
-                  >
-                    {c.label}
-                  </th>
-                ))}
+                {columns.map((c) => {
+                  const isSelect = c.kind === 'select-with-create'
+                  return (
+                    <th
+                      key={c.key}
+                      style={isSelect && (c as { minWidth?: string }).minWidth ? { minWidth: (c as { minWidth?: string }).minWidth } : undefined}
+                      className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${c.align === 'right' ? 'text-right' : 'text-left'} ${isSelect && !(c as { minWidth?: string }).minWidth ? 'min-w-[300px]' : ''}`}
+                    >
+                      {c.label}
+                    </th>
+                  )
+                })}
                 <th className="px-3 py-2 w-10" />
               </tr>
             </thead>

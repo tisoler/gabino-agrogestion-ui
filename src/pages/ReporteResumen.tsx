@@ -7,6 +7,7 @@ import {
 import api, { esErrorDeAcceso } from '../lib/api'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import { periodosCampania } from '../lib/campanias'
 import {
   getProducciones, crearReporte, actualizarReporte,
@@ -74,6 +75,7 @@ const labelCls = 'text-[10px] font-semibold uppercase tracking-wider text-muted-
 
 export default function ReporteResumen() {
   const navigate = useNavigate()
+  const volver = useVolver('/reportes')
   const [searchParams] = useSearchParams()
   const editId = searchParams.get('id') ? Number(searchParams.get('id')) : null
   const { permisos, empresas } = useAuth()
@@ -259,7 +261,7 @@ export default function ReporteResumen() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/reportes')}
+            onClick={volver}
             className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
             aria-label="Volver"
           >

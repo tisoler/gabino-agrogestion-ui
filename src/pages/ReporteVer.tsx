@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
+import { useVolver } from '../lib/navegacion'
 import {
   TIPOS_REPORTE_LABEL, fmtPesos,
   type ReporteCalculado, type ResumenFila, type ResumenTotales,
@@ -19,6 +20,7 @@ const decimalAPct = (v: number): string => String(Math.round(v * 10000) / 100)
 export default function ReporteVer() {
   const params = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const volver = useVolver('/reportes')
   const { permisos } = useAuth()
   const canRead = permisos.includes('lectura:reporte')
   const canWrite = permisos.includes('escritura:reporte')
@@ -82,13 +84,13 @@ export default function ReporteVer() {
       <div className="max-w-5xl mx-auto space-y-6 pb-20 md:pb-0 print:px-6 print:py-4">
         <div className="print-hide flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link
-              to="/reportes"
-              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            <button
+              onClick={volver}
+              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
               aria-label="Volver"
             >
               <ArrowLeft className="size-4" strokeWidth={1.75} />
-            </Link>
+            </button>
             <h1 className="text-xl font-semibold text-foreground tracking-tight">
               {TIPOS_REPORTE_LABEL[reporte.tipo]}
             </h1>

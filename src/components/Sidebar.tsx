@@ -274,7 +274,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       {/* Sidebar Container */}
       <aside
         className={`fixed left-0 top-0 bottom-0 z-50 transition-[width,transform] duration-200 ease-out
-          ${isCollapsed ? 'w-16' : 'w-60'}
+          ${isCollapsed ? 'w-16' : 'w-52'}
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >

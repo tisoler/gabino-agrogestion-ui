@@ -80,6 +80,7 @@ export interface CampaniaCostoDetalle {
   idCosto: number | null
   unidadesHa: number
   costoUnidad: number
+  observaciones?: string | null
   costo?: CostoItem
 }
 

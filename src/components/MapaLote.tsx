@@ -156,12 +156,14 @@ export default function MapaLote({
       })
       layerRef.current = geo
       geo.addTo(map)
-      map.fitBounds((geo as L.GeoJSON).getBounds(), { padding: [30, 30] })
+      // Padding amplio: el lote se muestra desde un poco más lejos (zoom menor)
+      // para dar contexto alrededor.
+      map.fitBounds((geo as L.GeoJSON).getBounds(), { padding: [80, 80] })
     } else if (centroide && Number.isFinite(centroide.lat) && Number.isFinite(centroide.lng)) {
       const marker = L.marker([centroide.lat, centroide.lng], { icon: iconoCentroide })
       layerRef.current = marker
       marker.addTo(map)
-      map.setView([centroide.lat, centroide.lng], 14)
+      map.setView([centroide.lat, centroide.lng], 13)
     }
   }, [geometria, centroide, dibujar])
 
