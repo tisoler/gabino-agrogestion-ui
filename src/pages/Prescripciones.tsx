@@ -463,7 +463,7 @@ export default function Prescripciones() {
                       onClick={() => goToDetail(p.id)}
                       className={`cursor-pointer transition-colors ${p.anulada ? 'bg-destructive/10 hover:bg-destructive/20 text-muted-foreground' : 'hover:bg-muted/40'}`}
                     >
-                      <td className="flex flex-col items-center px-4 py-3 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Calendar className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
                           <span className="text-sm text-foreground">{fmtFecha(p.fecha)}</span>
@@ -477,7 +477,7 @@ export default function Prescripciones() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Building2 className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                          <span className="text-sm text-foreground truncate">
+                          <span className="text-sm text-foreground line-clamp-2 leading-tight">
                             {empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre
                               || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
                           </span>

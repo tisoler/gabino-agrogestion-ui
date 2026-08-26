@@ -98,15 +98,15 @@ export default function ReporteVer() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition-opacity cursor-pointer"
             >
-              <Printer className="size-4" strokeWidth={1.75} />
+              <Printer className="size-3.5" strokeWidth={1.75} />
               Imprimir / PDF
             </button>
             {canWrite && (
               <Link
                 to={editUrl}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
+                className="inline-flex h-9 items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity"
               >
                 <Pencil className="size-4" strokeWidth={1.75} />
                 Editar

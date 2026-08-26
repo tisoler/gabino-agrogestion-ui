@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, Loader2, RefreshCcw, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, Loader2, RefreshCcw, CheckCircle2, Trash2 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 
@@ -8,6 +8,11 @@ export default function Configuracion() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<'ok' | 'error' | null>(null)
   const [mensaje, setMensaje] = useState('')
+
+  const [meses, setMeses] = useState(3)
+  const [limpiando, setLimpiando] = useState(false)
+  const [resultPdfs, setResultPdfs] = useState<'ok' | 'error' | null>(null)
+  const [mensajePdfs, setMensajePdfs] = useState('')
 
   const handleInvalidar = async () => {
     if (busy) return
@@ -22,6 +27,25 @@ export default function Configuracion() {
       setMensaje('No se pudo limpiar la caché. Intentá de nuevo.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleLimpiarPdfs = async () => {
+    if (limpiando) return
+    if (!window.confirm(`¿Eliminar los PDFs generados hace ${meses} meses o más? Esta acción no se puede deshacer.`)) return
+    setLimpiando(true)
+    setResultPdfs(null)
+    try {
+      const { data } = await api.post('/prescripciones/limpiar-pdfs', { meses })
+      setResultPdfs('ok')
+      setMensajePdfs(data?.eliminados
+        ? `Se eliminaron ${data.eliminados} archivo(s).`
+        : 'No hay archivos para eliminar.')
+    } catch {
+      setResultPdfs('error')
+      setMensajePdfs('No se pudieron eliminar los archivos. Intentá de nuevo.')
+    } finally {
+      setLimpiando(false)
     }
   }
 
@@ -67,6 +91,51 @@ export default function Configuracion() {
             <span className="inline-flex items-center gap-1 text-sm text-destructive">
               <AlertCircle className="size-4" strokeWidth={2} />
               {mensaje}
+            </span>
+          )}
+        </div>
+      </section>
+
+      <section className="bg-card border border-border rounded-lg p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Archivos PDF</h2>
+        <p className="text-sm text-muted-foreground">
+          Los PDFs de prescripciones compartidos por WhatsApp se guardan en DigitalOcean Spaces.
+          Podés eliminar los más antiguos para liberar espacio. Al eliminarlos, se borra el link y
+          el PDF se regenera la próxima vez que se comparta.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-muted-foreground" htmlFor="mesesPdf">
+            Antigüedad mínima
+          </label>
+          <select
+            id="mesesPdf"
+            value={meses}
+            onChange={(e) => setMeses(Number(e.target.value))}
+            className="px-3 py-2 rounded-md border border-border bg-input-background text-sm outline-none focus:border-primary cursor-pointer"
+          >
+            <option value={1}>1 mes</option>
+            <option value={3}>3 meses</option>
+            <option value={6}>6 meses</option>
+            <option value={12}>12 meses</option>
+          </select>
+          <button
+            onClick={handleLimpiarPdfs}
+            disabled={limpiando}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+          >
+            {limpiando ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" strokeWidth={1.75} />}
+            {limpiando ? 'Eliminando…' : 'Limpiar archivos PDF'}
+          </button>
+          {resultPdfs === 'ok' && (
+            <span className="inline-flex items-center gap-1 text-sm text-success">
+              <CheckCircle2 className="size-4" strokeWidth={2} />
+              {mensajePdfs}
+            </span>
+          )}
+          {resultPdfs === 'error' && (
+            <span className="inline-flex items-center gap-1 text-sm text-destructive">
+              <AlertCircle className="size-4" strokeWidth={2} />
+              {mensajePdfs}
             </span>
           )}
         </div>

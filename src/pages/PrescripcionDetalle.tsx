@@ -3,12 +3,14 @@ import useSWR, { mutate } from 'swr'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Building2, MapPin,
-  Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot, RotateCcw,
+  Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot, RotateCcw, Download,
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { useVolver } from '../lib/navegacion'
 import { fmtFecha, fmtHa, fmtDosisCantidad, type Prescripcion } from '../lib/prescripciones'
+import CompartirPrescripcionModal from '../components/CompartirPrescripcionModal'
+import WhatsAppIcon from '../components/WhatsAppIcon'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
@@ -20,6 +22,8 @@ export default function PrescripcionDetalle() {
   const canWrite = permisos.includes('escritura:prescripcion')
   const volver = useVolver('/prescripciones')
   const [toggling, setToggling] = useState(false)
+  const [compartirOpen, setCompartirOpen] = useState(false)
+  const [descargando, setDescargando] = useState(false)
 
   const { data: prescripcion, error, isLoading } = useSWR<Prescripcion>(
     canRead && params.id ? `/prescripciones/${params.id}` : null,
@@ -99,33 +103,67 @@ export default function PrescripcionDetalle() {
     }
   }
 
+  const handleDescargarPdf = async () => {
+    if (!prescripcion || descargando) return
+    setDescargando(true)
+    try {
+      const res = await api.get(`/prescripciones/${prescripcion.id}/pdf`, {
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `prescripcion-${prescripcion.id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('No se pudo descargar el PDF', e)
+    } finally {
+      setDescargando(false)
+    }
+  }
+
+  const handleCompartirWhatsApp = () => {
+    if (prescripcion && idEmpresa != null) {
+      setCompartirOpen(true)
+    }
+  }
+
   return (
     <>
       <style>{'@page { margin: 0; }'}</style>
       <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-0 print-hide">
         {/* Header */}
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={volver}
-              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
-              aria-label="Volver"
-            >
-              <ArrowLeft className="size-4" strokeWidth={1.75} />
-            </button>
-            <div className="flex gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={volver}
+                className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+                aria-label="Volver"
+              >
+                <ArrowLeft className="size-4" strokeWidth={1.75} />
+              </button>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
                 Prescripción #{prescripcion.id}
               </h1>
-              <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                 <Calendar className="size-3.5" strokeWidth={1.75} />
                 {fmtFecha(prescripcion.fecha)}
               </p>
+              <span className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-accent px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <Lock className="size-3" strokeWidth={2} />
+                Guardada · solo lectura
+              </span>
             </div>
           </div>
-          <div className="flex flex-wrap justify-end items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {prescripcion.anulada && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md text-[10px] font-semibold uppercase tracking-wider text-destructive">
+              <span className="inline-flex h-6 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-2 text-[10px] font-semibold uppercase tracking-wider text-destructive">
                 <Ban className="size-3" strokeWidth={2} />
                 Anulada
               </span>
@@ -134,9 +172,9 @@ export default function PrescripcionDetalle() {
               <button
                 onClick={handleToggleAnulada}
                 disabled={toggling}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${prescripcion.anulada
-                  ? 'text-primary border-primary/30 hover:bg-primary/10'
-                  : 'text-destructive border-destructive/30 hover:bg-destructive/10'
+                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${prescripcion.anulada
+                  ? 'border-primary/30 text-primary hover:bg-primary/10'
+                  : 'border-destructive/30 text-destructive hover:bg-destructive/10'
                   }`}
               >
                 {toggling ? (
@@ -149,17 +187,33 @@ export default function PrescripcionDetalle() {
                 {toggling ? 'Procesando…' : prescripcion.anulada ? 'Recuperar' : 'Anular'}
               </button>
             )}
+            <div className="h-6 w-px bg-zinc-500 shrink-0" aria-hidden />
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition-opacity cursor-pointer"
             >
-              <Printer className="size-4" strokeWidth={1.75} />
-              Imprimir / PDF
+              <Printer className="size-3.5" strokeWidth={1.75} />
+              Imprimir
             </button>
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-accent border border-border rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Lock className="size-3" strokeWidth={2} />
-              Guardada · solo lectura
-            </span>
+            <button
+              onClick={handleDescargarPdf}
+              disabled={descargando}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {descargando ? (
+                <Activity className="size-3.5 animate-spin" strokeWidth={2} />
+              ) : (
+                <Download className="size-3.5" strokeWidth={1.75} />
+              )}
+              {descargando ? 'Descargando…' : 'Descargar PDF'}
+            </button>
+            <button
+              onClick={handleCompartirWhatsApp}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition-opacity cursor-pointer"
+            >
+              <WhatsAppIcon className="size-3.5 text-[#25D366]" />
+              Compartir
+            </button>
           </div>
         </div>
 
@@ -360,6 +414,15 @@ export default function PrescripcionDetalle() {
           <img src="/pie.png" alt="Pie" />
         </div>
       </div>
+
+      {/* Modal: compartir por WhatsApp */}
+      {compartirOpen && idEmpresa != null && (
+        <CompartirPrescripcionModal
+          prescripcionId={prescripcion.id}
+          empresaId={idEmpresa}
+          onClose={() => setCompartirOpen(false)}
+        />
+      )}
     </>
   )
 }
