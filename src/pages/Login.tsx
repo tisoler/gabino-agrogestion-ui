@@ -12,6 +12,16 @@ import { auth, googleProvider } from '../lib/firebase'
 import { asegurarUsuarioFirestore } from '../lib/signup'
 import { Sprout, Mail, Lock, Loader2, UserPlus, LogIn, CheckCircle2, KeyRound, Phone } from 'lucide-react'
 
+/**
+ * Valida un celular en formato internacional (E.164): "+" inicial y 8-15
+ * dígitos, tolerando espacios, guiones, paréntesis y puntos. Misma regla
+ * que el backend (normalizarCelular).
+ */
+function celularValido(raw: string): boolean {
+  const limpio = raw.replace(/[\s\-().]/g, '')
+  return /^\+\d{8,15}$/.test(limpio)
+}
+
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false)
   const [isForgot, setIsForgot] = useState(false)
@@ -54,6 +64,14 @@ export default function Login() {
 
     if (isRegister && password !== confirmPassword) {
       setError('Las contraseñas no coinciden.')
+      return
+    }
+
+    // El celular es opcional pero, si se carga, debe estar en formato
+    // internacional; si no, el bootstrap del backend lo ignoraría (y antes
+    // fallaba la creación del documento de Firestore).
+    if (isRegister && celular.trim() !== '' && !celularValido(celular.trim())) {
+      setError('El celular debe estar en formato internacional, ej: +54 9 11 1234 5678.')
       return
     }
 
