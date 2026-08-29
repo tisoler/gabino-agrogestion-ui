@@ -1009,16 +1009,22 @@ export default function CampaniaDetalle() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {isNew && (
             <Field label="Productor destino">
-              <SelectAutocomplete
-                value={empresaDestinoId ?? ''}
-                onChange={(v) => {
-                  setEmpresaDestinoId(Number(v))
-                  setIdCampo('')
-                  setCab('idLote', null)
-                }}
-                options={empresas.map((e) => ({ value: e.id, label: e.nombre }))}
-                placeholder="Elegí productor"
-              />
+              {!isAdmin && empresas.length === 1 ? (
+                <div className="px-3 py-2 bg-muted/50 border border-border rounded-md text-sm text-foreground">
+                  {empresas[0].nombre}
+                </div>
+              ) : (
+                <SelectAutocomplete
+                  value={empresaDestinoId ?? ''}
+                  onChange={(v) => {
+                    setEmpresaDestinoId(Number(v))
+                    setIdCampo('')
+                    setCab('idLote', null)
+                  }}
+                  options={empresas.map((e) => ({ value: e.id, label: e.nombre }))}
+                  placeholder="Elegí productor"
+                />
+              )}
             </Field>
           )}
           {(!isNew && campania?.lote) && (
