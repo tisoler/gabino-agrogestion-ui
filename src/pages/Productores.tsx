@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import {
   Plus, Building2, ChevronDown, ChevronRight, Mail,
   UserCog, Tractor, AlertCircle, Activity, X, Shield,
@@ -38,6 +38,25 @@ function getInitials(name: string | null | undefined) {
     .slice(0, 2)
     .map((p) => p.charAt(0).toUpperCase())
     .join('')
+}
+
+/**
+ * Normaliza el nombre de una empresa: primera letra de cada palabra en
+ * mayúscula y el resto en minúscula, salvo la palabra "y" que se conserva
+ * en minúscula. Ej: "establecimiento LA PRAdera y campos" →
+ * "Establecimiento La Pradera y Campos".
+ */
+function capitalizarNombre(nombre: string | null | undefined) {
+  if (!nombre) return ''
+  return nombre
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((palabra) => {
+      const lower = palabra.toLowerCase()
+      if (lower === 'y') return lower
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
 }
 
 function getRoleBadge(roles: string[]) {
@@ -79,12 +98,19 @@ export default function Productores() {
   const [pendingUid, setPendingUid] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  // Modal de edición de celular (WhatsApp)
-  const [celularModal, setCelularModal] = useState<{ uid: string; nombre: string; celular: string } | null>(null)
-  const [celularValue, setCelularValue] = useState('')
-  const [celularSaving, setCelularSaving] = useState(false)
+  // Modal de edición de empresa (nombre)
+  const [editEmpresaModal, setEditEmpresaModal] = useState<{ id: number; nombre: string } | null>(null)
+  const [empresaNombreValue, setEmpresaNombreValue] = useState('')
+  const [empresaSaving, setEmpresaSaving] = useState(false)
+
+  // Modal de edición de usuario (nombre + celular/WhatsApp)
+  const [editUsuarioModal, setEditUsuarioModal] = useState<{ uid: string; nombre: string; celular: string } | null>(null)
+  const [editNombreValue, setEditNombreValue] = useState('')
+  const [editCelularValue, setEditCelularValue] = useState('')
+  const [editUsuarioSaving, setEditUsuarioSaving] = useState(false)
 
   const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresa, user } = useAuth()
+  const { mutate: mutateGlobal } = useSWRConfig()
   const isAdmin = isSysAdmin || isAsesorAdmin
   const canRead = permisos.includes('lectura:productor')
   // Productor no puede crear empresas ni asociar/desasociar usuarios: sólo es asociado.
@@ -231,36 +257,88 @@ export default function Productores() {
     updateUserEmpresas(uid, { add: [addModalEmpresaId] })
   }
 
-  const openCelularModal = (u: UsuarioBasico) => {
-    setCelularModal({
-      uid: u.uid,
-      nombre: u.nombreUsuario || u.email || u.uid,
-      celular: u.celular || '',
-    })
-    setCelularValue(u.celular || '')
+  const openEditEmpresaModal = (empresa: EmpresaConUsuarios) => {
+    setEditEmpresaModal({ id: empresa.id, nombre: empresa.nombre })
+    setEmpresaNombreValue(capitalizarNombre(empresa.nombre))
     setActionError(null)
   }
 
-  const closeCelularModal = () => {
-    setCelularModal(null)
-    setCelularValue('')
+  const closeEditEmpresaModal = () => {
+    setEditEmpresaModal(null)
+    setEmpresaNombreValue('')
   }
 
-  const saveCelular = async (valor: string) => {
-    if (!celularModal) return
-    setCelularSaving(true)
+  const saveEmpresaNombre = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editEmpresaModal) return
+    const nombre = empresaNombreValue.trim()
+    if (!nombre) return
+    setEmpresaSaving(true)
     setActionError(null)
     try {
-      await api.patch(`/usuarios/${celularModal.uid}/celular`, { celular: valor })
-      closeCelularModal()
+      await api.patch(`/empresas/${editEmpresaModal.id}`, { nombre })
+      closeEditEmpresaModal()
       await mutate()
+      mutateGlobal('/empresas')
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } }; message?: string }
+      const errRes = err as { response?: { data?: { message?: string } }; message?: string }
       setActionError(
-        e?.response?.data?.message || e?.message || 'No se pudo guardar el celular',
+        errRes?.response?.data?.message ||
+        errRes?.message ||
+        'No se pudo guardar el nombre del productor',
       )
     } finally {
-      setCelularSaving(false)
+      setEmpresaSaving(false)
+    }
+  }
+
+  const openEditUsuarioModal = (u: UsuarioBasico) => {
+    const nombre = u.nombreUsuario || u.email || u.uid
+    setEditUsuarioModal({
+      uid: u.uid,
+      nombre,
+      celular: u.celular || '',
+    })
+    setEditNombreValue(nombre)
+    setEditCelularValue(u.celular || '')
+    setActionError(null)
+  }
+
+  const closeEditUsuarioModal = () => {
+    setEditUsuarioModal(null)
+    setEditNombreValue('')
+    setEditCelularValue('')
+  }
+
+  const saveUsuario = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editUsuarioModal) return
+    setEditUsuarioSaving(true)
+    setActionError(null)
+    try {
+      const nombre = editNombreValue.trim()
+      const celular = editCelularValue.trim()
+      const nombreCambio = nombre !== '' && nombre !== editUsuarioModal.nombre.trim()
+      const celularCambio = celular !== (editUsuarioModal.celular || '')
+      if (nombreCambio) {
+        await api.patch(`/usuarios/${editUsuarioModal.uid}/nombre`, { nombre })
+      }
+      if (celularCambio) {
+        await api.patch(`/usuarios/${editUsuarioModal.uid}/celular`, { celular })
+      }
+      closeEditUsuarioModal()
+      if (nombreCambio || celularCambio) {
+        await mutate()
+      }
+    } catch (err) {
+      const errRes = err as { response?: { data?: { message?: string } }; message?: string }
+      setActionError(
+        errRes?.response?.data?.message ||
+        errRes?.message ||
+        'No se pudo guardar los cambios del usuario',
+      )
+    } finally {
+      setEditUsuarioSaving(false)
     }
   }
 
@@ -419,49 +497,62 @@ export default function Productores() {
             const totalAsesoresEmpresa = asesores.length + asesoresAdmin.length
             return (
               <div key={empresa.id} className="bg-card border border-border rounded-lg overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(empresa.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left cursor-pointer"
-                  aria-expanded={isOpen}
-                >
-                  <div className="size-9 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
-                    <Building2 className="size-5" strokeWidth={1.75} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base font-semibold text-foreground leading-tight truncate">
-                        {empresa.nombre}
-                      </h2>
-                      {!empresa.activo && (
-                        <span className="px-1.5 py-0.5 bg-destructive-soft text-destructive text-[10px] font-semibold uppercase tracking-wider rounded">
-                          Inactiva
+                <div className="flex items-stretch">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(empresa.id)}
+                    className="flex-1 flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left cursor-pointer min-w-0"
+                    aria-expanded={isOpen}
+                  >
+                    <div className="size-9 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                      <Building2 className="size-5" strokeWidth={1.75} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-base font-semibold text-foreground leading-tight truncate">
+                          {capitalizarNombre(empresa.nombre)}
+                        </h2>
+                        {!empresa.activo && (
+                          <span className="px-1.5 py-0.5 bg-destructive-soft text-destructive text-[10px] font-semibold uppercase tracking-wider rounded">
+                            Inactiva
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {totalAsesoresEmpresa} {totalAsesoresEmpresa === 1 ? 'asesor' : 'asesores'} ·{' '}
+                        {productores.length} {productores.length === 1 ? 'productor' : 'productores'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
+                          <UserCog className="size-3" strokeWidth={1.75} />
+                          {totalAsesoresEmpresa}
                         </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
+                          <Tractor className="size-3" strokeWidth={1.75} />
+                          {productores.length}
+                        </span>
+                      </div>
+                      {isOpen ? (
+                        <ChevronDown className="size-4 text-muted-foreground" strokeWidth={1.75} />
+                      ) : (
+                        <ChevronRight className="size-4 text-muted-foreground" strokeWidth={1.75} />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {totalAsesoresEmpresa} {totalAsesoresEmpresa === 1 ? 'asesor' : 'asesores'} ·{' '}
-                      {productores.length} {productores.length === 1 ? 'productor' : 'productores'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
-                        <UserCog className="size-3" strokeWidth={1.75} />
-                        {totalAsesoresEmpresa}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded">
-                        <Tractor className="size-3" strokeWidth={1.75} />
-                        {productores.length}
-                      </span>
-                    </div>
-                    {isOpen ? (
-                      <ChevronDown className="size-4 text-muted-foreground" strokeWidth={1.75} />
-                    ) : (
-                      <ChevronRight className="size-4 text-muted-foreground" strokeWidth={1.75} />
-                    )}
-                  </div>
-                </button>
+                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => openEditEmpresaModal(empresa)}
+                      className="px-3.5 flex items-center text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-colors cursor-pointer"
+                      title="Editar nombre del productor"
+                      aria-label={`Editar nombre de ${capitalizarNombre(empresa.nombre)}`}
+                    >
+                      <Pencil className="size-4" strokeWidth={1.75} />
+                    </button>
+                  )}
+                </div>
 
                 {isOpen && (
                   <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
@@ -477,7 +568,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
-                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
+                              onEdit={canWrite ? () => openEditUsuarioModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -497,7 +588,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
-                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
+                              onEdit={canWrite ? () => openEditUsuarioModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -517,7 +608,7 @@ export default function Productores() {
                               usuario={u}
                               empresaId={empresa.id}
                               onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
-                              onEdit={canWrite ? () => openCelularModal(u) : undefined}
+                              onEdit={canWrite ? () => openEditUsuarioModal(u) : undefined}
                               isPending={pendingUid === u.uid}
                             />
                           ))}
@@ -699,7 +790,7 @@ export default function Productores() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">Agregar usuario</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Productor: <span className="font-medium text-foreground">{addModalEmpresa.nombre}</span>
+                  Productor: <span className="font-medium text-foreground">{capitalizarNombre(addModalEmpresa.nombre)}</span>
                 </p>
               </div>
               <button
@@ -790,51 +881,133 @@ export default function Productores() {
         </div>
       )}
 
-      {/* Modal: Editar celular (WhatsApp) */}
-      {celularModal && (
+      {/* Modal: Editar nombre del productor */}
+      {editEmpresaModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
-            onClick={() => !celularSaving && closeCelularModal()}
+            onClick={() => !empresaSaving && closeEditEmpresaModal()}
             aria-hidden
           />
           <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-base font-semibold text-foreground">Celular (WhatsApp)</h2>
+                <h2 className="text-base font-semibold text-foreground">Editar productor</h2>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  Usuario: <span className="font-medium text-foreground">{celularModal.nombre}</span>
+                  Productor: <span className="font-medium text-foreground">{capitalizarNombre(editEmpresaModal.nombre)}</span>
                 </p>
               </div>
               <button
-                onClick={closeCelularModal}
+                onClick={closeEditEmpresaModal}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-                disabled={celularSaving}
+                disabled={empresaSaving}
                 aria-label="Cerrar"
               >
                 <X className="size-4" strokeWidth={1.75} />
               </button>
             </div>
 
-            <form
-              className="p-5 space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault()
-                saveCelular(celularValue.trim())
-              }}
-            >
+            <form className="p-5 space-y-4" onSubmit={saveEmpresaNombre}>
+              <div className="space-y-1.5">
+                <label htmlFor="empresa-nombre-edit" className="text-xs font-medium text-foreground">
+                  Nombre
+                </label>
+                <input
+                  id="empresa-nombre-edit"
+                  type="text"
+                  value={empresaNombreValue}
+                  onChange={(e) => setEmpresaNombreValue(e.target.value)}
+                  placeholder="Ej: Establecimiento La Pradera"
+                  required
+                  maxLength={200}
+                  autoFocus
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Se guarda con la primera letra de cada palabra en mayúscula (excepto &laquo;y&raquo;).
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeEditEmpresaModal}
+                  className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
+                  disabled={empresaSaving}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={empresaSaving || !empresaNombreValue.trim()}
+                >
+                  {empresaSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar usuario (nombre + celular WhatsApp) */}
+      {editUsuarioModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+            onClick={() => !editUsuarioSaving && closeEditUsuarioModal()}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Editar usuario</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  Usuario: <span className="font-medium text-foreground">{editUsuarioModal.nombre}</span>
+                </p>
+              </div>
+              <button
+                onClick={closeEditUsuarioModal}
+                className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                disabled={editUsuarioSaving}
+                aria-label="Cerrar"
+              >
+                <X className="size-4" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <form className="p-5 space-y-4" onSubmit={saveUsuario}>
+              <div className="space-y-1.5">
+                <label htmlFor="usuario-nombre-edit" className="text-xs font-medium text-foreground">
+                  Nombre
+                </label>
+                <input
+                  id="usuario-nombre-edit"
+                  type="text"
+                  value={editNombreValue}
+                  onChange={(e) => setEditNombreValue(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  required
+                  maxLength={120}
+                  autoFocus
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Se guarda en el perfil del usuario (Firestore).
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="celular-edit" className="text-xs font-medium text-foreground">
-                  Número con código de país
+                  Celular (WhatsApp)
                 </label>
                 <input
                   id="celular-edit"
                   type="tel"
-                  value={celularValue}
-                  onChange={(e) => setCelularValue(e.target.value)}
+                  value={editCelularValue}
+                  onChange={(e) => setEditCelularValue(e.target.value)}
                   placeholder="+54 9 11 1234 5678"
                   maxLength={32}
-                  autoFocus
                   className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                 />
                 <p className="text-[11px] text-muted-foreground">
@@ -845,18 +1018,18 @@ export default function Productores() {
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={closeCelularModal}
+                  onClick={closeEditUsuarioModal}
                   className="flex-1 px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
-                  disabled={celularSaving}
+                  disabled={editUsuarioSaving}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  disabled={celularSaving}
+                  disabled={editUsuarioSaving}
                 >
-                  {celularSaving ? 'Guardando…' : 'Guardar'}
+                  {editUsuarioSaving ? 'Guardando…' : 'Guardar'}
                 </button>
               </div>
             </form>
@@ -936,8 +1109,8 @@ function UsuarioCard({ usuario, onRemove, onEdit, isPending }: UsuarioCardProps)
           type="button"
           onClick={onEdit}
           className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
-          title="Editar celular (WhatsApp)"
-          aria-label={`Editar celular de ${nombreVisible}`}
+          title="Editar usuario (nombre y celular)"
+          aria-label={`Editar a ${nombreVisible}`}
         >
           <Pencil className="size-3.5" strokeWidth={1.75} />
         </button>

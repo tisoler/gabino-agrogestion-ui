@@ -36,6 +36,10 @@ interface MapaLoteProps {
   centroide?: Centroide | null
   onChange?: (geometria: GeoJSON.GeoJsonObject | null, centroide: Centroide | null, areaHa: number) => void
   altura?: string
+  /** Color de relleno del polígono (p.ej. análisiss por capas). */
+  fillColor?: string
+  /** Opacidad del relleno del polígono (default 0.25). */
+  fillOpacity?: number
 }
 
 const iconoCentroide = L.divIcon({
@@ -51,6 +55,8 @@ export default function MapaLote({
   centroide,
   onChange,
   altura = 'h-64',
+  fillColor = '#38bdf8',
+  fillOpacity = 0.25,
 }: MapaLoteProps) {
   const contRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -152,7 +158,7 @@ export default function MapaLote({
 
     if (geometria) {
       const geo = L.geoJSON(geometria, {
-        style: { color: '#0284c7', weight: 2, fillColor: '#38bdf8', fillOpacity: 0.25 },
+        style: { color: '#0284c7', weight: 2, fillColor, fillOpacity },
       })
       layerRef.current = geo
       geo.addTo(map)
@@ -165,7 +171,7 @@ export default function MapaLote({
       marker.addTo(map)
       map.setView([centroide.lat, centroide.lng], 13)
     }
-  }, [geometria, centroide, dibujar])
+  }, [geometria, centroide, dibujar, fillColor, fillOpacity])
 
   const reemplazar = (layer: L.Layer) => {
     if (layerRef.current && layerRef.current !== layer) {

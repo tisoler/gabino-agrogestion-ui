@@ -24,6 +24,7 @@ import Configuracion from './pages/Configuracion'
 import MensajesMasivos from './pages/MensajesMasivos'
 import MensajeMasivoNuevo from './pages/MensajeMasivoNuevo'
 import MensajeMasivoDetalle from './pages/MensajeMasivoDetalle'
+import AnalisisLote from './pages/AnalisisLote'
 
 const Dashboard = () => (
   <div className="space-y-4">
@@ -55,6 +56,7 @@ function App() {
               <Route path="/costos" element={<Costos />} />
               <Route path="/cultivos" element={<Cultivos />} />
               <Route path="/lotes" element={<Lotes />} />
+              <Route path="/analisis" element={<AnalisisLote />} />
               <Route path="/productores" element={<Productores />} />
               <Route path="/campanias" element={<Campanias />} />
               <Route path="/campanias/nueva" element={<CampaniaDetalle />} />

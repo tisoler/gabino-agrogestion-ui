@@ -21,6 +21,7 @@ import {
   FileBarChart,
   Settings,
   MessagesSquare,
+  Telescope,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/auth-context'
@@ -61,6 +62,7 @@ const NAV_GROUPS: NavItem[][] = [
   [
     { to: '/productores', label: 'Productores', icon: Users, permission: 'lectura:productor' },
     { to: '/lotes', label: 'Lotes', icon: MapPin, permission: 'lectura:lote' },
+    { to: '/analisis', label: 'Análisis de lote', icon: Telescope, permission: 'lectura:analisis-clima' },
   ],
   [
     { to: '/cultivos', label: 'Cultivos', icon: Sprout, permission: 'lectura:cultivo', ocultarParaProductor: true },
