@@ -3,7 +3,7 @@ import useSWR, { mutate } from 'swr'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, AlertCircle, Activity, Calendar, Building2, MapPin,
-  Sprout, Pickaxe, Package, Lock, Printer, Ban, ArrowRight, LandPlot, RotateCcw, Download,
+  Sprout, Pickaxe, Package, Lock, Printer, Ban, Eye, LandPlot, RotateCcw, Download,
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
@@ -85,6 +85,29 @@ export default function PrescripcionDetalle() {
   const campoTexto = esMultiLote
     ? Array.from(new Set(lotesPresc.map((l) => l.campania?.lote?.campo?.nombre || 'Sin campo'))).join(' · ')
     : (prescripcion.campania?.lote?.campo?.nombre || '—')
+  // Cada lote puede tener un cultivo distinto: se lista una vez por cultivo.
+  const cultivoTexto = esMultiLote
+    ? Array.from(new Set(lotesPresc.map((l) => l.campania?.cultivo?.nombre).filter((c): c is string => !!c))).join(' · ') ||
+      (prescripcion.campania?.cultivo?.nombre || '—')
+    : (prescripcion.campania?.cultivo?.nombre || '—')
+
+  // Botón "ver producción" por lote: navega a la campaña de cada uno. Sin
+  // relación de lotes (datos previos a la migración 029) cae en la principal.
+  const lotesParaNavegar = lotesPresc.length > 0
+    ? lotesPresc.map((l) => ({
+      campaniaId: l.idCampania,
+      lote: l.campania?.lote?.descripcion || `Lote #${l.campania?.lote?.id ?? '—'}`,
+      campo: l.campania?.lote?.campo?.nombre || 'Sin campo',
+      cultivo: l.campania?.cultivo?.nombre,
+    }))
+    : (prescripcion.campania
+      ? [{
+        campaniaId: prescripcion.campania.id,
+        lote: prescripcion.campania.lote?.descripcion || `Lote #${prescripcion.campania.lote?.id ?? '—'}`,
+        campo: prescripcion.campania.lote?.campo?.nombre || 'Sin campo',
+        cultivo: prescripcion.campania.cultivo?.nombre,
+      }]
+      : [])
   const empresa = idEmpresa != null
     ? { id: idEmpresa, nombre: empresas.find((e) => e.id === idEmpresa)?.nombre || `Productor #${idEmpresa}` }
     : null
@@ -274,21 +297,31 @@ export default function PrescripcionDetalle() {
                 <Sprout className="size-3 shrink-0" strokeWidth={2} />
                 Cultivo
               </p>
-              <p className="text-sm text-foreground">{prescripcion.campania?.cultivo?.nombre || '—'}</p>
+              <p className="text-sm text-foreground">{cultivoTexto}</p>
             </div>
-
-            {prescripcion.campania && (
-              <div className="flex justify-end">
-                <Link
-                  to={`/campanias/${prescripcion.campania.id}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity cursor-pointer"
-                >
-                  <ArrowRight className="size-4" strokeWidth={1.75} />
-                  Ir a la producción
-                </Link>
-              </div>
-            )}
           </div>
+
+          {lotesParaNavegar.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              {lotesParaNavegar.map((l) => (
+                <Link
+                  key={l.campaniaId}
+                  to={`/campanias/${l.campaniaId}`}
+                  className="inline-flex items-center gap-2 px-3 py-2 border border-border bg-card text-foreground rounded-md text-sm font-medium hover:bg-accent transition-opacity cursor-pointer"
+                  title={`Ir a la producción de ${l.lote}`}
+                >
+                  <Eye className="size-4 text-primary" strokeWidth={1.75} />
+                  {l.lote}
+                  {esMultiLote && (
+                    <span className="font-normal text-muted-foreground">
+                      · {l.campo}
+                      {l.cultivo ? ` · ${l.cultivo}` : ''}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Labor */}
@@ -395,7 +428,7 @@ export default function PrescripcionDetalle() {
             </div>
             <div>
               <dt>Cultivo</dt>
-              <dd>{prescripcion.campania?.cultivo?.nombre || '—'}</dd>
+              <dd>{cultivoTexto}</dd>
             </div>
             <div>
               <dt>Labor</dt>
