@@ -40,24 +40,7 @@ function getInitials(name: string | null | undefined) {
     .join('')
 }
 
-/**
- * Normaliza el nombre de una empresa: primera letra de cada palabra en
- * mayúscula y el resto en minúscula, salvo la palabra "y" que se conserva
- * en minúscula. Ej: "establecimiento LA PRAdera y campos" →
- * "Establecimiento La Pradera y Campos".
- */
-function capitalizarNombre(nombre: string | null | undefined) {
-  if (!nombre) return ''
-  return nombre
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((palabra) => {
-      const lower = palabra.toLowerCase()
-      if (lower === 'y') return lower
-      return lower.charAt(0).toUpperCase() + lower.slice(1)
-    })
-    .join(' ')
-}
+// El nombre ya viene capitalizado desde el BE (transformer de Empresa.nombre).
 
 function getRoleBadge(roles: string[]) {
   if (roles.includes(Roles.ASESOR)) return { label: 'Asesor', cls: 'bg-info-soft text-info' }
@@ -259,7 +242,7 @@ export default function Productores() {
 
   const openEditEmpresaModal = (empresa: EmpresaConUsuarios) => {
     setEditEmpresaModal({ id: empresa.id, nombre: empresa.nombre })
-    setEmpresaNombreValue(capitalizarNombre(empresa.nombre))
+    setEmpresaNombreValue(empresa.nombre)
     setActionError(null)
   }
 
@@ -510,7 +493,7 @@ export default function Productores() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="text-base font-semibold text-foreground leading-tight truncate">
-                          {capitalizarNombre(empresa.nombre)}
+                          {empresa.nombre}
                         </h2>
                         {!empresa.activo && (
                           <span className="px-1.5 py-0.5 bg-destructive-soft text-destructive text-[10px] font-semibold uppercase tracking-wider rounded">
@@ -547,7 +530,7 @@ export default function Productores() {
                       onClick={() => openEditEmpresaModal(empresa)}
                       className="px-3.5 flex items-center text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-colors cursor-pointer"
                       title="Editar nombre del productor"
-                      aria-label={`Editar nombre de ${capitalizarNombre(empresa.nombre)}`}
+                      aria-label={`Editar nombre de ${empresa.nombre}`}
                     >
                       <Pencil className="size-4" strokeWidth={1.75} />
                     </button>
@@ -790,7 +773,7 @@ export default function Productores() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">Agregar usuario</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Productor: <span className="font-medium text-foreground">{capitalizarNombre(addModalEmpresa.nombre)}</span>
+                  Productor: <span className="font-medium text-foreground">{addModalEmpresa.nombre}</span>
                 </p>
               </div>
               <button
@@ -894,7 +877,7 @@ export default function Productores() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">Editar productor</h2>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  Productor: <span className="font-medium text-foreground">{capitalizarNombre(editEmpresaModal.nombre)}</span>
+                  Productor: <span className="font-medium text-foreground">{editEmpresaModal.nombre}</span>
                 </p>
               </div>
               <button
