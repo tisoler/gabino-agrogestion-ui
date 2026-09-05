@@ -70,6 +70,21 @@ export default function PrescripcionDetalle() {
   }
 
   const idEmpresa = prescripcion.campania?.lote?.idEmpresa
+
+  // Con más de un lote, campo y lote se muestran como lista (cada lote con su
+  // superficie), igual que en el PDF.
+  const lotesPresc = prescripcion.lotes ?? []
+  const esMultiLote = lotesPresc.length > 1
+  const fmtSup = (v: number | null | undefined) =>
+    v == null ? '—' : `${v.toLocaleString('es-AR', { maximumFractionDigits: 2 })} ha`
+  const loteTexto = esMultiLote
+    ? lotesPresc
+      .map((l) => `${l.campania?.lote?.descripcion || `Lote #${l.campania?.lote?.id ?? '—'}`} (${fmtSup(l.superficieAplicada)})`)
+      .join(' · ')
+    : (prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`)
+  const campoTexto = esMultiLote
+    ? Array.from(new Set(lotesPresc.map((l) => l.campania?.lote?.campo?.nombre || 'Sin campo'))).join(' · ')
+    : (prescripcion.campania?.lote?.campo?.nombre || '—')
   const empresa = idEmpresa != null
     ? { id: idEmpresa, nombre: empresas.find((e) => e.id === idEmpresa)?.nombre || `Productor #${idEmpresa}` }
     : null
@@ -243,7 +258,7 @@ export default function PrescripcionDetalle() {
                 <MapPin className="size-3 shrink-0" strokeWidth={2} />
                 Campo
               </p>
-              <p className="text-sm text-foreground">{prescripcion.campania?.lote?.campo?.nombre || '—'}</p>
+              <p className="text-sm text-foreground">{campoTexto}</p>
             </div>
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
@@ -251,7 +266,7 @@ export default function PrescripcionDetalle() {
                 Lote
               </p>
               <p className="text-sm text-foreground">
-                {prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`}
+                {loteTexto}
               </p>
             </div>
             <div className="space-y-1">
@@ -298,6 +313,14 @@ export default function PrescripcionDetalle() {
               <p className="text-sm text-foreground">{fmtHa(prescripcion.totalHaAplicacion)}</p>
             </div>
           </div>
+          {!!prescripcion.observaciones && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Observaciones
+              </p>
+              <p className="text-sm text-foreground whitespace-pre-line">{prescripcion.observaciones}</p>
+            </div>
+          )}
         </section>
 
         {/* Insumos */}
@@ -362,12 +385,12 @@ export default function PrescripcionDetalle() {
             </div>
             <div>
               <dt>Campo</dt>
-              <dd>{prescripcion.campania?.lote?.campo?.nombre || '—'}</dd>
+              <dd>{campoTexto}</dd>
             </div>
             <div>
               <dt>Lote</dt>
               <dd>
-                {prescripcion.campania?.lote?.descripcion || `Lote #${prescripcion.campania?.lote?.id ?? '—'}`}
+                {loteTexto}
               </dd>
             </div>
             <div>
@@ -408,6 +431,13 @@ export default function PrescripcionDetalle() {
               )}
             </tbody>
           </table>
+
+          {!!prescripcion.observaciones && (
+            <div className="prescripcion-print-obs">
+              <p className="prescripcion-print-obs-label">Observaciones</p>
+              <p className="prescripcion-print-obs-text">{prescripcion.observaciones}</p>
+            </div>
+          )}
         </div>
 
         <div className="prescripcion-print-pie">

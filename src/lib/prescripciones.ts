@@ -13,13 +13,14 @@ export interface PrescripcionCampania {
 export interface PrescripcionListItem {
   id: number
   fecha: string
-  idCampania: number
+  idCampania: number | null
   idLabor: number
   totalHaAplicacion: number
   anulada: boolean
   campania: PrescripcionCampania | null
   labor: { id: number; nombre: string } | null
   insumoCount: number
+  lotesCount?: number
 }
 
 export interface PrescripcionInsumo {
@@ -31,8 +32,26 @@ export interface PrescripcionInsumo {
   insumo?: { id: number; nombre: string; unidad?: string | null } | null
 }
 
+/** Lote (producción) de una prescripción, con su superficie de aplicación. */
+export interface PrescripcionLote {
+  id: number
+  idPrescripcion: number
+  idCampania: number
+  superficieAplicada: number
+  campania?: {
+    id: number
+    campania?: string
+    lote?: { id: number; descripcion: string | null; campo?: { id: number; nombre: string } | null } | null
+    cultivo?: { id: number; nombre: string } | null
+  } | null
+}
+
 export interface Prescripcion extends Omit<PrescripcionListItem, 'insumoCount'> {
   insumos: PrescripcionInsumo[]
+  /** Indicaciones sobre la labor a realizar (opcional). */
+  observaciones?: string | null
+  /** Lotes abarcados (con superficie cada uno). */
+  lotes?: PrescripcionLote[]
 }
 
 export const fmtHa = (v: number | null | undefined, decimales = 2): string =>

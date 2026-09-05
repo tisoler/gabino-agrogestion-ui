@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -14,6 +14,7 @@ import { useVolver } from '../lib/navegacion'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
 import ProduccionDetalleModal from '../components/ProduccionDetalleModal'
 import SelectAutocomplete from '../components/SelectAutocomplete'
+import MultiselectFilter from '../components/MultiselectFilter'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 const todayLocalISO = () => {
@@ -24,7 +25,13 @@ const todayLocalISO = () => {
 interface CampaniaOption {
   id: number
   campania?: string
-  lote?: { id: number; descripcion: string | null; idEmpresa: number } | null
+  lote?: {
+    id: number
+    descripcion: string | null
+    idEmpresa: number
+    idCampo?: number | null
+    campo?: { id: number; nombre: string } | null
+  } | null
   cultivo?: { id: number; nombre: string } | null
   totales?: { supSembrada?: number }
 }
@@ -88,13 +95,15 @@ export default function PrescripcionNueva() {
     return empresas.filter((e) => ids.includes(e.id))
   }, [isAdmin, user, empresas])
 
-  // Paso 1: productor + campaña (período) + campo + lote + cultivo identifican la producción
+  // Paso 1: productor + período + cultivo (comunes) y campos/lotes (múltiple).
   const [fecha, setFecha] = useState(todayLocalISO())
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')
   const [periodo, setPeriodo] = useState<string>('')
-  const [idCampo, setIdCampo] = useState<number | ''>('')
-  const [idLote, setIdLote] = useState<number | ''>('')
   const [idCultivo, setIdCultivo] = useState<number | ''>('')
+  const [camposSel, setCamposSel] = useState<string[]>([])
+  const [lotesSel, setLotesSel] = useState<string[]>([])
+  /** Ha a aplicar por producción (clave: id de campaña). Sin clave = sembrada. */
+  const [supAplicada, setSupAplicada] = useState<Record<number, string>>({})
 
   // Catálogos (sys-admin y asesor-admin ven todas las labores/insumos)
   const { data: lotes = [] } = useSWR<Lote[]>(canWrite ? '/lotes' : null, fetcher)
@@ -131,77 +140,101 @@ export default function PrescripcionNueva() {
     [producciones]
   )
 
-  const lotesDisponibles = useMemo(() => {
+  // Cultivos con producción del productor en el período elegido.
+  const cultivosDisponibles = useMemo(() => {
     const rows = periodo === '' ? [] : producciones.filter((p) => p.campania === periodo)
-    const seen = new Map<number, Lote>()
-    for (const p of rows) {
-      if (p.lote) seen.set(p.lote.id, p.lote)
-    }
-    return Array.from(seen.values()).sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '', 'es'))
+    const seen = new Map<number, string>()
+    for (const p of rows) if (p.cultivo) seen.set(p.cultivo.id, p.cultivo.nombre)
+    return Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
   }, [producciones, periodo])
 
-  // Campos del productor (enriquecidos con el catálogo de lotes que trae "campo").
-  const lotesConCampo = useMemo(() => {
-    const byId = new Map(lotes.map((l) => [l.id, l]))
-    return lotesDisponibles.map((ld): Lote =>
-      byId.get(ld.id) || { ...ld, idCampo: null, campo: null }
-    )
-  }, [lotesDisponibles, lotes])
+  // Producciones del productor en ese período + cultivo: de ahí salen los
+  // campos y, filtrados por campo, los lotes. El catálogo de /lotes aporta el
+  // campo de cada lote.
+  const lotePorId = useMemo(() => new Map(lotes.map((l) => [l.id, l])), [lotes])
 
-  const camposDisponibles = useMemo(() => {
+  const produccionesFiltro = useMemo(() => {
+    if (periodo === '' || idCultivo === '') return []
+    return producciones.filter(
+      (p) => p.campania === periodo && p.cultivo?.id === Number(idCultivo)
+    )
+  }, [producciones, periodo, idCultivo])
+
+  const camposOpciones = useMemo(() => {
     const seen = new Map<number, string>()
     let sinCampo = false
-    for (const l of lotesConCampo) {
-      if (l.campo) seen.set(l.campo.id, l.campo.nombre)
+    for (const p of produccionesFiltro) {
+      const l = p.lote ? lotePorId.get(p.lote.id) : undefined
+      if (l?.campo) seen.set(l.campo.id, l.campo.nombre)
       else sinCampo = true
     }
     const opciones = Array.from(seen.entries())
       .sort((a, b) => a[1].localeCompare(b[1], 'es'))
-      .map(([value, label]) => ({ value, label }))
-    if (sinCampo) opciones.push({ value: 0, label: 'Sin campo' })
+      .map(([value, label]) => ({ value: String(value), label }))
+    if (sinCampo) opciones.push({ value: '0', label: 'Sin campo' })
     return opciones
-  }, [lotesConCampo])
+  }, [produccionesFiltro, lotePorId])
 
-  // El selector de campo filtra los lotes disponibles.
-  const lotesFiltrados = useMemo(() => {
-    if (idCampo === '') return lotesConCampo
-    const target = idCampo === 0 ? null : Number(idCampo)
-    return lotesConCampo.filter((l) => (l.idCampo ?? null) === target)
-  }, [lotesConCampo, idCampo])
+  // La lista de lotes se arma en función de los campos seleccionados.
+  const lotesOpciones = useMemo(
+    () =>
+      produccionesFiltro
+        .filter((p) => {
+          if (!p.lote) return false
+          if (camposSel.length === 0) return true
+          const l = lotePorId.get(p.lote.id)
+          return camposSel.includes(String(l?.idCampo ?? 0))
+        })
+        .map((p) => {
+          const l = p.lote ? lotePorId.get(p.lote.id) : undefined
+          return {
+            value: String(p.lote!.id),
+            label: p.lote!.descripcion || `Lote #${p.lote!.id}`,
+            campoNombre: l?.campo?.nombre || 'Sin campo',
+            campaniaId: p.id,
+            supSembrada: p.totales?.supSembrada,
+          }
+        })
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [produccionesFiltro, camposSel, lotePorId]
+  )
 
-  const cultivosDisponibles = useMemo(() => {
-    const rows =
-      periodo === '' || idLote === ''
-        ? []
-        : producciones.filter((p) => p.campania === periodo && p.lote?.id === Number(idLote))
-    const seen = new Map<number, { id: number; nombre: string }>()
-    for (const p of rows) {
-      if (p.cultivo) seen.set(p.cultivo.id, p.cultivo)
-    }
-    return Array.from(seen.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  }, [producciones, periodo, idLote])
+  // Selección vigente: se poda cuando el período/cultivo/campo dejan de
+  // incluir lotes (Patrón lotesEfectivos).
+  const lotesEfectivos = useMemo(
+    () => lotesSel.filter((id) => lotesOpciones.some((o) => o.value === id)),
+    [lotesSel, lotesOpciones]
+  )
 
-  const seleccionCompleta =
-    idEmpresa !== '' && periodo !== '' && idLote !== '' && idCultivo !== ''
+  const lotesSelData = useMemo(
+    () => lotesOpciones.filter((o) => lotesEfectivos.includes(o.value)),
+    [lotesOpciones, lotesEfectivos]
+  )
 
-  const produccionSel = seleccionCompleta
-    ? producciones.find(
-      (p) =>
-        p.campania === periodo &&
-        p.lote?.id === Number(idLote) &&
-        p.cultivo?.id === Number(idCultivo)
-    )
-    : undefined
-  const idCampania = produccionSel?.id ?? ''
+  const supDeLote = useCallback(
+    (o: { campaniaId: number; supSembrada?: number }): number => {
+      const editada = supAplicada[o.campaniaId]
+      if (editada != null) return num(editada)
+      return o.supSembrada && o.supSembrada > 0 ? o.supSembrada : 0
+    },
+    [supAplicada]
+  )
+
+  const totalHaNum = useMemo(
+    () => lotesSelData.reduce((acc, o) => acc + supDeLote(o), 0),
+    [lotesSelData, supDeLote]
+  )
 
   const lotesEmpresa = useMemo(
     () => (idEmpresa === '' ? [] : lotes.filter((l) => l.idEmpresa === Number(idEmpresa))),
     [lotes, idEmpresa]
   )
 
-  // Paso 2: labor + total ha
+  // Paso 2: labor (la superficie se carga por lote en el paso 1)
   const [idLabor, setLabor] = useState<number | ''>('')
-  const [totalHa, setTotalHa] = useState('')
+  const [observaciones, setObservaciones] = useState('')
 
   // Paso 3: insumos
   const [insumoRows, setInsumoRows] = useState<InsumoRow[]>([])
@@ -209,7 +242,8 @@ export default function PrescripcionNueva() {
 
   // Modales
   const [showCampaniaModal, setShowCampaniaModal] = useState(false)
-  const [showProduccionModal, setShowProduccionModal] = useState(false)
+  // Modal "Ver producción": id de la campaña de la fila elegida.
+  const [produccionModalId, setProduccionModalId] = useState<number | null>(null)
   const [campaniaForm, setCampaniaForm] = useState({
     campania: periodosCampania()[0] || '',
     idCampo: '' as number | '',
@@ -243,8 +277,9 @@ export default function PrescripcionNueva() {
   const [error, setError] = useState<string | null>(null)
   const [campaniaError, setCampaniaError] = useState<string | null>(null)
 
-  const totalHaNum = num(totalHa)
-  const canAddInsumos = idCampania !== '' && idLabor !== '' && totalHaNum > 0
+  const canAddInsumos =
+    idEmpresa !== '' && periodo !== '' && idCultivo !== '' && idLabor !== '' &&
+    lotesSelData.length > 0 && totalHaNum > 0
 
   // Insumo temporal: variedades del cultivo seleccionado en el modal campaña
   const variedadesModal = useMemo(() => {
@@ -302,27 +337,32 @@ export default function PrescripcionNueva() {
     })
   }, [])
 
-  const handleTotalHaChange = (value: string) => {
+  // Superficie a aplicar de un lote: recalcula las cantidades de los insumos
+  // contra el nuevo total (suma de lotes).
+  const updateSup = (campaniaId: number, value: string) => {
     const clean = fmtInputDecimal(value)
-    setTotalHa(clean)
-    const n = num(clean)
-    setInsumoRows((rows) => recomputeByTotalHa(rows, n))
+    setSupAplicada((m) => ({ ...m, [campaniaId]: clean }))
+    const nuevoTotal = lotesSelData.reduce(
+      (acc, o) => acc + (o.campaniaId === campaniaId ? num(clean) : supDeLote(o)),
+      0,
+    )
+    setInsumoRows((rows) => recomputeByTotalHa(rows, nuevoTotal))
   }
 
-  // Precarga "Total ha para aplicación" con la sup. sembrada de la producción
-  // (una sola vez por producción, sin pisar lo que el usuario cargó después).
-  const prefilledCampaniaRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (idCampania === '') return
-    if (prefilledCampaniaRef.current === idCampania) return
-    prefilledCampaniaRef.current = idCampania
-    const sup = produccionSel?.totales?.supSembrada
-    if (sup == null || !(sup > 0)) return
-    const clean = fmtNumValue(sup)
-    setTotalHa(clean)
-    setInsumoRows((rows) => recomputeByTotalHa(rows, num(clean)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idCampania])
+  // Toggle de lotes: limpia las superficies editadas de los lotes quitados.
+  const toggleLotes = (next: string[]) => {
+    setLotesSel(next)
+    setSupAplicada((m) => {
+      const vigentes = new Set(
+        lotesOpciones.filter((o) => next.includes(o.value)).map((o) => o.campaniaId),
+      )
+      const limpio: Record<number, string> = {}
+      for (const [k, v] of Object.entries(m)) {
+        if (vigentes.has(Number(k))) limpio[Number(k)] = v
+      }
+      return limpio
+    })
+  }
 
   // Crear producción desde el modal
   const handleCreateCampania = async () => {
@@ -334,12 +374,21 @@ export default function PrescripcionNueva() {
         idCultivo: Number(campaniaForm.idCultivo),
       }
       if (campaniaForm.idVariedad !== '') payload.idVariedad = Number(campaniaForm.idVariedad)
-      await api.post('/campanias', payload)
-      // La cascada queda apuntando a la producción recién creada.
-      setIdLote(campaniaForm.idLote)
-      setIdCultivo(campaniaForm.idCultivo)
+      const { data: nueva } = await api.post('/campanias', payload)
+      // La cascada queda apuntando a la producción recién creada, con su lote
+      // ya seleccionado.
+      const loteNuevo = Number(campaniaForm.idLote)
+      const campoNuevo = lotePorId.get(loteNuevo)?.idCampo ?? 0
       setPeriodo(campaniaForm.campania)
+      setIdCultivo(campaniaForm.idCultivo)
+      setCamposSel((s) => (s.includes(String(campoNuevo)) ? s : [...s, String(campoNuevo)]))
       await mutateProduccion()
+      const id: number | undefined = (nueva as { id?: number })?.id
+      setLotesSel((s) => {
+        const key = String(loteNuevo)
+        return s.includes(key) ? s : [...s, key]
+      })
+      if (id != null) setSupAplicada((m) => ({ ...m, [id]: m[id] ?? '' }))
       setShowCampaniaModal(false)
       setCampaniaError(null)
       setCampaniaForm({
@@ -353,9 +402,9 @@ export default function PrescripcionNueva() {
     }
   }
 
-  // Crear insumo desde el modal
   const canSave =
-    fecha !== '' && idCampania !== '' && idLabor !== '' && totalHaNum > 0 &&
+    fecha !== '' && periodo !== '' && idCultivo !== '' && idLabor !== '' &&
+    lotesSelData.length > 0 && lotesSelData.every((o) => supDeLote(o) > 0) &&
     insumoRows.every((r) => r.idInsumo !== '')
 
   const handleSave = async () => {
@@ -365,9 +414,12 @@ export default function PrescripcionNueva() {
     try {
       const payload: Record<string, unknown> = {
         fecha,
-        idCampania: Number(idCampania),
         idLabor: Number(idLabor),
-        totalHaAplicacion: totalHaNum,
+        observaciones: observaciones.trim() || undefined,
+        lotes: lotesSelData.map((o) => ({
+          idCampania: o.campaniaId,
+          superficieAplicada: supDeLote(o),
+        })),
         insumos: insumoRows
           .filter((r) => r.idInsumo !== '')
           .map((r) => ({
@@ -458,9 +510,11 @@ export default function PrescripcionNueva() {
             value={idEmpresa}
             onChange={(v) => {
               setIdEmpresa(Number(v))
-              setIdCampo('')
-              setIdLote('')
+              setPeriodo('')
               setIdCultivo('')
+              setCamposSel([])
+              setLotesSel([])
+              setSupAplicada({})
             }}
             options={empresasVisibles.map((e) => ({ value: e.id, label: e.nombre }))}
             placeholder="Seleccionar productor..."
@@ -468,7 +522,7 @@ export default function PrescripcionNueva() {
           />
         </div>
 
-        {/* Producción: productor + campaña + campo + lote + cultivo */}
+        {/* Producción: productor + campaña + cultivo + campos (múltiple) + lotes (múltiple) */}
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectAutocomplete
@@ -476,9 +530,10 @@ export default function PrescripcionNueva() {
               value={periodo}
               onChange={(v) => {
                 setPeriodo(String(v))
-                setIdCampo('')
-                setIdLote('')
                 setIdCultivo('')
+                setCamposSel([])
+                setLotesSel([])
+                setSupAplicada({})
               }}
               options={periodosDisponibles.map((p) => ({ value: p, label: p }))}
               placeholder={idEmpresa === '' ? 'Elegí primero el productor' : 'Seleccionar campaña...'}
@@ -488,42 +543,42 @@ export default function PrescripcionNueva() {
               defaultFirst
             />
             <SelectAutocomplete
-              label="Campo"
-              value={idCampo}
+              label="Cultivo"
+              value={idCultivo}
               onChange={(v) => {
-                setIdCampo(Number(v))
-                setIdLote('')
-                setIdCultivo('')
+                setIdCultivo(Number(v))
+                setCamposSel([])
               }}
-              options={camposDisponibles.map((c) => ({ value: c.value, label: c.label }))}
-              placeholder={periodo === '' ? 'Elegí campaña' : 'Seleccionar campo...'}
+              options={cultivosDisponibles}
+              placeholder={periodo === '' ? 'Elegí campaña' : 'Seleccionar cultivo...'}
               disabled={periodo === ''}
               autoSelectSingle
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <SelectAutocomplete
-              label="Lote"
-              value={idLote}
-              onChange={(v) => {
-                setIdLote(Number(v))
-                setIdCultivo('')
-              }}
-              options={lotesFiltrados.map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))}
-              placeholder={periodo === '' ? 'Elegí campaña' : 'Seleccionar lote...'}
-              disabled={periodo === ''}
-              autoSelectSingle
-            />
-            <SelectAutocomplete
-              label="Cultivo"
-              value={idCultivo}
-              onChange={(v) => setIdCultivo(Number(v))}
-              options={cultivosDisponibles.map((c) => ({ value: c.id, label: c.nombre }))}
-              placeholder={idLote === '' ? 'Elegí lote' : 'Seleccionar cultivo...'}
-              disabled={idLote === ''}
-              autoSelectSingle
-            />
+            <div className="space-y-1.5">
+              <label className={labelCls}>Campo</label>
+              <MultiselectFilter
+                value={camposSel}
+                opciones={camposOpciones}
+                onChange={setCamposSel}
+                placeholder="Todos los campos"
+                etiqueta="campo"
+                vacio="Elegí un cultivo primero."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls}>Lotes</label>
+              <MultiselectFilter
+                value={lotesEfectivos}
+                opciones={lotesOpciones.map((o) => ({ value: o.value, label: o.label }))}
+                onChange={toggleLotes}
+                placeholder={periodo === '' || idCultivo === '' ? 'Elegí campaña y cultivo' : 'Seleccionar lotes...'}
+                etiqueta="lote"
+                vacio="No hay lotes para esa combinación."
+              />
+            </div>
           </div>
 
           {idEmpresa === '' ? (
@@ -541,14 +596,6 @@ export default function PrescripcionNueva() {
             ) : (
               <p className="text-[12px] text-muted-foreground">Elegí una campaña.</p>
             )
-          ) : idLote === '' ? (
-            lotesFiltrados.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">
-                No existe una producción para esa combinación. Creala para continuar.
-              </p>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">Elegí un lote.</p>
-            )
           ) : idCultivo === '' ? (
             cultivosDisponibles.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">
@@ -557,44 +604,103 @@ export default function PrescripcionNueva() {
             ) : (
               <p className="text-[12px] text-muted-foreground">Elegí un cultivo.</p>
             )
-          ) : produccionSel ? (
+          ) : lotesSelData.length === 0 ? (
+            lotesOpciones.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No existe una producción para esa combinación. Creala para continuar.
+              </p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Elegí al menos un lote.</p>
+            )
+          ) : (
             <div className="flex items-center justify-between gap-3 flex-wrap text-sm text-success">
               <div className="flex items-center gap-2 min-w-0">
                 <CheckCircle2 className="size-4 shrink-0" strokeWidth={1.75} />
                 <span className="font-medium">
-                  Producción seleccionada,{' '}
+                  {lotesSelData.length === 1 ? 'Lote seleccionado' : `${lotesSelData.length} lotes seleccionados`},{' '}
                   <span className="text-primary font-semibold">
-                    sup. sembrada: {fmtHa(produccionSel.totales?.supSembrada)}
+                    total a aplicar: {fmtHa(totalHaNum)}
                   </span>
-                  . Ingresá la labor.
+                  . Ajustá la superficie de cada lote e ingresá la labor.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowProduccionModal(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
-                title="Ver datos de la producción"
-              >
-                <Eye className="size-3.5" strokeWidth={1.75} />
-                Ver producción
-              </button>
             </div>
-          ) : (
-            <p className="text-[12px] text-muted-foreground">
-              No existe una producción para esa combinación. Creala para continuar.
-            </p>
+          )}
+
+          {/* Superficie a aplicar por lote */}
+          {lotesSelData.length > 0 && (
+            <div className="overflow-x-auto border border-border rounded-md">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/20">
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sup. sembrada</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sup. a aplicar (ha)</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-10" aria-label="Acciones" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {lotesSelData.map((o) => {
+                    const editada = supAplicada[o.campaniaId]
+                    const defecto = o.supSembrada && o.supSembrada > 0 ? fmtNumValue(o.supSembrada) : ''
+                    return (
+                      <tr key={o.campaniaId}>
+                        <td className="px-4 py-2 text-foreground">{o.campoNombre}</td>
+                        <td className="px-4 py-2 font-medium text-foreground">{o.label}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                          {o.supSembrada != null && o.supSembrada > 0
+                            ? o.supSembrada.toLocaleString('es-AR', { maximumFractionDigits: 2 })
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-2 w-36">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editada != null ? editada : defecto}
+                            onChange={(e) => updateSup(o.campaniaId, e.target.value)}
+                            placeholder="0,00"
+                            className={inputCls + ' text-right'}
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setProduccionModalId(o.campaniaId)}
+                            className="inline-flex items-center justify-center p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                            title="Ver datos de la producción"
+                            aria-label={`Ver producción de ${o.label}`}
+                          >
+                            <Eye className="size-4" strokeWidth={1.75} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border bg-muted/10">
+                    <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total ha para aplicación
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold tabular-nums text-foreground">
+                      {totalHaNum.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-2" aria-hidden />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           )}
 
           <button
             type="button"
             onClick={() => {
               setCampaniaError(null)
-              const loteSel = lotes.find((l) => l.id === idLote)
               setCampaniaForm((f) => ({
                 ...f,
-                idLote,
-                idCampo: loteSel ? (loteSel.idCampo ?? 0) : '',
                 campania: periodo || periodosCampania()[0] || '',
+                idCultivo: idCultivo === '' ? f.idCultivo : Number(idCultivo),
               }))
               setShowCampaniaModal(true)
             }}
@@ -608,7 +714,7 @@ export default function PrescripcionNueva() {
         </div>
       </section>
 
-      {/* Labor + total ha */}
+      {/* Labor */}
       <section className="bg-card border border-border rounded-lg p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Pickaxe className="size-4 text-primary" strokeWidth={1.75} />
@@ -624,15 +730,23 @@ export default function PrescripcionNueva() {
           />
           <div className="space-y-1.5">
             <label className={labelCls}>Total ha para aplicación</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={totalHa}
-              onChange={(e) => handleTotalHaChange(e.target.value)}
-              placeholder="0.00"
-              className={inputCls}
-            />
+            <p className="px-3 py-2 bg-muted/30 border border-border rounded-md text-sm tabular-nums text-foreground">
+              {totalHaNum > 0
+                ? `${totalHaNum.toLocaleString('es-AR', { maximumFractionDigits: 2 })} ha`
+                : '—'}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Se calcula con la superficie de los lotes seleccionados.</p>
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Observaciones</label>
+          <textarea
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            placeholder="Indicaciones sobre la labor a realizar (opcional)"
+            rows={2}
+            className={`${inputCls} resize-y`}
+          />
         </div>
       </section>
 
@@ -656,7 +770,7 @@ export default function PrescripcionNueva() {
 
         {!canAddInsumos ? (
           <p className="text-sm text-muted-foreground">
-            Seleccioná la producción, la labor y el total de hectáreas para habilitar los insumos.
+            Seleccioná productor, campaña, cultivo, labor y al menos un lote con superficie para habilitar los insumos.
           </p>
         ) : insumoRows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No hay insumos agregados todavía.</p>
@@ -898,11 +1012,11 @@ export default function PrescripcionNueva() {
         />
       )}
 
-      {/* Modal: detalle de la producción en solo lectura */}
-      {showProduccionModal && idCampania !== '' && (
+      {/* Modal: detalle de la producción en solo lectura (por fila de lote) */}
+      {produccionModalId != null && (
         <ProduccionDetalleModal
-          campaniaId={Number(idCampania)}
-          onClose={() => setShowProduccionModal(false)}
+          campaniaId={produccionModalId}
+          onClose={() => setProduccionModalId(null)}
         />
       )}
     </div>

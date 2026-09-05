@@ -121,11 +121,13 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
                   </div>
                   <Tabla>
                     <thead>
-                      <Th>Labor</Th>
-                      <Th>Fecha</Th>
-                      <Th right>Sup. laboreada</Th>
-                      <Th right>Costo labor/ha</Th>
-                      <Th right>Costo ponderado/ha</Th>
+                      <tr className="border-b border-border bg-muted/20">
+                        <Th>Labor</Th>
+                        <Th>Fecha</Th>
+                        <Th right>Sup. laboreada</Th>
+                        <Th right>Costo labor/ha</Th>
+                        <Th right>Costo ponderado/ha</Th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {campania.labores.map((l) => (
@@ -151,11 +153,13 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
                   </div>
                   <Tabla>
                     <thead>
-                      <Th>Insumo</Th>
-                      <Th right>Sup. aplicada</Th>
-                      <Th right>Unidades/ha</Th>
-                      <Th right>Costo/unidad</Th>
-                      <Th right>Costo ponderado/ha</Th>
+                      <tr className="border-b border-border bg-muted/20">
+                        <Th>Insumo</Th>
+                        <Th right>Sup. aplicada</Th>
+                        <Th right>Unidades/ha</Th>
+                        <Th right>Costo/unidad</Th>
+                        <Th right>Costo ponderado/ha</Th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {campania.insumos.map((i) => (
@@ -181,10 +185,12 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
                   </div>
                   <Tabla>
                     <thead>
-                      <Th>Costo</Th>
-                      <Th right>Unidades/ha</Th>
-                      <Th right>Costo/unidad</Th>
-                      <Th right>Costo total</Th>
+                      <tr className="border-b border-border bg-muted/20">
+                        <Th>Costo</Th>
+                        <Th right>Unidades/ha</Th>
+                        <Th right>Costo/unidad</Th>
+                        <Th right>Costo total</Th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {campania.costos.map((k) => (

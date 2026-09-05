@@ -350,6 +350,11 @@ export default function Prescripciones() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base font-semibold text-foreground leading-tight truncate">
                         {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                        {(p.lotesCount ?? 0) > 1 && (
+                          <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] font-semibold">
+                            +{(p.lotesCount ?? 0) - 1}
+                          </span>
+                        )}
                         <span className="font-normal text-muted-foreground">
                           {p.campania?.campania ? ` · ${p.campania.campania}` : ''}
                         </span>
@@ -400,6 +405,9 @@ export default function Prescripciones() {
                     <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</dt>
                     <dd className="text-foreground truncate">
                       {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
+                      {(p.lotesCount ?? 0) > 1 && (
+                        <span className="font-normal text-muted-foreground"> +{(p.lotesCount ?? 0) - 1}</span>
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -499,6 +507,11 @@ export default function Prescripciones() {
                           <span className="text-sm text-foreground truncate">
                             {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
                           </span>
+                          {(p.lotesCount ?? 0) > 1 && (
+                            <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">
+                              +{(p.lotesCount ?? 0) - 1}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">

@@ -166,6 +166,23 @@ function buildInsumoOrCostoPayload(row: {
 type DetalleBuilder<T> = (row: T) => Record<string, unknown>
 
 /**
+ * Orden de exhibición de labores/insumos: primero los que vienen de una
+ * prescripción (por id de prescripción asc) y después los que no tienen,
+ * manteniendo el orden de inserción entre ellos (sort estable). Las mutaciones
+ * van por id de fila, así que reordenar la vista no afecta la edición.
+ */
+function ordenarPorPrescripcion<T extends { idPrescripcion?: number | null }>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => {
+    const pa = a.idPrescripcion ?? null
+    const pb = b.idPrescripcion ?? null
+    if (pa == null && pb == null) return 0
+    if (pa == null) return 1
+    if (pb == null) return -1
+    return pa - pb
+  })
+}
+
+/**
  * Sincroniza una tabla de detalle: hace POST de los nuevos (id < 0),
  * PATCH de los modificados y DELETE de los borrados. Tanto POST como PATCH
  * envían el payload completo (con defaults) para evitar problemas de
@@ -491,6 +508,11 @@ export default function CampaniaDetalle() {
     for (const i of insumos) if (i.idPrescripcion != null) ids.push(i.idPrescripcion)
     return ids
   }, [labores, insumos])
+
+  // Orden de exhibición: primero las filas con prescripción (id asc) y después
+  // las sin prescripción, manteniendo el orden de inserción entre ellas.
+  const laboresOrdenadas = useMemo(() => ordenarPorPrescripcion(labores), [labores])
+  const insumosOrdenados = useMemo(() => ordenarPorPrescripcion(insumos), [insumos])
 
   // Aviso de warning cuando falta la sup. sembrada (los costos ponderados se
   // calculan dividiendo por ella).
@@ -1158,7 +1180,7 @@ export default function CampaniaDetalle() {
               { key: 'observaciones', label: 'Observaciones', kind: 'text' },
               { key: '__ponderado', label: 'Costo ponderado/ha', kind: 'readonly-money', align: 'right' },
             ]}
-            rows={labores}
+            rows={laboresOrdenadas}
             catalogOptions={catalogLabores}
             addLabel="Agregar labor"
             canAdd={canWrite && catalogLabores.length > 0}
@@ -1192,7 +1214,7 @@ export default function CampaniaDetalle() {
               { key: 'costoUnidad', label: 'Costo/unidad', kind: 'precio-insumo', align: 'right' },
               { key: '__ponderado', label: 'Costo ponderado/ha', kind: 'readonly-money', align: 'right' },
             ]}
-            rows={insumos}
+            rows={insumosOrdenados}
             catalogOptions={catalogInsumos}
             addLabel="Agregar insumo"
             canAdd={canWrite && catalogInsumos.length > 0}

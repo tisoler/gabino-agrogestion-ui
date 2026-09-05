@@ -197,22 +197,38 @@
     letter-spacing: -0.005em;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-weight: var(--font-weight-display);
     letter-spacing: -0.018em;
     line-height: 1.2;
   }
 
   /* Subtle scrollbar in both themes */
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   ::-webkit-scrollbar-thumb {
     background: var(--border);
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); background-clip: padding-box; }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+    background-clip: padding-box;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -237,6 +253,7 @@
 /* Print: la vista de reportes se imprime limpia (sin sidebar ni header)      */
 /* -------------------------------------------------------------------------- */
 @media print {
+
   aside,
   .print-hide {
     display: none !important;
@@ -246,7 +263,7 @@
     padding: 0 !important;
   }
 
-  main > div {
+  main>div {
     padding: 0 !important;
   }
 
@@ -358,6 +375,31 @@
 
   .prescripcion-print-tabla .text-right {
     text-align: right;
+  }
+
+  .prescripcion-print-obs {
+    margin-top: 5mm;
+    border: 1px solid #000;
+    background: #f4f4f5;
+    padding: 2.5mm 3mm;
+    break-inside: avoid;
+    /* Sin esto el navegador omite el fondo al imprimir (y con el PDF del
+       servidor tampoco coincide). */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .prescripcion-print-obs-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 1mm;
+  }
+
+  .prescripcion-print-obs-text {
+    font-size: 14px;
+    white-space: pre-line;
   }
 
   .prescripcion-print-pie {
