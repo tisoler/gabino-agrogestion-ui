@@ -105,7 +105,7 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
       <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border relative">
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
-            <GabinoLogo className="size-9 shrink-0 text-primary" grosor={15} />
+            <GabinoLogo className="size-9 shrink-0 text-primary" grosor={11} />
             <div className="flex flex-col overflow-hidden leading-tight">
               <span className="text-sm font-semibold tracking-tight truncate">Gabino</span>
               <span className="text-[11px] text-muted-foreground truncate">Agrogestión</span>
@@ -114,7 +114,7 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
         )}
         {isCollapsed && (
           <div className="mx-auto">
-            <GabinoLogo className="size-8 text-primary" grosor={15} />
+            <GabinoLogo className="size-8 text-primary" grosor={11} />
           </div>
         )}
         <button
@@ -250,7 +250,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       {/* Mobile Top Header */}
       <div className="print-hide lg:hidden fixed top-0 inset-x-0 h-14 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 z-50">
         <div className="flex items-center gap-2.5">
-          <GabinoLogo className="size-8 shrink-0 text-primary" grosor={15} />
+          <GabinoLogo className="size-8 shrink-0 text-primary" grosor={11} />
           <span className="text-sm font-semibold tracking-tight">Gabino</span>
         </div>
         <button
