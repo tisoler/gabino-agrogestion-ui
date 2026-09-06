@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../contexts/auth-context'
 import { useTheme, type ThemeMode } from '../contexts/theme-context'
 import { getRoleLabel } from '../constantes'
+import GabinoLogo from './GabinoLogo'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -104,9 +105,7 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
       <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border relative">
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-9 rounded-md bg-primary-soft text-primary flex items-center justify-center shrink-0">
-              <Sprout className="size-5" strokeWidth={1.75} />
-            </div>
+            <GabinoLogo className="size-9 shrink-0 text-primary" grosor={15} />
             <div className="flex flex-col overflow-hidden leading-tight">
               <span className="text-sm font-semibold tracking-tight truncate">Gabino</span>
               <span className="text-[11px] text-muted-foreground truncate">Agrogestión</span>
@@ -114,8 +113,8 @@ function SidebarContent({ isCollapsed, setIsCollapsed, onCloseMobile }: SidebarC
           </div>
         )}
         {isCollapsed && (
-          <div className="size-9 rounded-md bg-primary-soft text-primary flex items-center justify-center mx-auto">
-            <Sprout className="size-5" strokeWidth={1.75} />
+          <div className="mx-auto">
+            <GabinoLogo className="size-8 text-primary" grosor={15} />
           </div>
         )}
         <button
@@ -251,9 +250,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       {/* Mobile Top Header */}
       <div className="print-hide lg:hidden fixed top-0 inset-x-0 h-14 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 z-50">
         <div className="flex items-center gap-2.5">
-          <div className="size-8 rounded-md bg-primary-soft text-primary flex items-center justify-center">
-            <Sprout className="size-5" strokeWidth={1.75} />
-          </div>
+          <GabinoLogo className="size-8 shrink-0 text-primary" grosor={15} />
           <span className="text-sm font-semibold tracking-tight">Gabino</span>
         </div>
         <button
@@ -276,7 +273,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       {/* Sidebar Container */}
       <aside
         className={`fixed left-0 top-0 bottom-0 z-50 transition-[width,transform] duration-200 ease-out
-          ${isCollapsed ? 'w-16' : 'w-52'}
+          ${isCollapsed ? 'w-20' : 'w-52'}
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
