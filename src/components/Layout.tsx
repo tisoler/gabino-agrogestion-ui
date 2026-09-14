@@ -2,6 +2,7 @@ import { Sidebar } from './Sidebar'
 import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import CotizacionDolar from './CotizacionDolar'
+import CotizacionesPizarra from './CotizacionesPizarra'
 import NotificacionesBell from './NotificacionesBell'
 
 export default function Layout() {
@@ -18,6 +19,8 @@ export default function Layout() {
         <div className="mx-auto max-w-7xl p-4 md:p-6 pt-16 md:pt-4 min-h-screen">
           <div className="print-hide flex justify-end items-center gap-2 mb-7">
             <NotificacionesBell />
+            <CotizacionesPizarra />
+            <div className="hidden md:block w-px self-stretch bg-border" aria-hidden />
             <CotizacionDolar />
           </div>
           <Outlet />

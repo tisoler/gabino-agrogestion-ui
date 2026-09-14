@@ -146,7 +146,7 @@ export default function Login() {
         <div className="bg-card/90 border border-border shadow-xl rounded-lg overflow-hidden backdrop-blur-md">
           <div className="p-8 pb-4 text-center">
             <div className="inline-flex size-20 rounded-lg bg-primary items-center justify-center mb-4">
-              <GabinoLogo className="size-18 text-white" grosor={6} />
+              <GabinoLogo className="size-16 text-white" grosor={6} />
             </div>
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">Gabino Agrogestión</h1>
             <p className="text-sm text-muted-foreground mt-1">

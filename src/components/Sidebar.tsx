@@ -22,6 +22,7 @@ import {
   Settings,
   MessagesSquare,
   Telescope,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/auth-context'
@@ -73,6 +74,7 @@ const NAV_GROUPS: NavItem[][] = [
   ],
   [
     { to: '/mensajes-masivos', label: 'Mensajes', icon: MessagesSquare, permission: 'lectura:mensaje-masivo' },
+    { to: '/facturacion', label: 'Facturación', icon: Wallet, soloSysAdmin: true },
     { to: '/configuracion', label: 'Configuración', icon: Settings, soloSysAdmin: true },
   ],
 ]
