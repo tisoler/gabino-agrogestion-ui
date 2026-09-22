@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/auth-context'
 import { fmtFecha, fmtHa, type PrescripcionListItem } from '../lib/prescripciones'
 import { periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'
+import LotesPrescripcionPopover from '../components/LotesPrescripcionPopover'
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
@@ -28,6 +29,14 @@ interface Insumo {
   id: number
   nombre: string
 }
+
+/** Primera fila visible en la celda (fallback del popover multi-lote). */
+const fallbackEntrada = (p: PrescripcionListItem): { campo: string | null; lote: string } => ({
+  campo: p.campania?.lote?.campo?.nombre ?? null,
+  lote:
+    p.campania?.lote?.descripcion?.trim() ||
+    (p.campania?.lote ? `Lote #${p.campania.lote.id}` : '—'),
+})
 
 export default function Prescripciones() {
   const navigate = useNavigate()
@@ -351,9 +360,13 @@ export default function Prescripciones() {
                       <h3 className="text-base font-semibold text-foreground leading-tight truncate">
                         {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
                         {(p.lotesCount ?? 0) > 1 && (
-                          <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] font-semibold">
-                            +{(p.lotesCount ?? 0) - 1}
-                          </span>
+                          <LotesPrescripcionPopover
+                            prescripcionId={p.id}
+                            restantes={(p.lotesCount ?? 0) - 1}
+                            kind="lote"
+                            fallback={fallbackEntrada(p)}
+                            className="ml-1 inline-flex items-center px-2 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-colors cursor-pointer"
+                          />
                         )}
                         <span className="font-normal text-muted-foreground">
                           {p.campania?.campania ? ` · ${p.campania.campania}` : ''}
@@ -399,15 +412,34 @@ export default function Prescripciones() {
                   </div>
                   <div>
                     <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campo</dt>
-                    <dd className="text-foreground truncate">{p.campania?.lote?.campo?.nombre || '—'}</dd>
+                    <dd className="text-foreground">
+                      <span className="flex items-center gap-1 min-w-0">
+                        <span className="truncate">{p.campania?.lote?.campo?.nombre || '—'}</span>
+                        {(p.lotesCount ?? 0) > 1 && (
+                          <LotesPrescripcionPopover
+                            prescripcionId={p.id}
+                            restantes={(p.lotesCount ?? 0) - 1}
+                            kind="campo"
+                            fallback={fallbackEntrada(p)}
+                          />
+                        )}
+                      </span>
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</dt>
-                    <dd className="text-foreground truncate">
-                      {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
-                      {(p.lotesCount ?? 0) > 1 && (
-                        <span className="font-normal text-muted-foreground"> +{(p.lotesCount ?? 0) - 1}</span>
-                      )}
+                    <dd className="text-foreground">
+                      <span className="flex items-center gap-1 min-w-0">
+                        <span className="truncate">{p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}</span>
+                        {(p.lotesCount ?? 0) > 1 && (
+                          <LotesPrescripcionPopover
+                            prescripcionId={p.id}
+                            restantes={(p.lotesCount ?? 0) - 1}
+                            kind="lote"
+                            fallback={fallbackEntrada(p)}
+                          />
+                        )}
+                      </span>
                     </dd>
                   </div>
                   <div>
@@ -497,8 +529,16 @@ export default function Prescripciones() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-foreground">
-                          {p.campania?.lote?.campo?.nombre || '—'}
+                        <span className="flex items-center gap-1 text-sm text-foreground min-w-0">
+                          <span className="truncate">{p.campania?.lote?.campo?.nombre || '—'}</span>
+                          {(p.lotesCount ?? 0) > 1 && (
+                            <LotesPrescripcionPopover
+                              prescripcionId={p.id}
+                              restantes={(p.lotesCount ?? 0) - 1}
+                              kind="campo"
+                              fallback={fallbackEntrada(p)}
+                            />
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -508,9 +548,12 @@ export default function Prescripciones() {
                             {p.campania?.lote?.descripcion || `Lote #${p.campania?.lote?.id ?? '—'}`}
                           </span>
                           {(p.lotesCount ?? 0) > 1 && (
-                            <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">
-                              +{(p.lotesCount ?? 0) - 1}
-                            </span>
+                            <LotesPrescripcionPopover
+                              prescripcionId={p.id}
+                              restantes={(p.lotesCount ?? 0) - 1}
+                              kind="lote"
+                              fallback={fallbackEntrada(p)}
+                            />
                           )}
                         </div>
                       </td>
