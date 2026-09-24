@@ -8,7 +8,7 @@ import {
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { useVolver } from '../lib/navegacion'
-import { fmtFecha, fmtHa, fmtDosisCantidad, type Prescripcion } from '../lib/prescripciones'
+import { fmtFecha, fmtHa, fmtDosisCantidad, fmtNroPrescripcion, type Prescripcion } from '../lib/prescripciones'
 import CompartirPrescripcionModal from '../components/CompartirPrescripcionModal'
 import WhatsAppIcon from '../components/WhatsAppIcon'
 
@@ -185,7 +185,7 @@ export default function PrescripcionDetalle() {
                 <ArrowLeft className="size-4" strokeWidth={1.75} />
               </button>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-                Prescripción #{prescripcion.id}
+                Prescripción #{fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}
               </h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -407,7 +407,7 @@ export default function PrescripcionDetalle() {
 
         <div className="prescripcion-print-body">
           <div className="prescripcion-print-titulo">
-            <h1>Prescripción</h1>
+            <h1>Prescripción #{fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}</h1>
             <p>{fmtFecha(prescripcion.fecha)}</p>
           </div>
 
@@ -482,6 +482,7 @@ export default function PrescripcionDetalle() {
       {compartirOpen && idEmpresa != null && (
         <CompartirPrescripcionModal
           prescripcionId={prescripcion.id}
+          numero={fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}
           empresaId={idEmpresa}
           onClose={() => setCompartirOpen(false)}
         />

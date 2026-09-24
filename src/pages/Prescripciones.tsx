@@ -3,11 +3,11 @@ import useSWR, { mutate } from 'swr'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, AlertCircle, Activity, ClipboardList, MapPin, Calendar,
-  Pickaxe, Package, Building2, Loader2, X,
+  Pickaxe, Building2, Loader2, X,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
-import { fmtFecha, fmtHa, type PrescripcionListItem } from '../lib/prescripciones'
+import { fmtFecha, fmtHa, fmtNroPrescripcion, type PrescripcionListItem } from '../lib/prescripciones'
 import { periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'
 import LotesPrescripcionPopover from '../components/LotesPrescripcionPopover'
@@ -131,12 +131,18 @@ export default function Prescripciones() {
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     if (!term) return prescripciones
-    return prescripciones.filter((p) =>
-      (empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre || '').toLowerCase().includes(term) ||
-      (p.campania?.lote?.campo?.nombre || '').toLowerCase().includes(term) ||
-      (p.campania?.lote?.descripcion || '').toLowerCase().includes(term) ||
-      (p.labor?.nombre || '').toLowerCase().includes(term)
-    )
+    return prescripciones.filter((p) => {
+      if (
+        (empresas.find((e) => e.id === p.campania?.lote?.idEmpresa)?.nombre || '').toLowerCase().includes(term) ||
+        (p.campania?.lote?.campo?.nombre || '').toLowerCase().includes(term) ||
+        (p.campania?.lote?.descripcion || '').toLowerCase().includes(term) ||
+        (p.labor?.nombre || '').toLowerCase().includes(term)
+      ) return true
+      // Número de prescripción: coincide "26-104", "104" o el id anterior.
+      return fmtNroPrescripcion(p.fecha, p.numero).toLowerCase().includes(term) ||
+        String(p.numero ?? '').includes(term) ||
+        String(p.id).includes(term)
+    })
   }, [prescripciones, searchTerm, empresas])
 
   const hasActiveFilters =
@@ -230,7 +236,7 @@ export default function Prescripciones() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" strokeWidth={1.75} />
           <input
             type="text"
-            placeholder="Buscar por productor, campo, lote o labor..."
+            placeholder="Buscar por número, productor, campo, lote o labor..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
@@ -450,9 +456,8 @@ export default function Prescripciones() {
 
                 <div className="pt-2 border-t border-border flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Total {fmtHa(p.totalHaAplicacion)}</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
-                    <Package className="size-3" strokeWidth={1.75} />
-                    {p.insumoCount} {p.insumoCount === 1 ? 'insumo' : 'insumos'}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground tabular-nums">
+                    N° {fmtNroPrescripcion(p.fecha, p.numero)}
                   </span>
                 </div>
               </div>
@@ -467,6 +472,9 @@ export default function Prescripciones() {
                   <tr className="border-b border-border bg-muted/40">
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Fecha
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      N°
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Productor
@@ -485,9 +493,6 @@ export default function Prescripciones() {
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
                       Total ha
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
-                      Insumos
                     </th>
                     {canWrite && (
                       <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
@@ -513,6 +518,9 @@ export default function Prescripciones() {
                             Anulada
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                        <span className="text-sm text-foreground">{fmtNroPrescripcion(p.fecha, p.numero)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -566,12 +574,6 @@ export default function Prescripciones() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-sm">{fmtHa(p.totalHaAplicacion)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
-                          <Package className="size-3" strokeWidth={1.75} />
-                          {p.insumoCount}
-                        </span>
-                      </td>
                       {canWrite && (
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <button

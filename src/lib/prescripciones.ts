@@ -13,6 +13,8 @@ export interface PrescripcionCampania {
 export interface PrescripcionListItem {
   id: number
   fecha: string
+  /** Secuencial dentro del año de `fecha` (visible como "AA-numero"). */
+  numero: number
   idCampania: number | null
   idLabor: number
   totalHaAplicacion: number
@@ -56,6 +58,17 @@ export interface Prescripcion extends Omit<PrescripcionListItem, 'insumoCount'> 
 
 export const fmtHa = (v: number | null | undefined, decimales = 2): string =>
   v == null || Number.isNaN(v) ? '—' : `${v.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: decimales })} ha`
+
+/** Número visible año-número: "26-104" (año de 2 dígitos + secuencial). */
+export const fmtNroPrescripcion = (
+  fecha: string | undefined | null,
+  numero: number | null | undefined,
+): string => {
+  if (numero == null) return '—'
+  const anio = typeof fecha === 'string' ? Number(fecha.slice(0, 4)) : NaN
+  if (!Number.isInteger(anio)) return String(numero)
+  return `${String(anio).slice(-2)}-${numero}`
+}
 
 export const fmtCantidad = (v: number | null | undefined, decimales = 2): string =>
   v == null || Number.isNaN(v) ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: decimales })
