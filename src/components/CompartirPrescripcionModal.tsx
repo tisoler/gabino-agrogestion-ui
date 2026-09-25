@@ -94,7 +94,7 @@ export default function CompartirPrescripcionModal({
     })
   }
 
-  const texto = `Prescripción N° ${numero}\n${url ?? ''}`
+  const texto = `Prescripción N°${numero}\n${url ?? ''}`
 
   // Un link de WhatsApp Web por celular seleccionado, un tab cada uno.
   // Se abren de forma síncrona dentro del gesto para que no las bloquee el
@@ -150,7 +150,7 @@ export default function CompartirPrescripcionModal({
             </span>
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-foreground">Compartir por WhatsApp</h2>
-              <p className="text-xs text-muted-foreground truncate">Prescripción N° {numero}</p>
+              <p className="text-xs text-muted-foreground truncate">Prescripción N°{numero}</p>
             </div>
           </div>
           <button

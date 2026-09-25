@@ -457,7 +457,7 @@ export default function Prescripciones() {
                 <div className="pt-2 border-t border-border flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Total {fmtHa(p.totalHaAplicacion)}</span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground tabular-nums">
-                    N° {fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}
+                    N°{fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}
                   </span>
                 </div>
               </div>
@@ -520,7 +520,7 @@ export default function Prescripciones() {
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap tabular-nums">
-                        <span className="text-sm text-foreground">{fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}</span>
+                        <span className="text-sm text-foreground tracking-[-0.06em]">{fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">

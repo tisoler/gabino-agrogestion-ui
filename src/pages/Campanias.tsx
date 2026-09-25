@@ -407,7 +407,7 @@ export default function Campanias() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <span className="inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground tabular-nums">
-                        N° {fmtNroCampania(c.numEmpresa, c.numAnio, c.numSeq)}
+                        N°{fmtNroCampania(c.numEmpresa, c.numAnio, c.numSeq)}
                       </span>
                       <span className="inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
                         {c.campania}
