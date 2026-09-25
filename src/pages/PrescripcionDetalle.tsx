@@ -185,7 +185,7 @@ export default function PrescripcionDetalle() {
                 <ArrowLeft className="size-4" strokeWidth={1.75} />
               </button>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-                Prescripción #{fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}
+                Prescripción #{fmtNroPrescripcion(prescripcion.numEmpresa, prescripcion.numAnio, prescripcion.numero)}
               </h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -407,7 +407,7 @@ export default function PrescripcionDetalle() {
 
         <div className="prescripcion-print-body">
           <div className="prescripcion-print-titulo">
-            <h1>Prescripción #{fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}</h1>
+            <h1>Prescripción #{fmtNroPrescripcion(prescripcion.numEmpresa, prescripcion.numAnio, prescripcion.numero)}</h1>
             <p>{fmtFecha(prescripcion.fecha)}</p>
           </div>
 
@@ -482,7 +482,7 @@ export default function PrescripcionDetalle() {
       {compartirOpen && idEmpresa != null && (
         <CompartirPrescripcionModal
           prescripcionId={prescripcion.id}
-          numero={fmtNroPrescripcion(prescripcion.fecha, prescripcion.numero)}
+          numero={fmtNroPrescripcion(prescripcion.numEmpresa, prescripcion.numAnio, prescripcion.numero)}
           empresaId={idEmpresa}
           onClose={() => setCompartirOpen(false)}
         />

@@ -138,8 +138,8 @@ export default function Prescripciones() {
         (p.campania?.lote?.descripcion || '').toLowerCase().includes(term) ||
         (p.labor?.nombre || '').toLowerCase().includes(term)
       ) return true
-      // Número de prescripción: coincide "26-104", "104" o el id anterior.
-      return fmtNroPrescripcion(p.fecha, p.numero).toLowerCase().includes(term) ||
+      // Número de prescripción: coincide "12-26-104", "104" o el id anterior.
+      return fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero).toLowerCase().includes(term) ||
         String(p.numero ?? '').includes(term) ||
         String(p.id).includes(term)
     })
@@ -412,12 +412,6 @@ export default function Prescripciones() {
                         || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
                     </dd>
                   </div>
-                  {isSysAdmin && (
-                    <div>
-                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Asesor</dt>
-                      <dd className="text-foreground truncate">{p.asesor?.nombre || '—'}</dd>
-                    </div>
-                  )}
                   <div>
                     <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaña</dt>
                     <dd className="text-foreground">{p.campania?.campania || '—'}</dd>
@@ -463,7 +457,7 @@ export default function Prescripciones() {
                 <div className="pt-2 border-t border-border flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Total {fmtHa(p.totalHaAplicacion)}</span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground tabular-nums">
-                    N° {fmtNroPrescripcion(p.fecha, p.numero)}
+                    N° {fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}
                   </span>
                 </div>
               </div>
@@ -485,11 +479,6 @@ export default function Prescripciones() {
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Productor
                     </th>
-                    {isSysAdmin && (
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Asesor
-                      </th>
-                    )}
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Campaña
                     </th>
@@ -531,7 +520,7 @@ export default function Prescripciones() {
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap tabular-nums">
-                        <span className="text-sm text-foreground">{fmtNroPrescripcion(p.fecha, p.numero)}</span>
+                        <span className="text-sm text-foreground">{fmtNroPrescripcion(p.numEmpresa, p.numAnio, p.numero)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -542,13 +531,6 @@ export default function Prescripciones() {
                           </span>
                         </div>
                       </td>
-                      {isSysAdmin && (
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-foreground">
-                            {p.asesor?.nombre || '—'}
-                          </span>
-                        </td>
-                      )}
                       <td className="px-4 py-3">
                         <span className="text-sm text-foreground">
                           {p.campania?.campania || '—'}

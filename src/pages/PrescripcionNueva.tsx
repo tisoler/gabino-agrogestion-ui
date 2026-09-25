@@ -101,8 +101,6 @@ export default function PrescripcionNueva() {
   // resuelve por fila (cada lote elige su producción de la campaña).
   const [fecha, setFecha] = useState(todayLocalISO())
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')
-  /** Asesor dueño de la numeración (sólo sys-admin lo elige; el asesor es automático). */
-  const [asesorUid, setAsesorUid] = useState('')
   const [periodo, setPeriodo] = useState<string>('')
   const [camposSel, setCamposSel] = useState<string[]>([])
   const [lotesSel, setLotesSel] = useState<string[]>([])
@@ -121,21 +119,6 @@ export default function PrescripcionNueva() {
   const { data: categoriasInsumo = [] } = useSWR<{ id: number; nombre: string }[]>(
     canWrite ? '/categorias' : null,
     fetcher,
-  )
-
-  // Asesores para el selector de numeración (sólo sys-admin).
-  const { data: candidatos = [] } = useSWR<{ uid: string; nombreUsuario: string; roles: string[] }[]>(
-    isSysAdmin ? '/usuarios/candidatos' : null,
-    fetcher,
-    { revalidateOnFocus: false },
-  )
-  const asesoresOpciones = useMemo(
-    () =>
-      candidatos
-        .filter((c) => c.roles.includes('asesor'))
-        .map((c) => ({ value: c.uid, label: c.nombreUsuario }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
-    [candidatos],
   )
 
   // Producciones del productor seleccionado; de ahí se derivan las opciones
@@ -480,7 +463,6 @@ export default function PrescripcionNueva() {
 
   const canSave =
     fecha !== '' && periodo !== '' && idLabor !== '' &&
-    (!isSysAdmin || asesorUid !== '') &&
     filasPendientas.length === 0 && filasResueltas.length > 0 &&
     filasResueltas.every((o) => o.superficie > 0) &&
     insumoRows.every((r) => r.idInsumo !== '')
@@ -494,7 +476,6 @@ export default function PrescripcionNueva() {
         fecha,
         idLabor: Number(idLabor),
         observaciones: observaciones.trim() || undefined,
-        ...(isSysAdmin && asesorUid !== '' ? { uidAsesor: asesorUid } : {}),
         // Las filas sin producción (resaltadas) no se agregan.
         lotes: filasResueltas.map((o) => ({
           idCampania: o.campaniaId,
@@ -601,17 +582,6 @@ export default function PrescripcionNueva() {
             autoSelectSingle
           />
         </div>
-        {isSysAdmin && (
-          <div className="space-y-1.5">
-            <SelectAutocomplete
-              label="Asesor (dueño de la numeración)"
-              value={asesorUid}
-              onChange={(v) => setAsesorUid(String(v))}
-              options={asesoresOpciones}
-              placeholder="Seleccionar asesor..."
-            />
-          </div>
-        )}
 
         {/* Producción: productor + campaña + campos (múltiple) + lotes (múltiple) */}
         <div className="space-y-3">

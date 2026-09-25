@@ -23,10 +23,10 @@ export interface PrescripcionListItem {
   labor: { id: number; nombre: string } | null
   insumoCount: number
   lotesCount?: number
-  /** UID del asesor dueño de la numeración (NULL = legado). */
-  uidAsesor: string | null
-  /** Asesor resuelto (sólo informativo). */
-  asesor: { uid: string; nombre: string } | null
+  /** Ámbito productor de la numeración (empresa de los lotes). */
+  numEmpresa: number
+  /** Año de la fecha en 2 dígitos (el secuencial reinicia cada año). */
+  numAnio: number
 }
 
 export interface PrescripcionInsumo {
@@ -63,15 +63,14 @@ export interface Prescripcion extends Omit<PrescripcionListItem, 'insumoCount'> 
 export const fmtHa = (v: number | null | undefined, decimales = 2): string =>
   v == null || Number.isNaN(v) ? '—' : `${v.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: decimales })} ha`
 
-/** Número visible año-número: "26-104" (año de 2 dígitos + secuencial). */
+/** Número visible E-AA-N: "12-26-104" (empresa-año 2 dígitos-secuencial). */
 export const fmtNroPrescripcion = (
-  fecha: string | undefined | null,
+  numEmpresa: number | null | undefined,
+  numAnio: number | null | undefined,
   numero: number | null | undefined,
 ): string => {
-  if (numero == null) return '—'
-  const anio = typeof fecha === 'string' ? Number(fecha.slice(0, 4)) : NaN
-  if (!Number.isInteger(anio)) return String(numero)
-  return `${String(anio).slice(-2)}-${numero}`
+  if (numEmpresa == null || numAnio == null || numero == null) return '—'
+  return `${numEmpresa}-${String(numAnio).padStart(2, '0').slice(-2)}-${numero}`
 }
 
 export const fmtCantidad = (v: number | null | undefined, decimales = 2): string =>
