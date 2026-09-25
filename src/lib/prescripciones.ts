@@ -23,6 +23,10 @@ export interface PrescripcionListItem {
   labor: { id: number; nombre: string } | null
   insumoCount: number
   lotesCount?: number
+  /** UID del asesor dueño de la numeración (NULL = legado). */
+  uidAsesor: string | null
+  /** Asesor resuelto (sólo informativo). */
+  asesor: { uid: string; nombre: string } | null
 }
 
 export interface PrescripcionInsumo {

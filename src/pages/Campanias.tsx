@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
-import { fmtMoneda, fmtNumero, fmtQQHa, periodosCampania } from '../lib/campanias'
+import { fmtMoneda, fmtNumero, fmtQQHa, fmtNroCampania, periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'
 
 interface CampaniaListTotales {
@@ -24,6 +24,9 @@ interface CampaniaListItem {
   idLote: number
   idCultivo: number
   idVariedad: number | null
+  numEmpresa: number
+  numAnio: number
+  numSeq: number
   lote?: {
     id: number
     descripcion: string | null
@@ -54,8 +57,8 @@ const fetcher = (url: string) => api.get(url).then((r) => r.data)
 export default function Campanias() {
   const navigate = useNavigate()
 
-  const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, user, empresas } = useAuth()
+  const isAdmin = isSysAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
   const userEmpresas = (user?.idEmpresas || [])
@@ -402,9 +405,14 @@ export default function Campanias() {
                         {c.lote?.descripcion || `Lote #${c.idLote}`}
                       </h3>
                     </div>
-                    <span className="shrink-0 inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
-                      {c.campania}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground tabular-nums">
+                        N° {fmtNroCampania(c.numEmpresa, c.numAnio, c.numSeq)}
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 bg-accent border border-border rounded text-[11px] font-medium text-foreground">
+                        {c.campania}
+                      </span>
+                    </div>
                   </div>
 
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">

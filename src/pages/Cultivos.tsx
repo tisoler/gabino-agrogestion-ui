@@ -5,7 +5,7 @@ import {
   Lock, AlertCircle, Globe, ChevronDown, X, Shield, ToggleLeft, ToggleRight, Loader2,
   Layers, ChevronUp
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 
@@ -14,6 +14,8 @@ interface Variedad {
   idCultivo: number
   nombre: string
   idEmpresa: number | null
+  /** UID del asesor dueño (hereda el del cultivo). */
+  uidPropietario: string | null
   activo: boolean
 }
 
@@ -23,17 +25,22 @@ interface Cultivo {
   descripcion: string | null
   tipoCosecha: 'fina' | 'gruesa' | null
   idEmpresa: number | null
+  /** UID del asesor dueño (alcance "todos sus productores"). */
+  uidPropietario: string | null
   activo: boolean
   variedades: Variedad[]
 }
+
+type AlcanceForm = 'empresa' | 'asesor' | 'global'
 
 export default function Cultivos() {
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedCrops, setExpandedCrops] = useState<Set<number>>(new Set())
 
-  // Alcance unificado para todos los roles: todas | global | por empresa
-  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  // Alcance unificado para todos los roles: todas | global | por empresa | de asesor
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa' | 'asesor'>('todas')
   const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+  const [scopeAsesorUid, setScopeAsesorUid] = useState('')
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCultivo, setEditingCultivo] = useState<Cultivo | null>(null)
@@ -41,7 +48,9 @@ export default function Cultivos() {
     nombre: '',
     descripcion: '',
     tipoCosecha: '' as '' | 'fina' | 'gruesa',
-    idEmpresa: null as number | null
+    idEmpresa: null as number | null,
+    alcance: 'empresa' as AlcanceForm,
+    uidAsesor: '',
   })
 
   const [isVarietyModalOpen, setIsVarietyModalOpen] = useState(false)
@@ -55,8 +64,8 @@ export default function Cultivos() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0)
@@ -65,21 +74,24 @@ export default function Cultivos() {
   const canWrite = permisos.includes('escritura:cultivo')
   const canRead = permisos.includes('lectura:cultivo') && !isProductor
 
-  const cultivosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
+  const cultivosFetcher = async ([url, empresaId, scopeSel, asesorUid]: [string, number | boolean, string, string]) => {
     const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
       params.scope = 'empresa'
       params.currentEmpresaId = Number(empresaId)
+    } else if (scopeSel === 'asesor') {
+      params.scope = 'asesor'
+      if (asesorUid) params.uidAsesor = asesorUid
     }
 
     const res = await api.get(url, { params })
     return res.data
   }
 
-  const swrCultivosKey: [string, number | boolean, string] | null = canRead
-    ? ['cultivos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+  const swrCultivosKey: [string, number | boolean, string, string] | null = canRead
+    ? ['cultivos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope, scope === 'asesor' ? scopeAsesorUid : '']
     : null
 
   const { data: cultivos = [], isLoading, mutate } = useSWR<Cultivo[]>(
@@ -113,7 +125,9 @@ export default function Cultivos() {
         nombre: cultivo.nombre,
         descripcion: cultivo.descripcion || '',
         tipoCosecha: cultivo.tipoCosecha || '',
-        idEmpresa: cultivo.idEmpresa
+        idEmpresa: cultivo.idEmpresa,
+        alcance: cultivo.uidPropietario != null ? 'asesor' : cultivo.idEmpresa != null ? 'empresa' : 'global',
+        uidAsesor: cultivo.uidPropietario || '',
       })
     } else {
       setEditingCultivo(null)
@@ -121,7 +135,9 @@ export default function Cultivos() {
         nombre: '',
         descripcion: '',
         tipoCosecha: '',
-        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null),
+        alcance: isAdmin ? 'global' : 'asesor',
+        uidAsesor: '',
       })
     }
     setIsModalOpen(true)
@@ -134,6 +150,8 @@ export default function Cultivos() {
     try {
       const payload = {
         ...formData,
+        idEmpresa: formData.alcance === 'empresa' ? formData.idEmpresa : null,
+        uidAsesor: formData.alcance === 'asesor' && formData.uidAsesor !== '' ? formData.uidAsesor : undefined,
         tipoCosecha: formData.tipoCosecha || null
       }
       if (editingCultivo) {
@@ -204,11 +222,29 @@ export default function Cultivos() {
     })
   }
 
-  const isEditable = (item: { idEmpresa: number | null }) => {
+  const isEditable = (item: { idEmpresa: number | null; uidPropietario: string | null }) => {
     if (!canWrite) return false
     if (isAdmin) return true
+    if (item.uidPropietario != null) return item.uidPropietario === user?.id
     return item.idEmpresa !== null
   }
+
+  // Asesores para alcance "De asesor" y badges (sólo sys-admin).
+  const { data: candidatos = [] } = useSWR<{ uid: string; nombreUsuario: string; roles: string[] }[]>(
+    isSysAdmin ? '/usuarios/candidatos' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const asesoresOpciones = useMemo(
+    () =>
+      candidatos
+        .filter((c) => c.roles.includes('asesor'))
+        .map((c) => ({ value: c.uid, label: c.nombreUsuario }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [candidatos],
+  )
+  const nombreAsesor = (uid: string | null): string =>
+    asesoresOpciones.find((o) => o.value === uid)?.label || 'De asesor'
 
   if (!canRead) {
     return (
@@ -254,6 +290,7 @@ export default function Cultivos() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
+              ['asesor', 'De asesor'],
               ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
@@ -279,6 +316,17 @@ export default function Cultivos() {
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus cultivos.</span>
+          )}
+          {scope === 'asesor' && isSysAdmin && (
+            <SelectAutocomplete
+              value={scopeAsesorUid}
+              onChange={(v) => setScopeAsesorUid(String(v))}
+              options={[
+                { value: '', label: 'Todos los asesores' },
+                ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label })),
+              ]}
+              placeholder="Filtrar por asesor"
+            />
           )}
         </div>
       </div>
@@ -339,7 +387,15 @@ export default function Cultivos() {
                   >
                     {cultivo.activo ? 'Activo' : 'Inactivo'}
                   </span>
-                  {cultivo.idEmpresa === null ? (
+                  {cultivo.uidPropietario != null ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                      {cultivo.uidPropietario === user?.id
+                        ? 'Todos mis productores'
+                        : isSysAdmin
+                          ? nombreAsesor(cultivo.uidPropietario)
+                          : 'De asesor'}
+                    </span>
+                  ) : cultivo.idEmpresa === null ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                       <Globe className="size-3" strokeWidth={2} />
                       Global
@@ -541,7 +597,15 @@ export default function Cultivos() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {cultivo.idEmpresa === null ? (
+                        {cultivo.uidPropietario != null ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                            {cultivo.uidPropietario === user?.id
+                              ? 'Todos mis productores'
+                              : isSysAdmin
+                                ? nombreAsesor(cultivo.uidPropietario)
+                                : 'De asesor'}
+                          </span>
+                        ) : cultivo.idEmpresa === null ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                             <Globe className="size-3" strokeWidth={2} />
                             Global
@@ -737,37 +801,77 @@ export default function Cultivos() {
                   ]}
                 />
               </div>
-              {isAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="cultivo-alcance" className="text-xs font-medium text-foreground">Alcance</label>
+                <SelectAutocomplete
+                  value={formData.alcance}
+                  onChange={(v) => {
+                    const alcance = String(v) as AlcanceForm
+                    setFormData((prev) => ({
+                      ...prev,
+                      alcance,
+                      idEmpresa:
+                        alcance === 'empresa' && prev.idEmpresa == null
+                          ? (currentEmpresaId || userEmpresas[0] || null)
+                          : prev.idEmpresa,
+                      uidAsesor:
+                        alcance === 'asesor' && isAdmin && prev.uidAsesor === '' && asesoresOpciones.length > 0
+                          ? String(asesoresOpciones[0].value)
+                          : prev.uidAsesor,
+                    }))
+                  }}
+                  options={
+                    isAdmin
+                      ? [
+                        { value: 'empresa', label: 'De productor' },
+                        { value: 'asesor', label: 'De asesor (todos sus productores)' },
+                        { value: 'global', label: 'Global (todos)' },
+                      ]
+                      : [
+                        { value: 'empresa', label: 'Solo esta empresa' },
+                        { value: 'asesor', label: 'Todos mis productores' },
+                      ]
+                  }
+                />
+              </div>
+              {formData.alcance === 'empresa' && (
                 <div className="space-y-1.5">
                   <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
                   <SelectAutocomplete
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
                     options={[
-                      { value: '', label: 'Global (todos los productores)' },
-                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa)
+                      ...(isAdmin
+                        ? []
+                        : [{ value: '', label: 'Seleccionar productor' }]),
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && (isAdmin || userEmpresas.includes(e.id)))
                         ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
                         : []),
-                      ...empresas.map((e) => ({ value: String(e.id), label: e.nombre }))
+                      ...empresas.filter((e) => isAdmin || userEmpresas.includes(e.id)).map((e) => ({ value: String(e.id), label: e.nombre }))
                     ]}
                   />
                 </div>
               )}
-              {!isAdmin && userEmpresas.length > 1 && (
+              {formData.alcance === 'asesor' && isAdmin && (
                 <div className="space-y-1.5">
-                  <label htmlFor="cultivo-empresa" className="text-xs font-medium text-foreground">Productor</label>
+                  <label htmlFor="cultivo-asesor" className="text-xs font-medium text-foreground">Asesor</label>
                   <SelectAutocomplete
-                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    value={formData.uidAsesor}
+                    onChange={(v) => setFormData({ ...formData, uidAsesor: String(v) })}
                     options={[
-                      { value: '', label: 'Seleccionar productor' },
-                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
-                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                      { value: '', label: 'Seleccionar asesor...' },
+                      ...(formData.uidAsesor !== '' && !asesoresOpciones.some((o) => o.value === formData.uidAsesor)
+                        ? [{ value: formData.uidAsesor, label: 'Asesor asignado' }]
                         : []),
-                      ...empresas.filter((e) => userEmpresas.includes(e.id)).map((e) => ({ value: String(e.id), label: e.nombre }))
+                      ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label }))
                     ]}
                   />
                 </div>
+              )}
+              {formData.alcance === 'global' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Solo como sys-admin puedes crear cultivos globales.
+                </p>
               )}
               {formError && (
                 <p className="text-xs text-destructive inline-flex items-center gap-1.5 bg-destructive-soft border border-destructive/20 rounded-md px-3 py-2">

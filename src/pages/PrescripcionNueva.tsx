@@ -85,9 +85,11 @@ export default function PrescripcionNueva() {
   const navigate = useNavigate()
   const volver = useVolver('/prescripciones')
   const { mutate } = useSWRConfig()
-  const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, isAsesor, user, empresas } = useAuth()
+  const isAdmin = isSysAdmin
   const canWrite = permisos.includes('escritura:prescripcion')
+  /** Sólo asesores crean prescripciones (el productor no; sys-admin por excepción). */
+  const puedeCrear = isSysAdmin || isAsesor
 
   const empresasVisibles = useMemo(() => {
     if (isAdmin) return empresas
@@ -99,6 +101,8 @@ export default function PrescripcionNueva() {
   // resuelve por fila (cada lote elige su producción de la campaña).
   const [fecha, setFecha] = useState(todayLocalISO())
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')
+  /** Asesor dueño de la numeración (sólo sys-admin lo elige; el asesor es automático). */
+  const [asesorUid, setAsesorUid] = useState('')
   const [periodo, setPeriodo] = useState<string>('')
   const [camposSel, setCamposSel] = useState<string[]>([])
   const [lotesSel, setLotesSel] = useState<string[]>([])
@@ -107,16 +111,31 @@ export default function PrescripcionNueva() {
   /** Ha a aplicar por producción (clave: id de campaña). Sin clave = sembrada. */
   const [supAplicada, setSupAplicada] = useState<Record<number, string>>({})
 
-  // Catálogos (sys-admin y asesor-admin ven todas las labores/insumos)
+  // Catálogos (sys-admin ve todas las labores/insumos)
   const { data: lotes = [] } = useSWR<Lote[]>(canWrite ? '/lotes' : null, fetcher)
   const { data: cultivos = [] } = useSWR<Cultivo[]>(canWrite ? '/cultivos' : null, fetcher)
-  const { data: labores = [] } = useSWR<Labor[]>(canWrite ? ['/labores', 'all'] : null, () =>
-    api.get('/labores', { params: { all: true } }).then((r) => r.data))
-  const { data: insumos = [], mutate: mutateInsumos } = useSWR<Insumo[]>(canWrite ? ['/insumos', 'all'] : null, () =>
-    api.get('/insumos', { params: { all: true } }).then((r) => r.data))
+  const { data: labores = [] } = useSWR<Labor[]>(canWrite ? ['/labores', 'all', idEmpresa] : null, () =>
+    api.get('/labores', { params: { all: true, ...(idEmpresa !== '' ? { currentEmpresaId: Number(idEmpresa) } : {}) } }).then((r) => r.data))
+  const { data: insumos = [], mutate: mutateInsumos } = useSWR<Insumo[]>(canWrite ? ['/insumos', 'all', idEmpresa] : null, () =>
+    api.get('/insumos', { params: { all: true, ...(idEmpresa !== '' ? { currentEmpresaId: Number(idEmpresa) } : {}) } }).then((r) => r.data))
   const { data: categoriasInsumo = [] } = useSWR<{ id: number; nombre: string }[]>(
     canWrite ? '/categorias' : null,
     fetcher,
+  )
+
+  // Asesores para el selector de numeración (sólo sys-admin).
+  const { data: candidatos = [] } = useSWR<{ uid: string; nombreUsuario: string; roles: string[] }[]>(
+    isSysAdmin ? '/usuarios/candidatos' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const asesoresOpciones = useMemo(
+    () =>
+      candidatos
+        .filter((c) => c.roles.includes('asesor'))
+        .map((c) => ({ value: c.uid, label: c.nombreUsuario }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [candidatos],
   )
 
   // Producciones del productor seleccionado; de ahí se derivan las opciones
@@ -461,6 +480,7 @@ export default function PrescripcionNueva() {
 
   const canSave =
     fecha !== '' && periodo !== '' && idLabor !== '' &&
+    (!isSysAdmin || asesorUid !== '') &&
     filasPendientas.length === 0 && filasResueltas.length > 0 &&
     filasResueltas.every((o) => o.superficie > 0) &&
     insumoRows.every((r) => r.idInsumo !== '')
@@ -474,6 +494,7 @@ export default function PrescripcionNueva() {
         fecha,
         idLabor: Number(idLabor),
         observaciones: observaciones.trim() || undefined,
+        ...(isSysAdmin && asesorUid !== '' ? { uidAsesor: asesorUid } : {}),
         // Las filas sin producción (resaltadas) no se agregan.
         lotes: filasResueltas.map((o) => ({
           idCampania: o.campaniaId,
@@ -513,7 +534,7 @@ export default function PrescripcionNueva() {
     }
   }
 
-  if (!canWrite) {
+  if (!canWrite || !puedeCrear) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
         <AlertCircle className="size-10 text-destructive mb-4" strokeWidth={1.5} />
@@ -580,6 +601,17 @@ export default function PrescripcionNueva() {
             autoSelectSingle
           />
         </div>
+        {isSysAdmin && (
+          <div className="space-y-1.5">
+            <SelectAutocomplete
+              label="Asesor (dueño de la numeración)"
+              value={asesorUid}
+              onChange={(v) => setAsesorUid(String(v))}
+              options={asesoresOpciones}
+              placeholder="Seleccionar asesor..."
+            />
+          </div>
+        )}
 
         {/* Producción: productor + campaña + campos (múltiple) + lotes (múltiple) */}
         <div className="space-y-3">

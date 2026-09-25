@@ -24,7 +24,6 @@ export interface AuthContextType {
   currentEmpresa: string | null
   isSysAdmin: boolean
   isAsesor: boolean
-  isAsesorAdmin: boolean
   isProductor: boolean
   empresas: Empresa[]
   isLoadingEmpresas: boolean

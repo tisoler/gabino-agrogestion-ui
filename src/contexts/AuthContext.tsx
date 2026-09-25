@@ -32,11 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isSysAdmin = user?.roles?.includes(Roles.SYS_ADMIN) || false
   const isAsesor = user?.roles?.includes(Roles.ASESOR) || false
-  const isAsesorAdmin = user?.roles?.includes(Roles.ASESOR_ADMIN) || false
   const isProductor = user?.roles?.includes(Roles.PRODUCTOR) || false
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const isAdmin = isSysAdmin
 
-  // Empresas visibles para el usuario (sys-admin y asesor-admin: todas;
+  // Empresas visibles para el usuario (sys-admin: todas;
   // resto: sus idEmpresas)
   const { data: listadoEmpresas, isLoading: isLoadingEmpresas } = useSWR<{ id: number; nombre: string }[]>(
     user ? '/empresas' : null,
@@ -62,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (isAdmin) {
-      // sys-admin y asesor-admin no usan empresa actual: la UI trabaja con la admin-toggle.
+      // sys-admin no usa empresa actual: la UI trabaja con la admin-toggle.
       setCurrentEmpresaIdState(null)
       try {
         window.localStorage.removeItem(STORAGE_KEY)
@@ -191,7 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentEmpresa,
         isSysAdmin,
         isAsesor,
-        isAsesorAdmin,
         isProductor,
         empresas: listadoEmpresas || [],
         isLoadingEmpresas,

@@ -13,7 +13,7 @@ import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useCotizacionDolar, fmtPrecioInsumo } from '../lib/moneda'
 import { useVolver } from '../lib/navegacion'
 import {
-  fmtMoneda, fmtNumero, fmtQQHa, todayLocalISO,
+  fmtMoneda, fmtNumero, fmtQQHa, fmtNroCampania, todayLocalISO,
   costoPonderadoHa, costoPonderadoInsumoRowHa, costoTotalCostoRowHa,
   calcularResultados, periodosCampania,
   type Campania, type CampaniaLaborDetalle, type CampaniaInsumoDetalle,
@@ -283,9 +283,9 @@ export default function CampaniaDetalle() {
   const params = useParams<{ id: string }>()
   const isNew = !params.id || params.id === 'nueva'
 
-  const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresaId, empresas } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
-  const canManageCategorias = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, currentEmpresaId, empresas } = useAuth()
+  const isAdmin = isSysAdmin
+  const canManageCategorias = isSysAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
 
@@ -332,7 +332,7 @@ export default function CampaniaDetalle() {
   const newTempId = () => -++tempIdCounter.current
 
   // Catálogos
-  // - sys-admin / asesor-admin: cultivos con all=true (globales + empresas),
+  // - sys-admin: cultivos con all=true (globales + empresas),
   //   lotes de todas las empresas (se filtran por empresa destino abajo).
   // - asesor / productor: cultivos globales + empresa seleccionada, y lotes
   //   de la empresa seleccionada.
@@ -979,7 +979,11 @@ export default function CampaniaDetalle() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            {isNew ? 'Nueva producción' : `Producción #${campaniaId}`}
+            {isNew
+              ? 'Nueva producción'
+              : campania
+                ? `Producción #${fmtNroCampania(campania.numEmpresa, campania.numAnio, campania.numSeq)}`
+                : `Producción #${campaniaId}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {isNew

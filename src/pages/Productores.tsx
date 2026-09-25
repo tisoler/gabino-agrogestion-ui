@@ -44,7 +44,6 @@ function getInitials(name: string | null | undefined) {
 
 function getRoleBadge(roles: string[]) {
   if (roles.includes(Roles.ASESOR)) return { label: 'Asesor', cls: 'bg-info-soft text-info' }
-  if (roles.includes(Roles.ASESOR_ADMIN)) return { label: 'Asesor admin', cls: 'bg-warning-soft text-warning-foreground' }
   if (roles.includes(Roles.PRODUCTOR)) return { label: 'Productor', cls: 'bg-primary-soft text-primary' }
   return { label: getRoleLabel(roles) || '—', cls: 'bg-muted text-muted-foreground' }
 }
@@ -92,9 +91,9 @@ export default function Productores() {
   const [editCelularValue, setEditCelularValue] = useState('')
   const [editUsuarioSaving, setEditUsuarioSaving] = useState(false)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, currentEmpresa, user } = useAuth()
+  const { permisos, isSysAdmin, currentEmpresa, user } = useAuth()
   const { mutate: mutateGlobal } = useSWRConfig()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const isAdmin = isSysAdmin
   const canRead = permisos.includes('lectura:productor')
   // Productor no puede crear empresas ni asociar/desasociar usuarios: sólo es asociado.
   const canWrite = permisos.includes('escritura:empresa') && !user?.roles?.includes(Roles.PRODUCTOR)
@@ -149,7 +148,7 @@ export default function Productores() {
 
   const totalAsesores = useMemo(
     () => (data || []).reduce(
-      (acc, e) => acc + e.usuarios.filter((u) => u.roles.includes(Roles.ASESOR) || u.roles.includes(Roles.ASESOR_ADMIN)).length,
+      (acc, e) => acc + e.usuarios.filter((u) => u.roles.includes(Roles.ASESOR)).length,
       0,
     ),
     [data],
@@ -475,9 +474,8 @@ export default function Productores() {
           {filtered.map((empresa) => {
             const isOpen = expanded.has(empresa.id)
             const asesores = empresa.usuarios.filter((u) => u.roles.includes(Roles.ASESOR))
-            const asesoresAdmin = empresa.usuarios.filter((u) => u.roles.includes(Roles.ASESOR_ADMIN))
             const productores = empresa.usuarios.filter((u) => u.roles.includes(Roles.PRODUCTOR))
-            const totalAsesoresEmpresa = asesores.length + asesoresAdmin.length
+            const totalAsesoresEmpresa = asesores.length
             return (
               <div key={empresa.id} className="bg-card border border-border rounded-lg overflow-hidden">
                 <div className="flex items-stretch">
@@ -546,26 +544,6 @@ export default function Productores() {
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {asesores.map((u) => (
-                            <UsuarioCard
-                              key={u.uid}
-                              usuario={u}
-                              empresaId={empresa.id}
-                              onRemove={canRemoveUser(u.uid) ? () => handleRemove(u.uid, empresa.id, u.nombreUsuario || u.email || u.uid) : undefined}
-                              onEdit={canWrite ? () => openEditUsuarioModal(u) : undefined}
-                              isPending={pendingUid === u.uid}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {asesoresAdmin.length > 0 && (
-                      <div>
-                        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
-                          Asesores admin ({asesoresAdmin.length})
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {asesoresAdmin.map((u) => (
                             <UsuarioCard
                               key={u.uid}
                               usuario={u}

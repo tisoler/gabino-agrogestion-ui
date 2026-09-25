@@ -40,8 +40,8 @@ const fallbackEntrada = (p: PrescripcionListItem): { campo: string | null; lote:
 
 export default function Prescripciones() {
   const navigate = useNavigate()
-  const { permisos, isSysAdmin, isAsesorAdmin, user, empresas } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, user, empresas } = useAuth()
+  const isAdmin = isSysAdmin
   const canRead = permisos.includes('lectura:prescripcion')
   const canWrite = permisos.includes('escritura:prescripcion')
 
@@ -412,6 +412,12 @@ export default function Prescripciones() {
                         || `Productor #${p.campania?.lote?.idEmpresa ?? '—'}`}
                     </dd>
                   </div>
+                  {isSysAdmin && (
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Asesor</dt>
+                      <dd className="text-foreground truncate">{p.asesor?.nombre || '—'}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaña</dt>
                     <dd className="text-foreground">{p.campania?.campania || '—'}</dd>
@@ -479,6 +485,11 @@ export default function Prescripciones() {
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Productor
                     </th>
+                    {isSysAdmin && (
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Asesor
+                      </th>
+                    )}
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Campaña
                     </th>
@@ -531,6 +542,13 @@ export default function Prescripciones() {
                           </span>
                         </div>
                       </td>
+                      {isSysAdmin && (
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-foreground">
+                            {p.asesor?.nombre || '—'}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span className="text-sm text-foreground">
                           {p.campania?.campania || '—'}

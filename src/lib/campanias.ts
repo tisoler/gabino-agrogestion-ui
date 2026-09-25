@@ -104,6 +104,20 @@ export interface Campania {
   insumos?: CampaniaInsumoDetalle[]
   costos?: CampaniaCostoDetalle[]
   activo: boolean
+  /** Número E-AA-N: ámbito productor, año de creación y secuencial. */
+  numEmpresa: number
+  numAnio: number
+  numSeq: number
+}
+
+/** Número visible de producción: "5-26-7" (empresa-año 2 dígitos-secuencial). */
+export const fmtNroCampania = (
+  numEmpresa: number | null | undefined,
+  numAnio: number | null | undefined,
+  numSeq: number | null | undefined,
+): string => {
+  if (numEmpresa == null || numAnio == null || numSeq == null) return '—'
+  return `${numEmpresa}-${String(numAnio).padStart(2, '0').slice(-2)}-${numSeq}`
 }
 
 export interface ResultadosCampania {

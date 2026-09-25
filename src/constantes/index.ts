@@ -1,13 +1,11 @@
 export const Roles = {
   SYS_ADMIN: 'sys-admin',
   ASESOR: 'asesor',
-  ASESOR_ADMIN: 'asesor-admin',
   PRODUCTOR: 'productor',
 } as const;
 
 export const ROLES_LABELS: Record<string, string> = {
   [Roles.SYS_ADMIN]: 'Admin',
-  [Roles.ASESOR_ADMIN]: 'Asesor admin',
   [Roles.ASESOR]: 'Asesor',
   [Roles.PRODUCTOR]: 'Productor',
 };

@@ -84,8 +84,8 @@ export default function Lotes() {
   const [campoBusy, setCampoBusy] = useState(false)
   const [campoError, setCampoError] = useState<string | null>(null)
 
-  const { user, permisos, isSysAdmin, isAsesorAdmin, empresas, currentEmpresaId } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { user, permisos, isSysAdmin, empresas, currentEmpresaId } = useAuth()
+  const isAdmin = isSysAdmin
   const canWrite = permisos.includes('escritura:lote')
   const canRead = permisos.includes('lectura:lote')
   const userEmpresas = (user?.idEmpresas || [])

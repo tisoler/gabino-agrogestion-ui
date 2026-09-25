@@ -129,9 +129,9 @@ const mesActual = (): string => {
 }
 
 export default function AnalisisLote() {
-  const { permisos, user, isSysAdmin, isAsesorAdmin, empresas } = useAuth()
+  const { permisos, user, isSysAdmin, empresas } = useAuth()
   const canRead = permisos.includes(PERMISO_CLIMA)
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const isAdmin = isSysAdmin
   const userEmpresas = (user?.idEmpresas || []).map(Number).filter((n) => Number.isFinite(n) && n > 0)
 
   const [idEmpresa, setIdEmpresa] = useState<number | ''>('')

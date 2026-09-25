@@ -4,7 +4,7 @@ import {
   Plus, Search, Pencil, Activity, Pickaxe,
   Lock, AlertCircle, Globe, X, Shield, ToggleLeft, ToggleRight, Loader2, Package
 } from 'lucide-react'
-import api from '../lib/api'
+import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { useCotizacionDolar, fmtPrecio, type Moneda } from '../lib/moneda'
 import { setMonedaGlobal } from '../lib/monedaStore'
@@ -16,11 +16,15 @@ interface Labor {
   nombre: string
   descripcion: string | null
   idEmpresa: number | null
+  /** UID del asesor dueño (alcance "todos sus productores"). */
+  uidPropietario: string | null
   precioUnitario?: number | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
 }
+
+type AlcanceForm = 'empresa' | 'asesor' | 'global'
 
 export default function Labores() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -30,24 +34,27 @@ export default function Labores() {
   const dolar = compra
   useEffect(() => { setMonedaGlobal(moneda, 'compra', 'pesos') }, [moneda])
 
-  // Alcance unificado para todos los roles: todas | global | por empresa
-  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  // Alcance unificado para todos los roles: todas | global | por empresa | de asesor
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa' | 'asesor'>('todas')
   const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+  const [scopeAsesorUid, setScopeAsesorUid] = useState('')
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingLabor, setEditingLabor] = useState<Labor | null>(null)
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    idEmpresa: null as number | null
+    idEmpresa: null as number | null,
+    alcance: 'empresa' as AlcanceForm,
+    uidAsesor: '',
   })
   const [precioUnitario, setPrecioUnitario] = useState('')
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  const { permisos, isSysAdmin, isAsesorAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0)
@@ -56,21 +63,24 @@ export default function Labores() {
   const canWrite = permisos.includes('escritura:labor')
   const canRead = permisos.includes('lectura:labor') && !isProductor
 
-  const laboresFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
+  const laboresFetcher = async ([url, empresaId, scopeSel, asesorUid]: [string, number | boolean, string, string]) => {
     const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
       params.scope = 'empresa'
       params.currentEmpresaId = Number(empresaId)
+    } else if (scopeSel === 'asesor') {
+      params.scope = 'asesor'
+      if (asesorUid) params.uidAsesor = asesorUid
     }
 
     const res = await api.get(url, { params })
     return res.data
   }
 
-  const swrLaboresKey: [string, number | boolean, string] | null = canRead
-    ? ['labores', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+  const swrLaboresKey: [string, number | boolean, string, string] | null = canRead
+    ? ['labores', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope, scope === 'asesor' ? scopeAsesorUid : '']
     : null
 
   const { data: labores = [], isLoading, mutate } = useSWR<Labor[]>(
@@ -106,7 +116,9 @@ export default function Labores() {
       setFormData({
         nombre: labor.nombre,
         descripcion: labor.descripcion || '',
-        idEmpresa: labor.idEmpresa
+        idEmpresa: labor.idEmpresa,
+        alcance: labor.uidPropietario != null ? 'asesor' : labor.idEmpresa != null ? 'empresa' : 'global',
+        uidAsesor: labor.uidPropietario || '',
       })
       setPrecioUnitario(labor.precioUnitario != null ? String(labor.precioUnitario) : '')
     } else {
@@ -114,7 +126,9 @@ export default function Labores() {
       setFormData({
         nombre: '',
         descripcion: '',
-        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null)
+        idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null),
+        alcance: isAdmin ? 'global' : 'asesor',
+        uidAsesor: '',
       })
       setPrecioUnitario('')
     }
@@ -127,6 +141,8 @@ export default function Labores() {
     setSaving(true)
     const payload = {
       ...formData,
+      idEmpresa: formData.alcance === 'empresa' ? formData.idEmpresa : null,
+      uidAsesor: formData.alcance === 'asesor' && formData.uidAsesor !== '' ? formData.uidAsesor : undefined,
       precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario)
     }
     try {
@@ -163,8 +179,26 @@ export default function Labores() {
   const isEditable = (labor: Labor) => {
     if (!canWrite) return false
     if (isAdmin) return true
+    if (labor.uidPropietario != null) return labor.uidPropietario === user?.id
     return labor.idEmpresa !== null
   }
+
+  // Asesores para alcance "De asesor" y badges (sólo sys-admin).
+  const { data: candidatos = [] } = useSWR<{ uid: string; nombreUsuario: string; roles: string[] }[]>(
+    isSysAdmin ? '/usuarios/candidatos' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const asesoresOpciones = useMemo(
+    () =>
+      candidatos
+        .filter((c) => c.roles.includes('asesor'))
+        .map((c) => ({ value: c.uid, label: c.nombreUsuario }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [candidatos],
+  )
+  const nombreAsesor = (uid: string | null): string =>
+    asesoresOpciones.find((o) => o.value === uid)?.label || 'De asesor'
 
   if (!canRead) {
     return (
@@ -214,6 +248,7 @@ export default function Labores() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
+              ['asesor', 'De asesor'],
               ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
@@ -239,6 +274,17 @@ export default function Labores() {
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus labores.</span>
+          )}
+          {scope === 'asesor' && isSysAdmin && (
+            <SelectAutocomplete
+              value={scopeAsesorUid}
+              onChange={(v) => setScopeAsesorUid(String(v))}
+              options={[
+                { value: '', label: 'Todos los asesores' },
+                ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label })),
+              ]}
+              placeholder="Filtrar por asesor"
+            />
           )}
         </div>
       </div>
@@ -279,9 +325,17 @@ export default function Labores() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-semibold text-foreground leading-tight">{labor.nombre}</h3>
-                        {labor.idEmpresa === null && (
+                        {labor.uidPropietario == null && labor.idEmpresa === null && (
                           <span title="Labor global">
                             <Globe className="size-3.5 text-info" strokeWidth={2} />
+                          </span>
+                        )}
+                        {labor.uidPropietario != null && (
+                          <span
+                            className="px-1.5 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded"
+                            title={labor.uidPropietario === user?.id ? 'Visible en todos tus productores' : 'Labor de otro asesor'}
+                          >
+                            {labor.uidPropietario === user?.id ? 'Mis productores' : 'De asesor'}
                           </span>
                         )}
                         {!labor.activo && (
@@ -399,7 +453,15 @@ export default function Labores() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {labor.idEmpresa === null ? (
+                          {labor.uidPropietario != null ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                              {labor.uidPropietario === user?.id
+                                ? 'Todos mis productores'
+                                : isSysAdmin
+                                  ? nombreAsesor(labor.uidPropietario)
+                                  : 'De asesor'}
+                            </span>
+                          ) : labor.idEmpresa === null ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Globe className="size-3" strokeWidth={2} />
                               Global
@@ -549,7 +611,43 @@ export default function Labores() {
                 />
               </div>
 
-              {isAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="labor-alcance" className="text-xs font-medium text-foreground">
+                  Alcance
+                </label>
+                <SelectAutocomplete
+                  value={formData.alcance}
+                  onChange={(v) => {
+                    const alcance = String(v) as AlcanceForm
+                    setFormData((prev) => ({
+                      ...prev,
+                      alcance,
+                      idEmpresa:
+                        alcance === 'empresa' && prev.idEmpresa == null
+                          ? (currentEmpresaId || userEmpresas[0] || null)
+                          : prev.idEmpresa,
+                      uidAsesor:
+                        alcance === 'asesor' && isAdmin && prev.uidAsesor === '' && asesoresOpciones.length > 0
+                          ? String(asesoresOpciones[0].value)
+                          : prev.uidAsesor,
+                    }))
+                  }}
+                  options={
+                    isAdmin
+                      ? [
+                        { value: 'empresa', label: 'De productor' },
+                        { value: 'asesor', label: 'De asesor (todos sus productores)' },
+                        { value: 'global', label: 'Global (todos)' },
+                      ]
+                      : [
+                        { value: 'empresa', label: 'Solo esta empresa' },
+                        { value: 'asesor', label: 'Todos mis productores' },
+                      ]
+                  }
+                />
+              </div>
+
+              {formData.alcance === 'empresa' && (
                 <div className="space-y-1.5">
                   <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
                     Productor
@@ -558,37 +656,41 @@ export default function Labores() {
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
                     options={[
-                      { value: '', label: 'Global (todos los productores)' },
+                      ...(isAdmin
+                        ? []
+                        : [{ value: '', label: 'Seleccionar productor' }]),
                       ...(formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa)
+                      !empresas?.some((e) => e.id === formData.idEmpresa && (isAdmin || userEmpresas.includes(e.id)))
                         ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
                         : []),
-                      ...(empresas?.map((e) => ({ value: String(e.id), label: e.nombre })) ?? []),
+                      ...(empresas?.filter((e) => isAdmin || userEmpresas.includes(e.id)) ?? []).map((e) => ({ value: String(e.id), label: e.nombre })),
                     ]}
                   />
-                  <p className="text-[11px] text-muted-foreground">
-                    Solo como sys-admin puedes crear labores globales o asignarlas a otros productores.
-                  </p>
                 </div>
               )}
-              {!isAdmin && userEmpresas.length > 1 && (
+
+              {formData.alcance === 'asesor' && isAdmin && (
                 <div className="space-y-1.5">
-                  <label htmlFor="labor-empresa" className="text-xs font-medium text-foreground">
-                    Productor
+                  <label htmlFor="labor-asesor" className="text-xs font-medium text-foreground">
+                    Asesor
                   </label>
                   <SelectAutocomplete
-                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : Number(v) })}
+                    value={formData.uidAsesor}
+                    onChange={(v) => setFormData({ ...formData, uidAsesor: String(v) })}
                     options={[
-                      { value: '', label: 'Seleccionar productor' },
-                      ...(formData.idEmpresa != null &&
-                      !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
-                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
+                      { value: '', label: 'Seleccionar asesor...' },
+                      ...(formData.uidAsesor !== '' && !asesoresOpciones.some((o) => o.value === formData.uidAsesor)
+                        ? [{ value: formData.uidAsesor, label: 'Asesor asignado' }]
                         : []),
-                      ...(empresas?.filter((e) => userEmpresas.includes(e.id)) ?? []).map((e) => ({ value: String(e.id), label: e.nombre })),
+                      ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label })),
                     ]}
                   />
                 </div>
+              )}
+              {formData.alcance === 'global' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Solo como sys-admin puedes crear labores globales.
+                </p>
               )}
 
               <div className="flex gap-2 pt-3">

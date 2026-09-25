@@ -27,12 +27,16 @@ interface Insumo {
   idCategoria: number | null
   categoria?: Categoria | null
   idEmpresa: number | null
+  /** UID del asesor dueño (alcance "todos sus productores"). */
+  uidPropietario: string | null
   precioUnitario?: number | null
   unidad?: string | null
   activo: boolean
   createdAt?: string
   updatedAt?: string
 }
+
+type AlcanceForm = 'empresa' | 'asesor' | 'global'
 
 export default function Insumos() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -42,9 +46,10 @@ export default function Insumos() {
   const dolar = venta
   useEffect(() => { setMonedaGlobal(moneda, 'venta', 'usd') }, [moneda])
 
-  // Alcance unificado para todos los roles: todas | global | por empresa
-  const [scope, setScope] = useState<'todas' | 'global' | 'empresa'>('todas')
+  // Alcance unificado para todos los roles: todas | global | por empresa | de asesor
+  const [scope, setScope] = useState<'todas' | 'global' | 'empresa' | 'asesor'>('todas')
   const [scopeEmpresaId, setScopeEmpresaId] = useState<number | null>(null)
+  const [scopeAsesorUid, setScopeAsesorUid] = useState('')
 
   // Filtro multiselección de categorías
   const [filterCategoriaIds, setFilterCategoriaIds] = useState<number[]>([])
@@ -56,7 +61,9 @@ export default function Insumos() {
     descripcion: '',
     idCategoria: null as number | null,
     idEmpresa: null as number | null,
-    unidad: '' as string
+    unidad: '' as string,
+    alcance: 'empresa' as AlcanceForm,
+    uidAsesor: '',
   })
   const [precioUnitario, setPrecioUnitario] = useState('')
 
@@ -71,8 +78,8 @@ export default function Insumos() {
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  const { permisos, isSysAdmin, isAsesor, isAsesorAdmin, isProductor, empresas, currentEmpresaId, user } = useAuth()
-  const isAdmin = isSysAdmin || isAsesorAdmin
+  const { permisos, isSysAdmin, isAsesor, isProductor, empresas, currentEmpresaId, user } = useAuth()
+  const isAdmin = isSysAdmin
   const userEmpresas = (user?.idEmpresas || [])
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0)
@@ -80,23 +87,26 @@ export default function Insumos() {
   const scopeEmpresas = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
   const canWrite = permisos.includes('escritura:insumo')
   const canRead = permisos.includes('lectura:insumo') && !isProductor
-  const canManageCategorias = isSysAdmin || isAsesorAdmin
+  const canManageCategorias = isSysAdmin
 
-  const insumosFetcher = async ([url, empresaId, scopeSel]: [string, number | boolean, string]) => {
+  const insumosFetcher = async ([url, empresaId, scopeSel, asesorUid]: [string, number | boolean, string, string]) => {
     const params: Record<string, unknown> = {}
     if (scopeSel === 'global') {
       params.scope = 'global'
     } else if (scopeSel === 'empresa' && empresaId) {
       params.scope = 'empresa'
       params.currentEmpresaId = Number(empresaId)
+    } else if (scopeSel === 'asesor') {
+      params.scope = 'asesor'
+      if (asesorUid) params.uidAsesor = asesorUid
     }
 
     const res = await api.get(url, { params })
     return res.data
   }
 
-  const swrInsumosKey: [string, number | boolean, string] | null = canRead
-    ? ['insumos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope]
+  const swrInsumosKey: [string, number | boolean, string, string] | null = canRead
+    ? ['insumos', scope === 'empresa' ? (scopeEmpresaId || 0) : false, scope, scope === 'asesor' ? scopeAsesorUid : '']
     : null
 
   const { data: insumos = [], isLoading, mutate } = useSWR<Insumo[]>(
@@ -139,7 +149,9 @@ export default function Insumos() {
         descripcion: insumo.descripcion || '',
         idCategoria: insumo.idCategoria ?? null,
         idEmpresa: insumo.idEmpresa,
-        unidad: insumo.unidad || ''
+        unidad: insumo.unidad || '',
+        alcance: insumo.uidPropietario != null ? 'asesor' : insumo.idEmpresa != null ? 'empresa' : 'global',
+        uidAsesor: insumo.uidPropietario || '',
       })
       setPrecioUnitario(insumo.precioUnitario != null ? String(insumo.precioUnitario) : '')
     } else {
@@ -149,7 +161,9 @@ export default function Insumos() {
         descripcion: '',
         idCategoria: null,
         idEmpresa: isAdmin ? null : (currentEmpresaId || userEmpresas[0] || null),
-        unidad: ''
+        unidad: '',
+        alcance: isAdmin ? 'global' : 'asesor',
+        uidAsesor: '',
       })
       setPrecioUnitario('')
     }
@@ -162,6 +176,8 @@ export default function Insumos() {
     setSaving(true)
     const payload = {
       ...formData,
+      idEmpresa: formData.alcance === 'empresa' ? formData.idEmpresa : null,
+      uidAsesor: formData.alcance === 'asesor' && formData.uidAsesor !== '' ? formData.uidAsesor : undefined,
       precioUnitario: precioUnitario.trim() === '' ? null : parseFloat(precioUnitario),
       unidad: formData.unidad || null
     }
@@ -238,8 +254,26 @@ export default function Insumos() {
   const isEditable = (insumo: Insumo) => {
     if (!canWrite) return false
     if (isAdmin) return true
+    if (insumo.uidPropietario != null) return insumo.uidPropietario === user?.id
     return insumo.idEmpresa !== null
   }
+
+  // Asesores para alcance "De asesor" y badges (sólo sys-admin).
+  const { data: candidatos = [] } = useSWR<{ uid: string; nombreUsuario: string; roles: string[] }[]>(
+    isSysAdmin ? '/usuarios/candidatos' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const asesoresOpciones = useMemo(
+    () =>
+      candidatos
+        .filter((c) => c.roles.includes('asesor'))
+        .map((c) => ({ value: c.uid, label: c.nombreUsuario }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [candidatos],
+  )
+  const nombreAsesor = (uid: string | null): string =>
+    asesoresOpciones.find((o) => o.value === uid)?.label || 'De asesor'
 
   if (!canRead) {
     return (
@@ -288,6 +322,7 @@ export default function Insumos() {
             {([
               ['todas', 'Todas'],
               ['global', 'Global'],
+              ['asesor', 'De asesor'],
               ['empresa', 'Por productor'],
             ] as const).map(([key, label]) => (
               <button
@@ -315,6 +350,19 @@ export default function Insumos() {
           )}
           {scope === 'empresa' && !scopeEmpresaId && (
             <span className="text-xs text-muted-foreground">Elegí un productor para ver solo sus insumos.</span>
+          )}
+          {scope === 'asesor' && isSysAdmin && (
+            <div className="w-56">
+              <SelectAutocomplete
+                placeholder="Todos los asesores"
+                value={scopeAsesorUid}
+                onChange={(v) => setScopeAsesorUid(String(v))}
+                options={[
+                  { value: '', label: 'Todos los asesores' },
+                  ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label })),
+                ]}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -366,9 +414,17 @@ export default function Insumos() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-semibold text-foreground leading-tight">{insumo.nombre}</h3>
-                        {insumo.idEmpresa === null && (
+                        {insumo.uidPropietario == null && insumo.idEmpresa === null && (
                           <span title="Insumo global">
                             <Globe className="size-3.5 text-info" strokeWidth={2} />
+                          </span>
+                        )}
+                        {insumo.uidPropietario != null && (
+                          <span
+                            className="px-1.5 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded"
+                            title={insumo.uidPropietario === user?.id ? 'Visible en todos tus productores' : 'Insumo de otro asesor'}
+                          >
+                            {insumo.uidPropietario === user?.id ? 'Mis productores' : 'De asesor'}
                           </span>
                         )}
                         {!insumo.activo && (
@@ -515,7 +571,15 @@ export default function Insumos() {
                           <span className="text-xs text-muted-foreground">{insumo.unidad || '—'}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {insumo.idEmpresa === null ? (
+                          {insumo.uidPropietario != null ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-soft text-primary text-[10px] font-semibold uppercase tracking-wider rounded">
+                              {insumo.uidPropietario === user?.id
+                                ? 'Todos mis productores'
+                                : isSysAdmin
+                                  ? nombreAsesor(insumo.uidPropietario)
+                                  : 'De asesor'}
+                            </span>
+                          ) : insumo.idEmpresa === null ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info-soft text-info text-[10px] font-semibold uppercase tracking-wider rounded">
                               <Globe className="size-3" strokeWidth={2} />
                               Global
@@ -667,7 +731,7 @@ export default function Insumos() {
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Las categorías son globales; sólo sys-admin o asesor-admin pueden crear nuevas.
+                  Las categorías son globales; sólo sys-admin puede crear nuevas.
                 </p>
               </div>
 
@@ -715,7 +779,45 @@ export default function Insumos() {
                 />
               </div>
 
-              {isAdmin && (
+              <div className="space-y-1.5">
+                <label htmlFor="insumo-alcance" className="text-xs font-medium text-foreground">
+                  Alcance
+                </label>
+                <SelectAutocomplete
+                  value={formData.alcance}
+                  onChange={(v) => {
+                    const alcance = String(v) as AlcanceForm
+                    setFormData((prev) => ({
+                      ...prev,
+                      alcance,
+                      // Al pasar a empresa sin una elegida, defaultea a la actual/propia.
+                      idEmpresa:
+                        alcance === 'empresa' && prev.idEmpresa == null
+                          ? (currentEmpresaId || userEmpresas[0] || null)
+                          : prev.idEmpresa,
+                      // Sys-admin: al pasar a asesor sin uno elegido, defaultea al primero.
+                      uidAsesor:
+                        alcance === 'asesor' && isAdmin && prev.uidAsesor === '' && asesoresOpciones.length > 0
+                          ? String(asesoresOpciones[0].value)
+                          : prev.uidAsesor,
+                    }))
+                  }}
+                  options={
+                    isAdmin
+                      ? [
+                        { value: 'empresa', label: 'De productor' },
+                        { value: 'asesor', label: 'De asesor (todos sus productores)' },
+                        { value: 'global', label: 'Global (todos)' },
+                      ]
+                      : [
+                        { value: 'empresa', label: 'Solo esta empresa' },
+                        { value: 'asesor', label: 'Todos mis productores' },
+                      ]
+                  }
+                />
+              </div>
+
+              {formData.alcance === 'empresa' && (
                 <div className="space-y-1.5">
                   <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
                     Productor
@@ -724,37 +826,42 @@ export default function Insumos() {
                     value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
                     onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : parseInt(String(v), 10) })}
                     options={[
-                      { value: '', label: 'Global (todos los productores)' },
-                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa)
-                        ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
-                        : []),
-                      ...(empresas?.map((e) => ({ value: String(e.id), label: e.nombre })) ?? []),
-                    ]}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Solo como sys-admin puedes crear insumos globales o asignarlos a otros productores.
-                  </p>
-                </div>
-              )}
-              {!isAdmin && userEmpresas.length > 1 && (
-                <div className="space-y-1.5">
-                  <label htmlFor="insumo-empresa" className="text-xs font-medium text-foreground">
-                    Productor
-                  </label>
-                  <SelectAutocomplete
-                    value={formData.idEmpresa === null ? '' : String(formData.idEmpresa)}
-                    onChange={(v) => setFormData({ ...formData, idEmpresa: v === '' ? null : parseInt(String(v), 10) })}
-                    options={[
-                      { value: '', label: 'Seleccionar productor' },
-                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && userEmpresas.includes(e.id))
+                      ...(isAdmin
+                        ? []
+                        : [{ value: '', label: 'Seleccionar productor' }]),
+                      ...(formData.idEmpresa != null && !empresas?.some((e) => e.id === formData.idEmpresa && (isAdmin || userEmpresas.includes(e.id)))
                         ? [{ value: String(formData.idEmpresa), label: `Productor ${formData.idEmpresa}` }]
                         : []),
                       ...(empresas
-                        .filter((e) => userEmpresas.includes(e.id))
+                        .filter((e) => isAdmin || userEmpresas.includes(e.id))
                         .map((e) => ({ value: String(e.id), label: e.nombre }))),
                     ]}
                   />
                 </div>
+              )}
+
+              {formData.alcance === 'asesor' && isAdmin && (
+                <div className="space-y-1.5">
+                  <label htmlFor="insumo-asesor" className="text-xs font-medium text-foreground">
+                    Asesor
+                  </label>
+                  <SelectAutocomplete
+                    value={formData.uidAsesor}
+                    onChange={(v) => setFormData({ ...formData, uidAsesor: String(v) })}
+                    options={[
+                      { value: '', label: 'Seleccionar asesor...' },
+                      ...(formData.uidAsesor !== '' && !asesoresOpciones.some((o) => o.value === formData.uidAsesor)
+                        ? [{ value: formData.uidAsesor, label: 'Asesor asignado' }]
+                        : []),
+                      ...asesoresOpciones.map((o) => ({ value: String(o.value), label: o.label })),
+                    ]}
+                  />
+                </div>
+              )}
+              {formData.alcance === 'global' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Solo como sys-admin puedes crear insumos globales.
+                </p>
               )}
 
               <div className="flex gap-2 pt-3">
