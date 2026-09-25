@@ -710,11 +710,11 @@ export default function Insumos() {
                     options={[
                       { value: '', label: 'Seleccionar categoría...' },
                       ...(formData.idCategoria != null && !categorias.some((c) => c.id === formData.idCategoria)
-                        ? [{ value: String(formData.idCategoria), label: 'Categoría nueva' }]
+                        ? [{ value: formData.idCategoria, label: 'Categoría nueva' }]
                         : []),
                       ...categorias
                         .filter((c) => c.activo || c.id === formData.idCategoria)
-                        .map((c) => ({ value: String(c.id), label: c.nombre })),
+                        .map((c) => ({ value: c.id, label: c.nombre })),
                     ]}
                   />
                   {canManageCategorias && (
