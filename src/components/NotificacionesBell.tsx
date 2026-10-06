@@ -93,7 +93,7 @@ export default function NotificacionesBell() {
           <div className="fixed inset-0 z-40" onClick={close} aria-hidden />
           <div
             role="menu"
-            className="absolute right-0 top-full mt-2 z-50 w-[min(22rem,calc(100vw-2rem))] bg-card border border-border rounded-lg shadow-xl overflow-hidden"
+            className="fixed left-1/2 top-[4.5rem] -translate-x-1/2 z-50 w-[min(22rem,calc(100vw-2rem))] bg-card border border-border rounded-lg shadow-xl overflow-hidden sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:translate-x-0"
           >
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

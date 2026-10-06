@@ -9,6 +9,7 @@ import Labores from './pages/Labores'
 import Costos from './pages/Costos'
 import Cultivos from './pages/Cultivos'
 import Lotes from './pages/Lotes'
+import LoteDetalle from './pages/LoteDetalle'
 import Productores from './pages/Productores'
 import Campanias from './pages/Campanias'
 import CampaniaDetalle from './pages/CampaniaDetalle'
@@ -57,6 +58,8 @@ function App() {
               <Route path="/costos" element={<Costos />} />
               <Route path="/cultivos" element={<Cultivos />} />
               <Route path="/lotes" element={<Lotes />} />
+              <Route path="/lotes/nuevo" element={<LoteDetalle />} />
+              <Route path="/lotes/:id" element={<LoteDetalle />} />
               <Route path="/analisis" element={<AnalisisLote />} />
               <Route path="/productores" element={<Productores />} />
               <Route path="/campanias" element={<Campanias />} />

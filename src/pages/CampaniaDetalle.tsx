@@ -30,6 +30,7 @@ interface Lote {
   descripcion: string | null
   idCampo?: number | null
   campo?: { id: number; nombre: string } | null
+  area?: number | null
 }
 interface Cultivo {
   id: number
@@ -1089,7 +1090,16 @@ export default function CampaniaDetalle() {
           <Field label="Lote" icon={MapPin}>
             <SelectAutocomplete
               value={cabecera.idLote ?? ''}
-              onChange={(v) => setCab('idLote', v === '' ? null : Number(v))}
+              onChange={(v) => {
+                const next = v === '' ? null : Number(v)
+                setCab('idLote', next)
+                // En alta, precargar Sup. sembrada con el área del lote (editable;
+                // al cambiar de lote se vuelve a precargar si el nuevo tiene área).
+                if (isNew && next !== null) {
+                  const lote = lotesFiltrados.find((l) => l.id === next)
+                  if (lote?.area != null) setCab('supSembrada', String(lote.area))
+                }
+              }}
               options={lotesFiltrados.map((l) => ({ value: l.id, label: l.descripcion || `Lote #${l.id}` }))}
               placeholder="Elegí lote"
               disabled={!empresaDestinoId || loadingLotes}
