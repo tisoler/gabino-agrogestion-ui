@@ -16,8 +16,9 @@ import {
   ChevronRight,
   Sun,
   Moon,
-  Monitor,
-  ClipboardList,
+    Monitor,
+    ClipboardList,
+    ClipboardCheck,
   FileBarChart,
   Settings,
   MessagesSquare,
@@ -59,6 +60,7 @@ const NAV_GROUPS: NavItem[][] = [
   [
     { to: '/campanias', label: 'Producción', icon: Calendar, permission: 'lectura:campania' },
     { to: '/prescripciones', label: 'Prescripciones', icon: ClipboardList, permission: 'lectura:prescripcion' },
+    { to: '/monitoreos', label: 'Monitoreo en lote', icon: ClipboardCheck, permission: 'lectura:monitoreo-lote' },
     { to: '/reportes', label: 'Reportes', icon: FileBarChart, permission: 'lectura:reporte' },
   ],
   [

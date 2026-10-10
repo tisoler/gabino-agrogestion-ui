@@ -4,13 +4,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X, ArrowUpRight,
   Sprout, MapPin, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
+  ClipboardCheck,
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { UNIDADES_PRECIO, colorCategoria, colorPrescripcion } from '../constantes'
 import NuevoInsumoModal from '../components/NuevoInsumoModal'
+import MonitoreoModal from '../components/MonitoreoModal'
+import MonitoreoDetalleModal from '../components/MonitoreoDetalleModal'
 import SelectAutocomplete from '../components/SelectAutocomplete'
 import { useCotizacionDolar, fmtPrecioInsumo } from '../lib/moneda'
+import { fmtFecha } from '../lib/prescripciones'
 import { useVolver } from '../lib/navegacion'
 import {
   fmtMoneda, fmtNumero, fmtQQHa, fmtNroCampania, todayLocalISO,
@@ -36,6 +40,13 @@ interface Cultivo {
   id: number
   nombre: string
   variedades: { id: number; nombre: string }[]
+}
+interface MonitoreoItem {
+  id: number
+  fecha: string
+  hora: string
+  diagnostico: string
+  observaciones: string | null
 }
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
@@ -284,11 +295,14 @@ export default function CampaniaDetalle() {
   const params = useParams<{ id: string }>()
   const isNew = !params.id || params.id === 'nueva'
 
-  const { permisos, isSysAdmin, currentEmpresaId, empresas } = useAuth()
+  const { permisos, isSysAdmin, isAsesor, currentEmpresaId, empresas } = useAuth()
   const isAdmin = isSysAdmin
   const canManageCategorias = isSysAdmin
   const canWrite = permisos.includes('escritura:campania')
   const canRead = permisos.includes('lectura:campania')
+  const canReadMonitoreo = permisos.includes('lectura:monitoreo-lote')
+  const canWriteMonitoreo =
+    permisos.includes('escritura:monitoreo-lote') && (isAdmin || isAsesor)
 
   const [empresaDestinoId, setEmpresaDestinoId] = useState<number | null>(
     isNew ? (isAdmin ? null : currentEmpresaId) : null
@@ -380,6 +394,13 @@ export default function CampaniaDetalle() {
     canRead && campaniaId !== null ? '/categorias' : null,
     fetcher
   )
+  const { data: monitoreos = [], mutate: mutateMonitoreos } = useSWR<MonitoreoItem[]>(
+    canReadMonitoreo && campaniaId !== null ? `/campanias/${campaniaId}/monitoreos` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  )
+  const [showMonitoreoModal, setShowMonitoreoModal] = useState(false)
+  const [monitoreoDetalle, setMonitoreoDetalle] = useState<MonitoreoItem | null>(null)
 
   // Campaña existente
   //
@@ -1269,6 +1290,60 @@ export default function CampaniaDetalle() {
             emptyHint={catalogCostos.length === 0 ? 'No hay costos disponibles para este productor. Creá uno primero desde la sección Costos.' : undefined}
           />
 
+          {/* MONITOREOS */}
+          {canReadMonitoreo && (
+            <section className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider inline-flex items-center gap-2">
+                    <ClipboardCheck className="size-4 text-primary" strokeWidth={1.75} />
+                    Monitoreos
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Visitas y observaciones del asesor sobre esta producción.
+                  </p>
+                </div>
+                {canWriteMonitoreo && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMonitoreoModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium shadow-sm hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+                  >
+                    <Plus className="size-3.5" strokeWidth={2} />
+                    Agregar monitoreo
+                  </button>
+                )}
+              </div>
+              {monitoreos.length === 0 ? (
+                <p className="px-5 py-4 text-sm text-muted-foreground">
+                  Todavía no hay monitoreos en esta producción.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {monitoreos.map((m) => (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() => setMonitoreoDetalle(m)}
+                        className="w-full text-left px-5 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-xs font-medium text-foreground tabular-nums">
+                            {fmtFecha(m.fecha)} {m.hora?.slice(0, 5)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground mt-1 line-clamp-2">{m.diagnostico}</p>
+                        {m.observaciones && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{m.observaciones}</p>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* RESULTADOS ECONÓMICOS */}
           <section className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="px-5 py-4 border-b border-border bg-muted/30">
@@ -1329,6 +1404,46 @@ export default function CampaniaDetalle() {
             <SaveButton isSaving={isSaving} hasChanges={hasChanges} onClick={save} />
           </div>
         </>
+      )}
+
+      {/* Modal: nuevo monitoreo (sin abandonar la producción) */}
+      {showMonitoreoModal && campaniaId !== null && (
+        <MonitoreoModal
+          campaniaId={campaniaId}
+          onCreated={() => {
+            setShowMonitoreoModal(false)
+            mutateMonitoreos()
+          }}
+          onClose={() => setShowMonitoreoModal(false)}
+        />
+      )}
+
+      {/* Modal: detalle de monitoreo */}
+      {monitoreoDetalle && campania && (
+        <MonitoreoDetalleModal
+          monitoreo={{
+            ...monitoreoDetalle,
+            campania: {
+              id: campania.id,
+              campania: campania.campania,
+              lote: campania.lote
+                ? {
+                    id: campania.lote.id,
+                    descripcion: campania.lote.descripcion,
+                    idEmpresa: campania.lote.idEmpresa,
+                    campo: campania.lote.campo ?? null,
+                  }
+                : null,
+              cultivo: campania.cultivo ?? null,
+              variedad: campania.variedad ?? null,
+            },
+          }}
+          productor={
+            empresas.find((e) => e.id === campania.lote?.idEmpresa)?.nombre ??
+            (campania.lote ? `Productor #${campania.lote.idEmpresa}` : undefined)
+          }
+          onClose={() => setMonitoreoDetalle(null)}
+        />
       )}
 
       {/* Modal: nuevo insumo (compartido) */}

@@ -16,6 +16,8 @@ import CampaniaDetalle from './pages/CampaniaDetalle'
 import Prescripciones from './pages/Prescripciones'
 import PrescripcionNueva from './pages/PrescripcionNueva'
 import PrescripcionDetalle from './pages/PrescripcionDetalle'
+import Monitoreos from './pages/Monitoreos'
+import MonitoreoNuevo from './pages/MonitoreoNuevo'
 import Notificaciones from './pages/Notificaciones'
 import Reportes from './pages/Reportes'
 import ReporteResumen from './pages/ReporteResumen'
@@ -68,6 +70,8 @@ function App() {
               <Route path="/prescripciones" element={<Prescripciones />} />
               <Route path="/prescripciones/nueva" element={<PrescripcionNueva />} />
               <Route path="/prescripciones/:id" element={<PrescripcionDetalle />} />
+              <Route path="/monitoreos" element={<Monitoreos />} />
+              <Route path="/monitoreos/nuevo" element={<MonitoreoNuevo />} />
               <Route path="/notificaciones" element={<Notificaciones />} />
               <Route path="/reportes" element={<Reportes />} />
               <Route path="/reportes/resumen" element={<ReporteResumen />} />
