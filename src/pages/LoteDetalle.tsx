@@ -84,8 +84,9 @@ export default function LoteDetalle() {
   const volver = useVolver('/lotes')
   const navigate = useNavigate()
 
-  const { user, permisos, isSysAdmin, empresas, currentEmpresaId } = useAuth()
+  const { user, permisos, isSysAdmin, isAsesor, empresas, currentEmpresaId } = useAuth()
   const isAdmin = isSysAdmin
+  const canPickEmpresa = isAdmin || isAsesor
   const canWrite = permisos.includes('escritura:lote')
   const canRead = permisos.includes('lectura:lote')
   const userEmpresas = (user?.idEmpresas || [])
@@ -138,12 +139,14 @@ export default function LoteDetalle() {
     fetcher,
   )
 
-  // Al crear como admin: si no hay empresa elegida, usar la primera.
+  // Al crear: si no hay empresa elegida, usar la primera (admin) o la actual (asesor).
   useEffect(() => {
-    if (!isNew || formData.idEmpresa || !isAdmin || !empresas[0]?.id) return
+    if (!isNew || formData.idEmpresa || !canPickEmpresa) return
+    const defaultId = isAdmin ? empresas[0]?.id : (currentEmpresaId ?? empresas[0]?.id)
+    if (!defaultId) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hidrata default desde catálogo async
-    setFormData((prev) => (prev.idEmpresa ? prev : { ...prev, idEmpresa: empresas[0].id }))
-  }, [isNew, isAdmin, empresas, formData.idEmpresa])
+    setFormData((prev) => (prev.idEmpresa ? prev : { ...prev, idEmpresa: defaultId }))
+  }, [isNew, canPickEmpresa, isAdmin, currentEmpresaId, empresas, formData.idEmpresa])
 
   if (!canRead) {
     return (
@@ -292,7 +295,7 @@ export default function LoteDetalle() {
 
       <form className="bg-card border border-border rounded-lg p-5 space-y-4" onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {isAdmin && (
+          {canPickEmpresa && (
             <div className="space-y-1.5">
               <label htmlFor="lote-empresa" className="text-xs font-medium text-foreground">
                 Productor
@@ -461,7 +464,7 @@ export default function LoteDetalle() {
                 !formData.idUsuario ||
                 !formData.idCampo ||
                 !formData.descripcion.trim() ||
-                (isNew && (isAdmin || userEmpresas.length > 1) && !formData.idEmpresa) ||
+                (isNew && canPickEmpresa && !formData.idEmpresa) ||
                 saving
               }
             >

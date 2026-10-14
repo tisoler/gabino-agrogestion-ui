@@ -21,7 +21,13 @@ const ORDEN = ['soja', 'maiz', 'trigo', 'girasol', 'sorgo']
 const fmtTn = (n: number): string =>
   '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
-const nombre = (c: string): string => c.charAt(0).toUpperCase() + c.slice(1)
+const nombre = (c: string): string => {
+  let nombre = c.charAt(0).toUpperCase() + c.slice(1);
+  if (nombre?.toLowerCase() === 'maiz') {
+    nombre = 'Maíz'
+  }
+  return nombre;
+};
 
 /**
  * Pizarra CAC compacta para el header (a la izquierda del dólar).
@@ -52,12 +58,12 @@ export default function CotizacionesPizarra() {
             p.sinCotizacion
               ? `${nombre(p.cultivo)} sin cotización (se usa tarifa base)`
               : `${nombre(p.cultivo)} ${fmtTn(p.precioArs ?? 0)}/Tn` +
-                (p.precioUsd ? ` · US$ ${p.precioUsd}/Tn` : '') +
-                (p.estimado ? ' · estimado' : '') +
-                (data.fechaPizarra ? ` · pizarra del ${data.fechaPizarra}` : '')
+              (p.precioUsd ? ` · US$ ${p.precioUsd}/Tn` : '') +
+              (p.estimado ? ' · estimado' : '') +
+              (data.fechaPizarra ? ` · pizarra del ${data.fechaPizarra}` : '')
           }
         >
-          {nombre(p.cultivo).slice(0, 3)}.{' '}
+          {nombre(p.cultivo)}{' '}
           {p.sinCotizacion || p.precioArs === null ? (
             <span className="font-medium">S/C</span>
           ) : (

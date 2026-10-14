@@ -47,7 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isAdmin) {
       return (listadoEmpresas || []).map((e) => e.id)
     }
-    return (user.idEmpresas || []).map((e) => Number(e)).filter((n) => Number.isFinite(n) && n > 0)
+    const raw = (user.idEmpresas || [])
+      .map((e) => Number(e))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    // Poda ids obsoletos en Firestore (empresas borradas/inexistentes):
+    // /empresas ya devuelve sólo las asignadas y existentes.
+    if (!listadoEmpresas) return raw
+    const validas = new Set(listadoEmpresas.map((e) => e.id))
+    return raw.filter((id) => validas.has(id))
   }, [user, isAdmin, listadoEmpresas])
 
   // Sincroniza currentEmpresaId con la lista de empresas válidas del usuario.
