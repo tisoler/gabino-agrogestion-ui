@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import useSWR from 'swr'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus, Search, Pencil, MapPin, Activity,
   Lock, AlertCircle, Shield, ToggleLeft, ToggleRight, Loader2, User
@@ -37,9 +37,14 @@ interface Lote {
 
 export default function Lotes() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterEmpresaId, setFilterEmpresaId] = useState<number | null>(null)
-  const [filterCampos, setFilterCampos] = useState<string[]>([])
+  // ?campo=... (ej. tras crear un lote): preselecciona el filtro de campo.
+  const [filterCampos, setFilterCampos] = useState<string[]>(() => {
+    const c = searchParams.get('campo')
+    return c ? [c] : []
+  })
 
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
   const [selectedLoteId, setSelectedLoteId] = useState<number | null>(null)

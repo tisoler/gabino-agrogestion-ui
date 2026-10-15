@@ -191,5 +191,7 @@ export default function MapaLote({
     onChangeRef.current?.(feature.geometry, { lat: coords[1], lng: coords[0] }, areaHa)
   }
 
-  return <div ref={contRef} className={`${altura} w-full rounded-md overflow-hidden`} />
+  // `isolate`: los paneles de Leaflet usan z-index 400-1000; sin un stacking
+  // context propio el mapa tapaba modales/dropdowns de la página.
+  return <div ref={contRef} className={`${altura} w-full rounded-md overflow-hidden isolate`} />
 }

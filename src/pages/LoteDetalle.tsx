@@ -217,8 +217,9 @@ export default function LoteDetalle() {
     }
     try {
       if (isNew) {
-        const { data } = await api.post('/lotes', payload)
-        navigate(`/lotes/${data.id}`)
+        await api.post('/lotes', payload)
+        const nombreCampo = campos.find((c) => c.id === formData.idCampo)?.nombre
+        navigate(nombreCampo ? `/lotes?campo=${encodeURIComponent(nombreCampo)}` : '/lotes')
       } else {
         await api.patch(`/lotes/${loteId}`, payload)
         setSavedOk(true)
