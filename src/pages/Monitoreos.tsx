@@ -19,6 +19,10 @@ interface MonitoreoListItem {
   hora: string
   diagnostico: string
   observaciones: string | null
+  estado?: string
+  origen?: string | null
+  audioUrl?: string | null
+  transcripcionEstado?: string | null
   campania?: {
     id: number
     campania?: string
@@ -65,6 +69,7 @@ export default function Monitoreos() {
   const [filterLoteIds, setFilterLoteIds] = useState<number[]>([])
   const [filterCultivoIds, setFilterCultivoIds] = useState<number[]>([])
   const [filterVariedadIds, setFilterVariedadIds] = useState<number[]>([])
+  const [filterEstado, setFilterEstado] = useState<'todos' | 'borrador' | 'confirmado'>('todos')
 
   const { data: cultivos = [] } = useSWR<Cultivo[]>(canRead ? '/cultivos' : null, fetcher)
   const { data: lotes = [] } = useSWR<Lote[]>(canRead ? '/lotes' : null, fetcher)
@@ -122,7 +127,7 @@ export default function Monitoreos() {
     [filterLoteIds, lotesFiltrados],
   )
 
-  const monitoreosFetcher = async ([, empresaIds, campanias, campos, lotesIds, cultivos, variedades]: [string, string, string, string, string, string, string]) => {
+  const monitoreosFetcher = async ([, empresaIds, campanias, campos, lotesIds, cultivos, variedades, estado]: [string, string, string, string, string, string, string, string]) => {
     const params: Record<string, unknown> = {}
     if (empresaIds) params.empresaIds = empresaIds
     if (campanias) params.campanias = campanias
@@ -130,13 +135,14 @@ export default function Monitoreos() {
     if (lotesIds) params.idLote = lotesIds
     if (cultivos) params.idCultivo = cultivos
     if (variedades) params.idVariedad = variedades
+    if (estado === 'borrador' || estado === 'confirmado') params.estado = estado
     const res = await api.get('/monitoreos', { params })
     return res.data as MonitoreoListItem[]
   }
 
   const { data: monitoreos = [], isLoading, mutate: revalidarMonitoreos } = useSWR<MonitoreoListItem[]>(
     canRead
-      ? ['monitoreos', filterEmpresaIds.join(','), filterCampanias.join(','), filterCampoIds.join(','), loteIdsEfectivos.join(','), filterCultivoIds.join(','), variedadIdsEfectivos.join(',')]
+      ? ['monitoreos', filterEmpresaIds.join(','), filterCampanias.join(','), filterCampoIds.join(','), loteIdsEfectivos.join(','), filterCultivoIds.join(','), variedadIdsEfectivos.join(','), filterEstado]
       : null,
     monitoreosFetcher,
     { revalidateOnFocus: false },
@@ -149,6 +155,13 @@ export default function Monitoreos() {
     filterEmpresasVisibles.find((e) => e.id === idEmpresa)?.nombre
     ?? empresas.find((e) => e.id === idEmpresa)?.nombre
     ?? (idEmpresa != null ? `Productor #${idEmpresa}` : '—')
+
+  const badgeEstado = (estado?: string) =>
+    estado === 'borrador' ? (
+      <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+        Borrador
+      </span>
+    ) : null
 
   if (!canRead) {
     return (
@@ -194,11 +207,35 @@ export default function Monitoreos() {
           monitoreo={detalle}
           productor={nombreEmpresa(detalle.campania?.lote?.idEmpresa)}
           onClose={() => setDetalle(null)}
+          puedeConfirmar={canWrite}
+          onConfirmado={() => revalidarMonitoreos()}
+          editable={canWrite}
+          onActualizado={() => revalidarMonitoreos()}
         />
       )}
 
       {/* Filtros */}
       <div className="bg-card border border-border rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+          <label className="text-xs font-medium text-foreground">Estado</label>
+          <div className="inline-flex rounded-md border border-border overflow-hidden" role="group" aria-label="Filtrar por estado">
+            {(['todos', 'borrador', 'confirmado'] as const).map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setFilterEstado(e)}
+                aria-pressed={filterEstado === e}
+                className={`px-3 py-1.5 text-sm font-medium cursor-pointer transition-colors ${
+                  filterEstado === e
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card text-muted-foreground hover:bg-accent'
+                }`}
+              >
+                {e === 'todos' ? 'Todos' : e === 'borrador' ? 'Borradores' : 'Confirmados'}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-foreground">Productor</label>
           <MultiselectFilter
@@ -281,7 +318,9 @@ export default function Monitoreos() {
               <div
                 key={m.id}
                 onClick={() => setDetalle(m)}
-                className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40"
+                className={`bg-card border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40 ${
+                  m.estado === 'borrador' ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/20' : 'border-border'
+                }`}
               >
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-foreground leading-tight truncate">
@@ -290,9 +329,10 @@ export default function Monitoreos() {
                       {m.campania?.campania ? ` · ${m.campania.campania}` : ''}
                     </span>
                   </h3>
-                  <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground tabular-nums">
+                  <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground tabular-nums">
                     <Calendar className="size-3.5" strokeWidth={1.75} />
                     {fmtFecha(m.fecha)} · {m.hora?.slice(0, 5)}
+                    {badgeEstado(m.estado)}
                   </div>
                 </div>
 
@@ -336,6 +376,7 @@ export default function Monitoreos() {
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Lote</th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cultivo</th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Diagnóstico</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -343,7 +384,9 @@ export default function Monitoreos() {
                     <tr
                       key={m.id}
                       onClick={() => setDetalle(m)}
-                      className="cursor-pointer hover:bg-muted/40 transition-colors"
+                      className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+                        m.estado === 'borrador' ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
+                      }`}
                     >
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -390,6 +433,7 @@ export default function Monitoreos() {
                           {m.diagnostico}
                         </span>
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{badgeEstado(m.estado)}</td>
                     </tr>
                   ))}
                 </tbody>
