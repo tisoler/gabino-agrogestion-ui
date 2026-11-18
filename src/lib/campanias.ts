@@ -95,6 +95,7 @@ export interface Campania {
   prodNetaTotalQq: number | null
   precioXQq: number | null
   alquilerQqHa: number | null
+  alquilerPrecioXQq: number | null
   comercializacionPct: number | null
   cosechaXHa: number | null
   lote?: Lote
@@ -220,7 +221,7 @@ export function calcularResultados(
     'supSembrada' | 'supCosechada' | 'prodNetaTotalQq' | 'precioXQq' |
     'comercializacionPct' | 'cosechaXHa' | 'alquilerQqHa' |
     'labores' | 'insumos' | 'costos'
-  >,
+  > & { alquilerPrecioXQq?: number | null },
   dolarInsumo = 1,
 ): ResultadosCampania {
   const supSembrada = num(c.supSembrada)
@@ -230,6 +231,9 @@ export function calcularResultados(
   const comercPct = num(c.comercializacionPct)
   const cosechaHa = num(c.cosechaXHa)
   const alquilerQqHa = num(c.alquilerQqHa)
+  // Precio del quintal para el alquiler: si no hay valor guardado se usa el
+  // precio de venta como fallback (datos anteriores a la migración 040).
+  const precioAlquiler = c.alquilerPrecioXQq == null ? precio : num(c.alquilerPrecioXQq)
   const dInsumo = num(dolarInsumo) || 1
 
   const rendimientoQqHa = supCosechada > 0 ? prodNeta / supCosechada : 0
@@ -248,7 +252,7 @@ export function calcularResultados(
   const totalCostosDirectosHa =
     cosechaHa + costoTotalLaboresHa + costoTotalInsumosHa + costoTotalCostosHa
   const margenBrutoSAlquilerHa = ingresoNetoHa - totalCostosDirectosHa
-  const costoAlquilerHa = alquilerQqHa * precio
+  const costoAlquilerHa = alquilerQqHa * precioAlquiler
   const margenBrutoCAlquilerHa = margenBrutoSAlquilerHa - costoAlquilerHa
 
   return {

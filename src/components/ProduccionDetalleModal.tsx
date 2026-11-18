@@ -39,6 +39,7 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
       comercializacionPct: Number(campania.comercializacionPct) || 0,
       cosechaXHa: Number(campania.cosechaXHa) || 0,
       alquilerQqHa: Number(campania.alquilerQqHa) || 0,
+      alquilerPrecioXQq: campania.alquilerPrecioXQq ?? null,
       labores: campania.labores || [],
       insumos: campania.insumos || [],
       costos: campania.costos || [],
@@ -106,6 +107,10 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
                   <CampoValor label="Produc. neta total (qq)" value={fmtNumero(campania.prodNetaTotalQq, 2)} />
                   <CampoValor label="Precio ($/qq)" value={fmtMoneda(campania.precioXQq, 2)} />
                   <CampoValor label="Alquiler (qq/ha)" value={fmtNumero(campania.alquilerQqHa, 2)} />
+                  <CampoValor
+                    label="Precio quintal alquiler ($/qq)"
+                    value={campania.alquilerPrecioXQq != null ? fmtMoneda(campania.alquilerPrecioXQq, 2) : '—'}
+                  />
                   <CampoValor label="Comercialización (%)" value={campania.comercializacionPct != null ? `${fmtNumero(campania.comercializacionPct, 2)} %` : '—'} />
                   <CampoValor label="Cosecha ($/ha)" value={fmtMoneda(campania.cosechaXHa, 2)} />
                   <CampoValor label="Rendimiento" value={fmtQQHa(resultados?.rendimientoQqHa, 2)} />

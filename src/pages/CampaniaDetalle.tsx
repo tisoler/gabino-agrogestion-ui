@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, AlertCircle, Loader2, Save, Check, X, ArrowUpRight,
   Sprout, MapPin, Package, Pickaxe, DollarSign, FileDown, FolderPlus,
-  ClipboardCheck,
+  ClipboardCheck, RefreshCw,
 } from 'lucide-react'
 import api, { esErrorDeAcceso } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
@@ -49,6 +49,42 @@ interface MonitoreoItem {
   observaciones: string | null
 }
 
+interface PrecioCereal {
+  cultivo: string
+  precioArs: number | null
+  precioUsd: number | null
+  estimado: boolean
+  sinCotizacion: boolean
+}
+
+interface Pizarra {
+  fechaPizarra: string | null
+  precios: PrecioCereal[]
+}
+
+/** Cereales con tablero en la pizarra CAC (claves normalizadas sin acentos). */
+const CEREALES_PIZARRA = ['soja', 'girasol', 'maiz', 'trigo', 'sorgo'] as const
+
+const normalizarNombre = (nombre: string): string =>
+  (nombre ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+/**
+ * Matchea un nombre de cultivo ("Soja 1º", "Maíz tardío") con su cereal de
+ * pizarra. Misma lógica que `cerealDeCultivo` del backend (por contenido,
+ * no por igualdad exacta).
+ */
+function cerealDeCultivo(nombre: string): string | null {
+  const n = normalizarNombre(nombre)
+  for (const cereal of CEREALES_PIZARRA) {
+    if (n.includes(cereal)) return cereal
+  }
+  return null
+}
+
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
 type Cabecera = {
@@ -61,6 +97,7 @@ type Cabecera = {
   prodNetaTotalQq: string
   precioXQq: string
   alquilerQqHa: string
+  alquilerPrecioXQq: string
   comercializacionPct: string
   cosechaXHa: string
 }
@@ -75,13 +112,14 @@ const emptyCabecera = (): Cabecera => ({
   prodNetaTotalQq: '',
   precioXQq: '',
   alquilerQqHa: '',
+  alquilerPrecioXQq: '',
   comercializacionPct: '',
   cosechaXHa: '',
 })
 
 const numericFields: (keyof Cabecera)[] = [
   'supSembrada', 'supCosechada', 'prodNetaTotalQq', 'precioXQq',
-  'alquilerQqHa', 'comercializacionPct', 'cosechaXHa',
+  'alquilerQqHa', 'alquilerPrecioXQq', 'comercializacionPct', 'cosechaXHa',
 ]
 
 function buildPatchPayload(next: Cabecera, saved: Cabecera): Record<string, unknown> {
@@ -447,6 +485,7 @@ export default function CampaniaDetalle() {
       prodNetaTotalQq: campania.prodNetaTotalQq != null ? String(campania.prodNetaTotalQq) : '',
       precioXQq: campania.precioXQq != null ? String(campania.precioXQq) : '',
       alquilerQqHa: campania.alquilerQqHa != null ? String(campania.alquilerQqHa) : '',
+      alquilerPrecioXQq: campania.alquilerPrecioXQq != null ? String(campania.alquilerPrecioXQq) : '',
       comercializacionPct: campania.comercializacionPct != null ? String(campania.comercializacionPct) : '',
       cosechaXHa: campania.cosechaXHa != null ? String(campania.cosechaXHa) : '',
     }
@@ -503,6 +542,33 @@ export default function CampaniaDetalle() {
     return c?.variedades || []
   }, [cultivos, cabecera.idCultivo])
 
+  // Pizarra CAC (mismo endpoint que el widget del header): default visual del
+  // precio del quintal de alquiler según el cultivo. Solo se usa cuando la
+  // producción no tiene un valor guardado; no se persiste hasta que el usuario
+  // lo edita o lo restablece con el botón de reset.
+  const { data: pizarra } = useSWR<Pizarra>('/facturacion/precios', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30 * 60 * 1000,
+  })
+
+  const cultivoNombre = useMemo(() => {
+    if (!cabecera.idCultivo) return null
+    return cultivos.find((c) => c.id === cabecera.idCultivo)?.nombre ?? null
+  }, [cultivos, cabecera.idCultivo])
+
+  const pizarraAlquilerQq = useMemo((): number | null => {
+    if (!cultivoNombre || !pizarra?.precios) return null
+    const cereal = cerealDeCultivo(cultivoNombre)
+    if (!cereal) return null
+    const precio = pizarra.precios.find((p) => p.cultivo === cereal)
+    if (!precio || precio.precioArs == null) return null
+    return precio.precioArs / 10 // $/Tn → $/qq
+  }, [cultivoNombre, pizarra])
+
+  const alquilerPrecioGuardado =
+    cabecera.alquilerPrecioXQq === '' ? null : parseFloat(cabecera.alquilerPrecioXQq)
+  const alquilerPrecioEfectivo = alquilerPrecioGuardado ?? pizarraAlquilerQq ?? null
+
   const resultados = useMemo(() => calcularResultados({
     supSembrada: parseFloat(cabecera.supSembrada) || 0,
     supCosechada: parseFloat(cabecera.supCosechada) || 0,
@@ -511,8 +577,9 @@ export default function CampaniaDetalle() {
     comercializacionPct: parseFloat(cabecera.comercializacionPct) || 0,
     cosechaXHa: parseFloat(cabecera.cosechaXHa) || 0,
     alquilerQqHa: parseFloat(cabecera.alquilerQqHa) || 0,
+    alquilerPrecioXQq: alquilerPrecioEfectivo,
     labores, insumos, costos,
-  }, dolarVenta > 0 ? dolarVenta : 1), [cabecera, labores, insumos, costos, dolarVenta])
+  }, dolarVenta > 0 ? dolarVenta : 1), [cabecera, alquilerPrecioEfectivo, labores, insumos, costos, dolarVenta])
 
   // Total de insumos por ha en USD: la tabla lo convierte a pesos con el dólar
   // venta para su footer (resultados.costoTotalInsumosHa ya incluye el dólar).
@@ -1156,7 +1223,51 @@ export default function CampaniaDetalle() {
           <NumField label="Sup. cosechada (ha)" field="supCosechada" cabecera={cabecera} setCab={setCab} />
           <NumField label="Produc. neta total (qq)" field="prodNetaTotalQq" cabecera={cabecera} setCab={setCab} />
           <NumField label="Precio ($/qq)" field="precioXQq" cabecera={cabecera} setCab={setCab} />
-          <NumField label="Alquiler (qq/ha)" field="alquilerQqHa" cabecera={cabecera} setCab={setCab} />
+          <div className="sm:col-span-2 lg:col-span-4 rounded-md border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Alquiler
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <NumField label="Alquiler (qq/ha)" field="alquilerQqHa" cabecera={cabecera} setCab={setCab} />
+              <Field label="Precio quintal ($/qq)">
+                <div className="flex items-center gap-1">
+                  <NumberInput2
+                    value={alquilerPrecioEfectivo ?? 0}
+                    min={0}
+                    onCommit={(n) => {
+                      setCab('alquilerPrecioXQq', (n === 0 ? '0' : n.toFixed(2)))
+                    }}
+                    className={inputCls + ' text-right tabular-nums'}
+                  />
+                  {pizarraAlquilerQq != null && (
+                    <button
+                      type="button"
+                      onClick={() => setCab('alquilerPrecioXQq', pizarraAlquilerQq.toFixed(2))}
+                      title={`Restablecer valor de pizarra (${fmtMoneda(pizarraAlquilerQq, 2)}/qq)`}
+                      aria-label="Restablecer valor de pizarra"
+                      className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer shrink-0"
+                    >
+                      <RefreshCw className="size-4" strokeWidth={1.75} />
+                    </button>
+                  )}
+                </div>
+                {cabecera.alquilerPrecioXQq === '' && pizarraAlquilerQq != null && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Valor de pizarra{cultivoNombre ? ` (${cultivoNombre})` : ''} — editá para fijarlo
+                  </p>
+                )}
+              </Field>
+              <Field label="Total alquiler ($/ha)">
+                <input
+                  readOnly
+                  disabled
+                  value={fmtMoneda(resultados.costoAlquilerHa, 2)}
+                  aria-label="Total alquiler por hectárea"
+                  className={inputCls + ' text-right tabular-nums bg-muted/50'}
+                />
+              </Field>
+            </div>
+          </div>
           <NumField label="Comercialización (%)" field="comercializacionPct" cabecera={cabecera} setCab={setCab} max={100} />
           <NumField label="Cosecha ($/ha)" field="cosechaXHa" cabecera={cabecera} setCab={setCab} />
         </div>
