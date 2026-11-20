@@ -9,6 +9,8 @@ import api from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
 import { fmtMoneda, fmtNumero, fmtQQHa, fmtNroCampania, periodosCampania } from '../lib/campanias'
 import MultiselectFilter from '../components/MultiselectFilter'
+import SegurosModal from '../components/SegurosModal'
+import { useCampaniasFiltros } from '../contexts/campanias-filtros-context'
 
 interface CampaniaListTotales {
   rendimientoQqHa: number
@@ -65,16 +67,17 @@ export default function Campanias() {
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0)
 
-  // Filtros
+  // Filtros (viven en contexto para conservarlos al ir al detalle y volver).
   // Sin filtro por defecto: admins ven todas las empresas y asesor/productor
   // todas las que tienen vinculadas (el backend filtra por idEmpresas).
-  const [filterEmpresaIds, setFilterEmpresaIds] = useState<number[]>([])
+  const { filtros, setFiltros, resetFiltros } = useCampaniasFiltros()
+  const filterEmpresaIds = filtros.empresaIds
+  const filterCampanias = filtros.campanias
+  const filterCampoIds = filtros.campoIds
+  const filterLoteIds = filtros.loteIds
+  const filterCultivoIds = filtros.cultivoIds
+  const filterVariedadIds = filtros.variedadIds
   const filterEmpresasVisibles = isAdmin ? empresas : empresas.filter((e) => userEmpresas.includes(e.id))
-  const [filterCampanias, setFilterCampanias] = useState<string[]>([])
-  const [filterCampoIds, setFilterCampoIds] = useState<number[]>([])
-  const [filterLoteIds, setFilterLoteIds] = useState<number[]>([])
-  const [filterCultivoIds, setFilterCultivoIds] = useState<number[]>([])
-  const [filterVariedadIds, setFilterVariedadIds] = useState<number[]>([])
 
   // Catálogos para los selects de filtro y para la creación
   const { data: cultivos = [] } = useSWR<Cultivo[]>(canRead ? '/cultivos' : null, fetcher)
@@ -168,7 +171,7 @@ export default function Campanias() {
     return res.data as CampaniaListItem[]
   }
 
-  const { data: campanias = [], isLoading } = useSWR<CampaniaListItem[]>(
+  const { data: campanias = [], isLoading, mutate } = useSWR<CampaniaListItem[]>(
     canRead
       ? [
         'campanias',
@@ -184,6 +187,36 @@ export default function Campanias() {
     { revalidateOnFocus: false, revalidateOnMount: true, dedupingInterval: 0 }
   )
 
+  // Selección para la planilla de seguros (solo con permiso de escritura).
+  // Se intersecta con la lista visible para que los filtros no dejen
+  // selecciones fantasma.
+  const [seleccionados, setSeleccionados] = useState<Set<number>>(new Set())
+  const [segurosOpen, setSegurosOpen] = useState(false)
+  const seleccionadasVigentes = useMemo(
+    () => campanias.filter((c) => seleccionados.has(c.id)).map((c) => c.id),
+    [campanias, seleccionados],
+  )
+  const toggleSeleccion = (id: number) => {
+    setSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const toggleTodas = () => {
+    setSeleccionados((prev) => {
+      const vigentes = campanias.map((c) => c.id)
+      const todasMarcadas = vigentes.length > 0 && vigentes.every((id) => prev.has(id))
+      if (todasMarcadas) {
+        const next = new Set(prev)
+        for (const id of vigentes) next.delete(id)
+        return next
+      }
+      return new Set([...prev, ...vigentes])
+    })
+  }
+
   // Totales globales (para el header del dashboard)
   const totalesGlobales = useMemo(() => {
     const superficie = campanias.reduce((acc, c) => acc + (c.totales.supSembrada || 0), 0)
@@ -192,12 +225,7 @@ export default function Campanias() {
   }, [campanias])
 
   const clearFilters = () => {
-    setFilterEmpresaIds([])
-    setFilterCampanias([])
-    setFilterCampoIds([])
-    setFilterLoteIds([])
-    setFilterCultivoIds([])
-    setFilterVariedadIds([])
+    resetFiltros()
   }
 
   const hasActiveFilters =
@@ -287,7 +315,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={filterEmpresaIds.map(String)}
               opciones={filterEmpresasVisibles.map((e) => ({ value: String(e.id), label: e.nombre }))}
-              onChange={(next) => setFilterEmpresaIds(next.map(Number))}
+              onChange={(next) => setFiltros({ empresaIds: next.map(Number) })}
               placeholder="Todos"
               etiqueta="productore"
             />
@@ -299,7 +327,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={filterCampanias}
               opciones={periodosCampania().map((p) => ({ value: p, label: p }))}
-              onChange={setFilterCampanias}
+              onChange={(next) => setFiltros({ campanias: next })}
               placeholder="Todas"
               etiqueta="período"
             />
@@ -311,7 +339,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={filterCampoIds.map(String)}
               opciones={camposDisponibles.map((c) => ({ value: String(c.value), label: c.label }))}
-              onChange={(next) => setFilterCampoIds(next.map(Number))}
+              onChange={(next) => setFiltros({ campoIds: next.map(Number) })}
               placeholder="Todos"
               etiqueta="campo"
             />
@@ -323,7 +351,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={lotesEfectivos.map(String)}
               opciones={lotesFiltrados.map((l) => ({ value: String(l.id), label: l.descripcion || `Lote #${l.id}` }))}
-              onChange={(next) => setFilterLoteIds(next.map(Number))}
+              onChange={(next) => setFiltros({ loteIds: next.map(Number) })}
               placeholder="Todos"
               etiqueta="lote"
             />
@@ -335,7 +363,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={filterCultivoIds.map(String)}
               opciones={cultivos.map((c) => ({ value: String(c.id), label: c.nombre }))}
-              onChange={(next) => setFilterCultivoIds(next.map(Number))}
+              onChange={(next) => setFiltros({ cultivoIds: next.map(Number) })}
               placeholder="Todos"
               etiqueta="cultivo"
             />
@@ -347,7 +375,7 @@ export default function Campanias() {
             <MultiselectFilter
               value={variedadIdsEfectivos.map(String)}
               opciones={variedadesFiltradas.map((v) => ({ value: String(v.id), label: v.nombre }))}
-              onChange={(next) => setFilterVariedadIds(next.map(Number))}
+              onChange={(next) => setFiltros({ variedadIds: next.map(Number) })}
               placeholder={filterCultivoIds.length === 0 ? 'Elegí cultivo' : 'Todas'}
               etiqueta="variedad"
               vacio="Elegí un cultivo primero."
@@ -367,6 +395,35 @@ export default function Campanias() {
           </div>
         )}
       </div>
+
+      {/* Barra de selección (fija al hacer scroll) */}
+      {canWrite && (
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur py-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {seleccionadasVigentes.length === 0
+              ? 'Sin selección'
+              : `${seleccionadasVigentes.length} ${seleccionadasVigentes.length === 1 ? 'seleccionada' : 'seleccionadas'}`}
+          </span>
+          {seleccionadasVigentes.length > 0 && (
+            <button
+              onClick={() => setSeleccionados(new Set())}
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 cursor-pointer"
+            >
+              <X className="size-3" strokeWidth={2} />
+              Limpiar
+            </button>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={() => setSegurosOpen(true)}
+            disabled={seleccionadasVigentes.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <FileSpreadsheet className="size-4" strokeWidth={2} />
+            <span>Generar datos para seguros</span>
+          </button>
+        </div>
+      )}
 
       {/* Grilla */}
       {isLoading ? (
@@ -400,7 +457,17 @@ export default function Campanias() {
                   className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer transition-colors hover:bg-muted/40"
                 >
                   <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-start gap-2">
+                      {canWrite && (
+                        <input
+                          type="checkbox"
+                          checked={seleccionados.has(c.id)}
+                          onChange={() => toggleSeleccion(c.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="size-4 mt-1 accent-primary cursor-pointer shrink-0"
+                          aria-label={`Seleccionar ${c.lote?.descripcion || `lote #${c.idLote}`}`}
+                        />
+                      )}
                       <h3 className="text-base font-semibold text-foreground leading-tight truncate">
                         {c.lote?.descripcion || `Lote #${c.idLote}`}
                       </h3>
@@ -468,37 +535,55 @@ export default function Campanias() {
             })}
           </div>
 
-          {/* Desktop: tabla */}
+          {/* Desktop: tabla (header fijo + scroll interno) */}
           <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[70vh]">
               <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr className="border-b border-border">
+                  {canWrite && (
+                    <th className="px-3 py-3 w-10 sticky top-0 z-10 bg-muted">
+                      <input
+                        type="checkbox"
+                        checked={campanias.length > 0 && seleccionadasVigentes.length === campanias.length}
+                        ref={(el) => {
+                          if (el) {
+                            el.indeterminate =
+                              seleccionadasVigentes.length > 0 &&
+                              seleccionadasVigentes.length < campanias.length
+                          }
+                        }}
+                        onChange={toggleTodas}
+                        className="size-4 accent-primary cursor-pointer align-middle"
+                        aria-label="Seleccionar todas"
+                      />
+                    </th>
+                  )}
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-10 bg-muted">
                     Productor
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-10 bg-muted">
                     Campaña
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-10 bg-muted">
                     Campo
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-10 bg-muted">
                     Lote
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sticky top-0 z-10 bg-muted">
                     Cultivo / Variedad
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
                     Sup. Sem.
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
                     Rend.
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
                     Margen / ha
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
                     Margen lote
                   </th>
                 </tr>
@@ -512,6 +597,17 @@ export default function Campanias() {
                       onClick={() => goToDetail(c.id)}
                       className="cursor-pointer transition-colors hover:bg-muted/40"
                     >
+                      {canWrite && (
+                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={seleccionados.has(c.id)}
+                            onChange={() => toggleSeleccion(c.id)}
+                            className="size-4 accent-primary cursor-pointer align-middle"
+                            aria-label={`Seleccionar ${c.lote?.descripcion || `lote #${c.idLote}`}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span className="text-sm text-foreground">
                           {empresas.find((e) => e.id === c.lote?.idEmpresa)?.nombre
@@ -567,6 +663,14 @@ export default function Campanias() {
           </div>
           </div>
         </>
+      )}
+
+      {segurosOpen && seleccionadasVigentes.length > 0 && (
+        <SegurosModal
+          ids={seleccionadasVigentes}
+          onClose={() => setSegurosOpen(false)}
+          onSaved={() => mutate()}
+        />
       )}
     </div>
   )

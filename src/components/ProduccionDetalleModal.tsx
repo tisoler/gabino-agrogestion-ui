@@ -104,6 +104,9 @@ export default function ProduccionDetalleModal({ campaniaId, onClose }: Producci
                   <CampoValor label="Variedad" value={campania.variedad?.nombre || '—'} />
                   <CampoValor label="Sup. sembrada (ha)" value={fmtNumero(campania.supSembrada, 2)} />
                   <CampoValor label="Sup. cosechada (ha)" value={fmtNumero(campania.supCosechada, 2)} />
+                  <CampoValor label="Fecha de siembra" value={fmtFecha(campania.fechaSiembra)} />
+                  <CampoValor label="Empresa de seguros" value={campania.aseguradora?.nombre ?? '—'} />
+                  <CampoValor label="QQ asegurados" value={campania.qqAsegurados != null ? fmtNumero(campania.qqAsegurados, 2) : '—'} />
                   <CampoValor label="Produc. neta total (qq)" value={fmtNumero(campania.prodNetaTotalQq, 2)} />
                   <CampoValor label="Precio ($/qq)" value={fmtMoneda(campania.precioXQq, 2)} />
                   <CampoValor label="Alquiler (qq/ha)" value={fmtNumero(campania.alquilerQqHa, 2)} />

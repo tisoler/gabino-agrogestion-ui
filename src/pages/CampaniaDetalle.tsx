@@ -41,6 +41,11 @@ interface Cultivo {
   nombre: string
   variedades: { id: number; nombre: string }[]
 }
+interface Aseguradora {
+  id: number
+  nombre: string
+  activo: boolean
+}
 interface MonitoreoItem {
   id: number
   fecha: string
@@ -98,6 +103,9 @@ type Cabecera = {
   precioXQq: string
   alquilerQqHa: string
   alquilerPrecioXQq: string
+  fechaSiembra: string
+  idAseguradora: number | null
+  qqAsegurados: string
   comercializacionPct: string
   cosechaXHa: string
 }
@@ -113,13 +121,17 @@ const emptyCabecera = (): Cabecera => ({
   precioXQq: '',
   alquilerQqHa: '',
   alquilerPrecioXQq: '',
+  fechaSiembra: '',
+  idAseguradora: null,
+  qqAsegurados: '',
   comercializacionPct: '',
   cosechaXHa: '',
 })
 
 const numericFields: (keyof Cabecera)[] = [
   'supSembrada', 'supCosechada', 'prodNetaTotalQq', 'precioXQq',
-  'alquilerQqHa', 'alquilerPrecioXQq', 'comercializacionPct', 'cosechaXHa',
+  'alquilerQqHa', 'alquilerPrecioXQq', 'qqAsegurados',
+  'comercializacionPct', 'cosechaXHa',
 ]
 
 function buildPatchPayload(next: Cabecera, saved: Cabecera): Record<string, unknown> {
@@ -128,6 +140,10 @@ function buildPatchPayload(next: Cabecera, saved: Cabecera): Record<string, unkn
   if (next.idLote !== saved.idLote) payload.idLote = next.idLote
   if (next.idCultivo !== saved.idCultivo) payload.idCultivo = next.idCultivo
   if (next.idVariedad !== saved.idVariedad) payload.idVariedad = next.idVariedad
+  if (next.fechaSiembra !== saved.fechaSiembra) {
+    payload.fechaSiembra = next.fechaSiembra === '' ? null : next.fechaSiembra
+  }
+  if (next.idAseguradora !== saved.idAseguradora) payload.idAseguradora = next.idAseguradora
   for (const k of numericFields) {
     const v = next[k] as string
     const s = saved[k] as string
@@ -437,6 +453,11 @@ export default function CampaniaDetalle() {
     fetcher,
     { revalidateOnFocus: false }
   )
+  const { data: aseguradoras = [] } = useSWR<Aseguradora[]>(
+    canRead ? '/aseguradoras?soloActivas=true' : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  )
   const [showMonitoreoModal, setShowMonitoreoModal] = useState(false)
   const [monitoreoDetalle, setMonitoreoDetalle] = useState<MonitoreoItem | null>(null)
 
@@ -453,6 +474,16 @@ export default function CampaniaDetalle() {
     fetcher,
     { revalidateOnFocus: false }
   )
+  // Mantiene visible la aseguradora guardada aunque esté inactiva.
+  const aseguradoraOpciones = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const a of aseguradoras) map.set(a.id, a.nombre)
+    const guardada = campania?.aseguradora
+    if (guardada && !map.has(guardada.id)) map.set(guardada.id, guardada.nombre)
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([value, label]) => ({ value, label }))
+  }, [aseguradoras, campania])
 
   // Sin permiso sobre la empresa (403), inexistente (404) o sin sesión (401):
   // volver al listado (también aplica a admins con un id inválido).
@@ -486,6 +517,9 @@ export default function CampaniaDetalle() {
       precioXQq: campania.precioXQq != null ? String(campania.precioXQq) : '',
       alquilerQqHa: campania.alquilerQqHa != null ? String(campania.alquilerQqHa) : '',
       alquilerPrecioXQq: campania.alquilerPrecioXQq != null ? String(campania.alquilerPrecioXQq) : '',
+      fechaSiembra: campania.fechaSiembra ? String(campania.fechaSiembra).slice(0, 10) : '',
+      idAseguradora: campania.idAseguradora ?? null,
+      qqAsegurados: campania.qqAsegurados != null ? String(campania.qqAsegurados) : '',
       comercializacionPct: campania.comercializacionPct != null ? String(campania.comercializacionPct) : '',
       cosechaXHa: campania.cosechaXHa != null ? String(campania.cosechaXHa) : '',
     }
@@ -659,6 +693,8 @@ export default function CampaniaDetalle() {
       }
       if (empresaDestinoId) payload.idEmpresa = empresaDestinoId
       if (cabecera.idVariedad) payload.idVariedad = cabecera.idVariedad
+      if (cabecera.fechaSiembra !== '') payload.fechaSiembra = cabecera.fechaSiembra
+      if (cabecera.idAseguradora != null) payload.idAseguradora = cabecera.idAseguradora
       for (const k of numericFields) {
         const v = cabecera[k] as string
         if (v !== '') payload[k] = parseFloat(v)
@@ -804,6 +840,8 @@ export default function CampaniaDetalle() {
     if (cabecera.idLote !== cabeceraSaved.idLote) return true
     if (cabecera.idCultivo !== cabeceraSaved.idCultivo) return true
     if (cabecera.idVariedad !== cabeceraSaved.idVariedad) return true
+    if (cabecera.fechaSiembra !== cabeceraSaved.fechaSiembra) return true
+    if (cabecera.idAseguradora !== cabeceraSaved.idAseguradora) return true
     return false
   }, [cabecera, cabeceraSaved])
 
@@ -1221,6 +1259,14 @@ export default function CampaniaDetalle() {
 
           <NumField label="Sup. sembrada (ha)" field="supSembrada" cabecera={cabecera} setCab={setCab} />
           <NumField label="Sup. cosechada (ha)" field="supCosechada" cabecera={cabecera} setCab={setCab} />
+          <Field label="Fecha de siembra">
+            <input
+              type="date"
+              value={cabecera.fechaSiembra}
+              onChange={(e) => setCab('fechaSiembra', e.target.value)}
+              className={inputCls}
+            />
+          </Field>
           <NumField label="Produc. neta total (qq)" field="prodNetaTotalQq" cabecera={cabecera} setCab={setCab} />
           <NumField label="Precio ($/qq)" field="precioXQq" cabecera={cabecera} setCab={setCab} />
           <div className="sm:col-span-2 lg:col-span-4 rounded-md border border-border bg-muted/20 p-3">
@@ -1270,6 +1316,23 @@ export default function CampaniaDetalle() {
           </div>
           <NumField label="Comercialización (%)" field="comercializacionPct" cabecera={cabecera} setCab={setCab} max={100} />
           <NumField label="Cosecha ($/ha)" field="cosechaXHa" cabecera={cabecera} setCab={setCab} />
+          <div className="sm:col-span-2 lg:col-span-4 rounded-md border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Seguros
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Empresa de seguros">
+                <SelectAutocomplete
+                  value={cabecera.idAseguradora ?? ''}
+                  onChange={(v) => setCab('idAseguradora', v === '' ? null : Number(v))}
+                  options={aseguradoraOpciones}
+                  placeholder="Sin asignar"
+                  clearable
+                />
+              </Field>
+              <NumField label="QQ asegurados" field="qqAsegurados" cabecera={cabecera} setCab={setCab} />
+            </div>
+          </div>
         </div>
 
         {isNew && (

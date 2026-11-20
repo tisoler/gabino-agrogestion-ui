@@ -4,6 +4,7 @@ import { useState } from 'react'
 import CotizacionDolar from './CotizacionDolar'
 import CotizacionesPizarra from './CotizacionesPizarra'
 import NotificacionesBell from './NotificacionesBell'
+import { CampaniasFiltrosProvider } from '../contexts/CampaniasFiltrosContext'
 
 export default function Layout() {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -23,7 +24,9 @@ export default function Layout() {
             <div className="hidden md:block w-px self-stretch bg-border" aria-hidden />
             <CotizacionDolar />
           </div>
-          <Outlet />
+          <CampaniasFiltrosProvider>
+            <Outlet />
+          </CampaniasFiltrosProvider>
         </div>
       </main>
     </div>

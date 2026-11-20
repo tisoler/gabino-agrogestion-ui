@@ -1,7 +1,14 @@
 import { useState } from 'react'
-import { AlertCircle, Loader2, RefreshCcw, CheckCircle2, Trash2 } from 'lucide-react'
-import api from '../lib/api'
+import useSWR from 'swr'
+import { AlertCircle, Loader2, RefreshCcw, CheckCircle2, Trash2, Plus, Pencil, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import api, { fetcher } from '../lib/api'
 import { useAuth } from '../contexts/auth-context'
+
+interface Aseguradora {
+  id: number
+  nombre: string
+  activo: boolean
+}
 
 export default function Configuracion() {
   const { isSysAdmin } = useAuth()
@@ -140,6 +147,198 @@ export default function Configuracion() {
           )}
         </div>
       </section>
+
+      <EmpresasSegurosSection />
     </div>
+  )
+}
+
+function EmpresasSegurosSection() {
+  const { data: aseguradoras = [], isLoading, mutate } = useSWR<Aseguradora[]>(
+    '/aseguradoras',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [creando, setCreando] = useState(false)
+  const [editandoId, setEditandoId] = useState<number | null>(null)
+  const [editNombre, setEditNombre] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+
+  const errorDe = (e: unknown, fallback: string): string => {
+    const err = e as { response?: { data?: { message?: string | string[] } } }
+    const msg = err?.response?.data?.message
+    return Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : fallback
+  }
+
+  const handleCrear = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nuevoNombre.trim() || creando) return
+    setCreando(true)
+    setError(null)
+    try {
+      await api.post('/aseguradoras', { nombre: nuevoNombre.trim() })
+      setNuevoNombre('')
+      mutate()
+    } catch (err) {
+      setError(errorDe(err, 'No se pudo crear la empresa de seguros.'))
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  const handleGuardarNombre = async (id: number) => {
+    if (!editNombre.trim() || guardando) return
+    setGuardando(true)
+    setError(null)
+    try {
+      await api.patch(`/aseguradoras/${id}`, { nombre: editNombre.trim() })
+      setEditandoId(null)
+      mutate()
+    } catch (err) {
+      setError(errorDe(err, 'No se pudo guardar el nombre.'))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const handleToggle = async (a: Aseguradora) => {
+    setUpdatingIds((prev) => new Set(prev).add(a.id))
+    setError(null)
+    try {
+      await api.patch(`/aseguradoras/${a.id}`, { activo: !a.activo })
+      mutate()
+    } catch (err) {
+      setError(errorDe(err, 'No se pudo cambiar el estado.'))
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(a.id)
+        return next
+      })
+    }
+  }
+
+  return (
+    <section className="bg-card border border-border rounded-lg p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Empresas de seguros</h2>
+      <p className="text-sm text-muted-foreground">
+        Catálogo para la planilla de seguros de las producciones. Las inactivas no aparecen como opción,
+        pero se conservan en las producciones ya generadas.
+      </p>
+
+      <form onSubmit={handleCrear} className="flex gap-2">
+        <input
+          type="text"
+          value={nuevoNombre}
+          onChange={(e) => setNuevoNombre(e.target.value)}
+          placeholder="Nueva empresa (ej: La Dulce)"
+          className="flex-1 min-w-0 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+        />
+        <button
+          type="submit"
+          disabled={!nuevoNombre.trim() || creando}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+        >
+          {creando ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" strokeWidth={2} />}
+          Agregar
+        </button>
+      </form>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Cargando…
+        </div>
+      ) : aseguradoras.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay empresas cargadas.</p>
+      ) : (
+        <ul className="divide-y divide-border border border-border rounded-md overflow-hidden">
+          {aseguradoras.map((a) => (
+            <li key={a.id} className={`flex items-center gap-2 px-3 py-2 ${a.activo ? '' : 'bg-muted/20 opacity-70'}`}>
+              {editandoId === a.id ? (
+                <>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editNombre}
+                    onChange={(e) => setEditNombre(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleGuardarNombre(a.id)
+                      if (e.key === 'Escape') setEditandoId(null)
+                    }}
+                    className="flex-1 min-w-0 px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleGuardarNombre(a.id)}
+                    disabled={guardando || !editNombre.trim()}
+                    className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoId(null)}
+                    className="p-1.5 rounded-md text-muted-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
+                    aria-label="Cancelar"
+                  >
+                    <X className="size-4" strokeWidth={1.75} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{a.nombre}</span>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded shrink-0 ${a.activo
+                      ? 'bg-success-soft text-success'
+                      : 'bg-destructive-soft text-destructive'
+                      }`}
+                  >
+                    {a.activo ? 'Activa' : 'Inactiva'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setEditNombre(a.nombre); setEditandoId(a.id); setError(null) }}
+                    className="p-1.5 rounded-md text-primary hover:bg-primary-soft transition-colors cursor-pointer shrink-0"
+                    title="Editar nombre"
+                    aria-label="Editar nombre"
+                  >
+                    <Pencil className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(a)}
+                    className={`p-1.5 rounded-md cursor-pointer transition-colors shrink-0 ${a.activo
+                      ? 'text-success hover:bg-success-soft'
+                      : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                    title={a.activo ? 'Desactivar' : 'Activar'}
+                    aria-label={a.activo ? 'Desactivar' : 'Activar'}
+                  >
+                    {updatingIds.has(a.id) ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : a.activo ? (
+                      <ToggleRight className="size-4" strokeWidth={1.75} />
+                    ) : (
+                      <ToggleLeft className="size-4" strokeWidth={1.75} />
+                    )}
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && (
+        <p className="text-xs text-destructive inline-flex items-center gap-1.5 bg-destructive-soft border border-destructive/20 rounded-md px-3 py-2">
+          <AlertCircle className="size-3.5 shrink-0" strokeWidth={1.75} />
+          {error}
+        </p>
+      )}
+    </section>
   )
 }

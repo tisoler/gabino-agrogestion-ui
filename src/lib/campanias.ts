@@ -96,6 +96,10 @@ export interface Campania {
   precioXQq: number | null
   alquilerQqHa: number | null
   alquilerPrecioXQq: number | null
+  fechaSiembra: string | null
+  idAseguradora: number | null
+  aseguradora?: { id: number; nombre: string } | null
+  qqAsegurados: number | null
   comercializacionPct: number | null
   cosechaXHa: number | null
   lote?: Lote
