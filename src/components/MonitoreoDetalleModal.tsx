@@ -28,6 +28,25 @@ interface LoteOption {
   campo?: { id: number; nombre: string } | null
 }
 
+interface InsumoOption {
+  id: number
+  nombre: string
+  unidad?: string | null
+}
+
+interface LaborOption {
+  id: number
+  nombre: string
+}
+
+interface LineaForm {
+  key: number
+  idInsumo: number | ''
+  nombre: string
+  cantidadPorHa: string
+  unidad: string
+}
+
 /**
  * Campaña de monitoreo vigente (abr–mar), espejo de la regla del móvil/API:
  * oct-2026 → "26/27", feb-2027 → "26/27".
@@ -36,6 +55,13 @@ function periodoMonitoreoActual(fecha: Date = new Date()): string {
   const anio = fecha.getFullYear()
   const y = fecha.getMonth() >= 3 ? anio : anio - 1
   return `${String(y % 100).padStart(2, '0')}/${String((y + 1) % 100).padStart(2, '0')}`
+}
+
+export interface LineaSugerida {
+  idInsumo: number | null
+  nombre?: string | null
+  cantidadPorHa?: number | null
+  unidad?: string | null
 }
 
 export interface MonitoreoDetalle {
@@ -48,6 +74,7 @@ export interface MonitoreoDetalle {
   origen?: string | null
   audioUrl?: string | null
   transcripcionEstado?: string | null
+  prescripcionSugerida?: LineaSugerida[] | null
   campania?: {
     id: number
     campania?: string
@@ -55,6 +82,7 @@ export interface MonitoreoDetalle {
       id: number
       descripcion: string | null
       idEmpresa: number
+      area?: string | number | null
       campo?: { id: number; nombre: string } | null
     } | null
     cultivo?: { id: number; nombre: string } | null
@@ -205,10 +233,112 @@ export default function MonitoreoDetalleModal({ monitoreo, productor, onClose, p
     }
   }
 
+  // ---- Prescripción sugerida por voz (sección ampliada) ----
+  const tieneSugerencia = (actual.prescripcionSugerida?.length ?? 0) > 0
+  const [enReceta, setEnReceta] = useState(false)
+  const [lineas, setLineas] = useState<LineaForm[]>([])
+  const [rLabor, setRLabor] = useState<number | ''>('')
+  const [rFecha, setRFecha] = useState(actual.fecha)
+  const [rSuperficie, setRSuperficie] = useState('')
+  const [rObservaciones, setRObservaciones] = useState('')
+  const [guardandoReceta, setGuardandoReceta] = useState(false)
+  const [errorReceta, setErrorReceta] = useState<string | null>(null)
+  const [recetaCreada, setRecetaCreada] = useState<{ to: string; label: string } | null>(null)
+
+  const { data: insumosCat = [] } = useSWR<InsumoOption[]>(
+    editable && enReceta ? '/insumos' : null, fetcher, { revalidateOnFocus: false },
+  )
+  const { data: laboresCat = [] } = useSWR<LaborOption[]>(
+    editable && enReceta ? '/labores' : null, fetcher, { revalidateOnFocus: false },
+  )
+
+  const empezarReceta = () => {
+    setLineas(
+      (actual.prescripcionSugerida ?? []).map((l, i) => ({
+        key: Date.now() + i,
+        idInsumo: l.idInsumo ?? '',
+        nombre: l.nombre || '',
+        cantidadPorHa: l.cantidadPorHa != null ? String(l.cantidadPorHa) : '',
+        unidad: l.unidad || '',
+      })),
+    )
+    setRLabor('')
+    setRFecha(actual.fecha)
+    const area = actual.campania?.lote?.area
+    setRSuperficie(area != null && Number(area) > 0 ? String(Number(area)) : '')
+    setRObservaciones(actual.observaciones ?? '')
+    setErrorReceta(null)
+    setRecetaCreada(null)
+    setEnReceta(true)
+  }
+
+  const lineasValidas = lineas.filter(
+    (l) => l.idInsumo !== '' && Number(l.cantidadPorHa) > 0,
+  )
+  const puedeGuardarReceta =
+    !guardandoReceta &&
+    actual.campania != null &&
+    rLabor !== '' &&
+    rFecha !== '' &&
+    Number(rSuperficie) > 0 &&
+    lineasValidas.length > 0
+
+  const guardarReceta = async () => {
+    if (!puedeGuardarReceta || actual.campania == null) return
+    setGuardandoReceta(true)
+    setErrorReceta(null)
+    try {
+      const sup = Number(rSuperficie)
+      const res = await api.post('/prescripciones', {
+        fecha: rFecha,
+        idLabor: Number(rLabor),
+        lotes: [{ idCampania: actual.campania.id, superficieAplicada: sup }],
+        observaciones: rObservaciones.trim() || undefined,
+        insumos: lineasValidas.map((l) => {
+          const porHa = Number(l.cantidadPorHa)
+          return {
+            idInsumo: Number(l.idInsumo),
+            cantidadPorHa: porHa,
+            cantidadTotal: porHa * sup,
+          }
+        }),
+      })
+      await api.patch(`/monitoreos/${actual.id}`, { prescripcionSugerida: null })
+      setActual({ ...actual, prescripcionSugerida: null })
+      const rid = res.data?.id
+      const etiqueta = res.data?.numero != null && res.data?.numAnio != null
+        ? `${res.data.numAnio}-${res.data.numero}`
+        : `#${rid}`
+      setRecetaCreada(rid != null ? { to: `/prescripciones/${rid}`, label: etiqueta } : null)
+      setEnReceta(false)
+      onActualizado?.()
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } } }
+      const msg = err.response?.data?.message
+      setErrorReceta(Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : 'No se pudo guardar la prescripción.')
+    } finally {
+      setGuardandoReceta(false)
+    }
+  }
+
+  const descartarReceta = async () => {
+    if (!window.confirm('Descartar la prescripción sugerida por voz.')) return
+    try {
+      await api.patch(`/monitoreos/${actual.id}`, { prescripcionSugerida: null })
+      setActual({ ...actual, prescripcionSugerida: null })
+      setEnReceta(false)
+      onActualizado?.()
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string | string[] } } }
+      const msg = err.response?.data?.message
+      setErrorReceta(Array.isArray(msg) ? msg.join(', ') : typeof msg === 'string' ? msg : 'No se pudo descartar.')
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-card border border-border rounded-lg shadow-xl">
+      <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-card border border-border rounded-lg shadow-xl">
         <div className="sticky top-0 z-10 px-5 py-4 border-b border-border bg-card flex justify-between items-center">
           <div>
             <h2 className="text-base font-semibold text-foreground">Monitoreo</h2>
@@ -393,6 +523,169 @@ export default function MonitoreoDetalleModal({ monitoreo, productor, onClose, p
             </div>
           )}
 
+          {/* Prescripción sugerida por voz */}
+          {tieneSugerencia && !enReceta && (
+            <div className="space-y-2 border border-amber-300 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-950/20">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
+                Prescripción sugerida por voz
+              </h3>
+              <ul className="space-y-1 text-sm text-foreground">
+                {actual.prescripcionSugerida!.map((l, i) => (
+                  <li key={i}>
+                    · {l.nombre || 'Insumo sin identificar'}
+                    {l.cantidadPorHa != null ? ` — ${l.cantidadPorHa}${l.unidad ? ` ${l.unidad}` : ''}/ha` : ' — sin dosis'}
+                  </li>
+                ))}
+              </ul>
+              {recetaCreada && (
+                <p className="text-sm">
+                  <Link to={recetaCreada.to} className="font-medium text-primary hover:underline">
+                    Prescripción {recetaCreada.label} guardada → ver
+                  </Link>
+                </p>
+              )}
+            </div>
+          )}
+
+          {enReceta && (
+            <div className="space-y-3 border border-border rounded-lg p-4 bg-muted/20">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Revisar prescripción {actual.campania?.lote?.descripcion ? `· ${actual.campania.lote.descripcion}` : ''}
+              </h3>
+              {!actual.campania && (
+                <p className="text-xs text-muted-foreground">Resolvé el lote primero para guardar la prescripción.</p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Labor</label>
+                  <select
+                    value={rLabor}
+                    onChange={(e) => setRLabor(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground cursor-pointer"
+                  >
+                    <option value="">Seleccionar…</option>
+                    {laboresCat.map((l) => (
+                      <option key={l.id} value={l.id}>{l.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Fecha</label>
+                  <input
+                    type="date"
+                    value={rFecha}
+                    onChange={(e) => setRFecha(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Superficie (ha)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={rSuperficie}
+                    onChange={(e) => setRSuperficie(e.target.value)}
+                    placeholder="Ej: 25"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Líneas (insumo + dosis/ha)</label>
+                {lineas.map((l) => (
+                  <div key={l.key} className="grid grid-cols-[1fr_110px_90px_32px] gap-2 items-center">
+                    <select
+                      value={l.idInsumo}
+                      onChange={(e) => {
+                        const id = e.target.value === '' ? '' : Number(e.target.value)
+                        const ins = insumosCat.find((x) => x.id === id)
+                        setLineas((ls) => ls.map((x) => x.key === l.key
+                          ? { ...x, idInsumo: id, nombre: ins?.nombre ?? x.nombre, unidad: ins?.unidad ?? x.unidad }
+                          : x))
+                      }}
+                      className="w-full px-2 py-2 bg-background border border-border rounded-md text-sm text-foreground cursor-pointer"
+                    >
+                      <option value="">Insumo… ({l.nombre || 's/d'})</option>
+                      {insumosCat.map((x) => (
+                        <option key={x.id} value={x.id}>{x.nombre}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={l.cantidadPorHa}
+                      onChange={(e) => setLineas((ls) => ls.map((x) => x.key === l.key ? { ...x, cantidadPorHa: e.target.value } : x))}
+                      placeholder="/ha"
+                      className="w-full px-2 py-2 bg-background border border-border rounded-md text-sm text-foreground"
+                    />
+                    <input
+                      value={l.unidad}
+                      onChange={(e) => setLineas((ls) => ls.map((x) => x.key === l.key ? { ...x, unidad: e.target.value } : x))}
+                      placeholder="unid."
+                      className="w-full px-2 py-2 bg-background border border-border rounded-md text-sm text-foreground"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLineas((ls) => ls.filter((x) => x.key !== l.key))}
+                      className="p-1.5 rounded-md text-destructive hover:bg-destructive/10 cursor-pointer"
+                      aria-label="Quitar línea"
+                    >
+                      <X className="size-4" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLineas((ls) => [...ls, { key: Date.now(), idInsumo: '', nombre: '', cantidadPorHa: '', unidad: '' }])}
+                  className="text-xs font-medium text-primary hover:underline cursor-pointer"
+                >
+                  + Agregar línea
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Indicaciones (opcional)</label>
+                <textarea
+                  value={rObservaciones}
+                  onChange={(e) => setRObservaciones(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground resize-y"
+                />
+              </div>
+              {errorReceta && (
+                <p className="text-sm text-destructive">{errorReceta}</p>
+              )}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setEnReceta(false)}
+                  disabled={guardandoReceta}
+                  className="flex-1 cursor-pointer px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={descartarReceta}
+                  disabled={guardandoReceta}
+                  className="flex-1 cursor-pointer px-4 py-2 border border-destructive/50 text-destructive rounded-md text-sm font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                >
+                  Descartar
+                </button>
+                <button
+                  type="button"
+                  onClick={guardarReceta}
+                  disabled={!puedeGuardarReceta}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 cursor-pointer px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {guardandoReceta && <Loader2 className="size-4 animate-spin" />}
+                  {guardandoReceta ? 'Guardando…' : 'Guardar prescripción'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {errorConfirmar && (
             <p className="text-sm text-destructive">{errorConfirmar}</p>
           )}
@@ -428,6 +721,16 @@ export default function MonitoreoDetalleModal({ monitoreo, productor, onClose, p
                   >
                     <Pencil className="size-4" strokeWidth={1.75} />
                     Editar
+                  </button>
+                )}
+                {esBorrador && editable && tieneSugerencia && !enReceta && (
+                  <button
+                    type="button"
+                    onClick={empezarReceta}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 cursor-pointer px-4 py-2 border border-amber-400 text-amber-800 dark:text-amber-200 rounded-md text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                  >
+                    <Sprout className="size-4" strokeWidth={1.75} />
+                    Revisar prescripción
                   </button>
                 )}
                 {esBorrador && editable && (

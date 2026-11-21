@@ -23,6 +23,7 @@ interface MonitoreoListItem {
   origen?: string | null
   audioUrl?: string | null
   transcripcionEstado?: string | null
+  prescripcionSugerida?: { idInsumo: number | null; nombre?: string | null; cantidadPorHa?: number | null; unidad?: string | null }[] | null
   campania?: {
     id: number
     campania?: string
