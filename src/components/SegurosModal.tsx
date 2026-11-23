@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import {
   X, Loader2, AlertCircle, CheckCircle2, FileDown, FileSpreadsheet,
 } from 'lucide-react'
@@ -16,6 +16,10 @@ interface SegurosRow {
   idVariedad: number | null
   supSembrada: number | null
   fechaSiembra: string | null
+  fechaSiembraOrigen?: {
+    fuente: 'labor' | 'manual'
+    laborNombre?: string | null
+  } | null
   idAseguradora: number | null
   qqAsegurados: number | null
   aseguradora?: { id: number; nombre: string } | null
@@ -159,6 +163,19 @@ function SegurosModalBody({
   const [busy, setBusy] = useState<'csv' | 'xls' | 'compartir' | 'guardar' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
+  const { mutate: mutateGlobal } = useSWRConfig()
+
+  // Guardar datos de seguros actualiza campos de producción (campaña):
+  // revalidar la cache SWR de producciones (listado "campanias" y detalle
+  // /campanias/{id}) para que se vean en la navegación SPA sin recargar.
+  const revalidarProducciones = () =>
+    mutateGlobal(
+      (key) =>
+        (typeof key === 'string' && key.startsWith('/campanias')) ||
+        (Array.isArray(key) && key[0] === 'campanias'),
+      undefined,
+      { revalidate: true },
+    )
 
   const aseguradoraOpciones = useMemo(() => {
     const map = new Map<number, string>()
@@ -174,13 +191,22 @@ function SegurosModalBody({
       .map(([value, label]) => ({ value, label }))
   }, [aseguradoras, filas])
 
+  // Filas con labor de siembra: la fecha la define la labor y no es editable.
+  const fechasBloqueadas = useMemo(
+    () => new Set(filas.filter((f) => f.fechaSiembraOrigen?.fuente === 'labor').map((f) => f.id)),
+    [filas],
+  )
+
   // Se envían todos los valores del formulario (incluidos los vacíos, que el
   // servidor interpreta como "borrar"). Las filas no tocadas no están en el
-  // estado y el servidor las deja como están.
+  // estado y el servidor las deja como están. Las fechas bloqueadas por labor
+  // no se envían (el servidor también las ignora).
   const buildPayload = () => ({
     ids,
     qq: { ...qq },
-    fechaSiembra: { ...fechas },
+    fechaSiembra: Object.fromEntries(
+      Object.entries(fechas).filter(([id]) => !fechasBloqueadas.has(Number(id))),
+    ),
     idVariedad: { ...variedades },
     aseguradoraId,
   })
@@ -210,6 +236,7 @@ function SegurosModalBody({
       window.URL.revokeObjectURL(url)
       setOkMsg('Planilla generada y datos guardados en las producciones.')
       onSaved()
+      await revalidarProducciones()
     } catch (e) {
       setActionError(errorDe(e, 'No se pudo generar la planilla.'))
     } finally {
@@ -230,6 +257,7 @@ function SegurosModalBody({
       window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer')
       setOkMsg('Planilla generada y datos guardados en las producciones.')
       onSaved()
+      await revalidarProducciones()
     } catch (e) {
       setActionError(errorDe(e, 'No se pudo generar la planilla para compartir.'))
     } finally {
@@ -249,6 +277,7 @@ function SegurosModalBody({
       setOkMsg('Datos guardados en las producciones.')
       onSaved()
       onMutateFilas()
+      await revalidarProducciones()
     } catch (e) {
       setActionError(errorDe(e, 'No se pudieron guardar los datos.'))
     } finally {
@@ -319,13 +348,22 @@ function SegurosModalBody({
                           {f.lote?.centroide?.lng != null ? decimalADms(Number(f.lote.centroide.lng)) : '—'}
                         </td>
                         <td className="px-3 py-2">
-                          <input
-                            type="date"
-                            value={fechas[f.id] ?? ''}
-                            onChange={(e) => setFechas((prev) => ({ ...prev, [f.id]: e.target.value }))}
-                            title={f.fechaSiembra ? `Guardada: ${fmtFecha(f.fechaSiembra)}` : 'Sin fecha de siembra'}
-                            className={inputCls + ' w-[130px]'}
-                          />
+                          {f.fechaSiembraOrigen?.fuente === 'labor' ? (
+                            <span
+                              className="text-sm text-foreground whitespace-nowrap"
+                              title={`Se define en la labor "${f.fechaSiembraOrigen?.laborNombre ?? 'siembra'}"`}
+                            >
+                              {fmtFecha(f.fechaSiembra)}
+                            </span>
+                          ) : (
+                            <input
+                              type="date"
+                              value={fechas[f.id] ?? ''}
+                              onChange={(e) => setFechas((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                              title={f.fechaSiembra ? `Guardada: ${fmtFecha(f.fechaSiembra)}` : 'Sin fecha de siembra'}
+                              className={inputCls + ' w-[130px]'}
+                            />
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           {cultivos ? (
@@ -363,7 +401,7 @@ function SegurosModalBody({
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Superficie = sup. sembrada · Coordenadas del centroide del lote ·{' '}
+                Superficie = sup. sembrada · Coordenadas del centroide del lote · Las fechas definidas por labor de siembra no son editables ·{' '}
                 {filas.some((f) => f.lote?.centroide == null) && (
                   <span className="text-warning-foreground font-medium">
                     Hay lotes sin coordenadas (mostrados con —).

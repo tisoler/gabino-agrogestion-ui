@@ -97,6 +97,11 @@ export interface Campania {
   alquilerQqHa: number | null
   alquilerPrecioXQq: number | null
   fechaSiembra: string | null
+  /** Origen de la fecha: labor de siembra (no editable) o manual. */
+  fechaSiembraOrigen?: {
+    fuente: 'labor' | 'manual'
+    laborNombre?: string | null
+  } | null
   idAseguradora: number | null
   aseguradora?: { id: number; nombre: string } | null
   qqAsegurados: number | null

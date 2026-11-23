@@ -1264,8 +1264,17 @@ export default function CampaniaDetalle() {
               type="date"
               value={cabecera.fechaSiembra}
               onChange={(e) => setCab('fechaSiembra', e.target.value)}
-              className={inputCls}
+              disabled={campania?.fechaSiembraOrigen?.fuente === 'labor'}
+              title={campania?.fechaSiembraOrigen?.fuente === 'labor'
+                ? `Se define en la labor "${campania.fechaSiembraOrigen?.laborNombre ?? 'siembra'}"`
+                : undefined}
+              className={inputCls + (campania?.fechaSiembraOrigen?.fuente === 'labor' ? ' bg-muted/50' : '')}
             />
+            {campania?.fechaSiembraOrigen?.fuente === 'labor' && (
+              <p className="text-[11px] text-muted-foreground">
+                Se define en la labor “{campania.fechaSiembraOrigen?.laborNombre ?? 'siembra'}”
+              </p>
+            )}
           </Field>
           <NumField label="Produc. neta total (qq)" field="prodNetaTotalQq" cabecera={cabecera} setCab={setCab} />
           <NumField label="Precio ($/qq)" field="precioXQq" cabecera={cabecera} setCab={setCab} />
