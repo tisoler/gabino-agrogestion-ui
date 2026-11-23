@@ -31,6 +31,7 @@ interface Campo {
 interface Lote {
   id: number
   descripcion: string | null
+  alias?: string[] | null
   idCampo: number | null
   campo?: Campo | null
   idUsuario: string
@@ -47,6 +48,7 @@ interface Lote {
 
 interface LoteFormData {
   descripcion: string
+  alias: string[]
   idCampo: number | null
   idUsuario: string
   geometria: GeoJSON.GeoJsonObject | null
@@ -57,6 +59,7 @@ interface LoteFormData {
 
 const emptyForm: LoteFormData = {
   descripcion: '',
+  alias: [],
   idCampo: null,
   idUsuario: '',
   geometria: null,
@@ -67,6 +70,7 @@ const emptyForm: LoteFormData = {
 
 const toForm = (l: Lote): LoteFormData => ({
   descripcion: l.descripcion || '',
+  alias: l.alias ?? [],
   idCampo: l.idCampo,
   idUsuario: l.idUsuario,
   geometria: l.geometria ?? null,
@@ -74,6 +78,10 @@ const toForm = (l: Lote): LoteFormData => ({
   area: l.area?.toString() ?? '',
   idEmpresa: l.idEmpresa,
 })
+
+/** Limpia un alias: recorta espacios y caracteres especiales de los bordes. */
+const limpiarAlias = (s: string): string =>
+  s.trim().replace(/^[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚüÜ]+|[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚüÜ]+$/g, '').trim()
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data)
 
@@ -115,6 +123,19 @@ export default function LoteDetalle() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedOk, setSavedOk] = useState(false)
+  const [aliasInput, setAliasInput] = useState('')
+
+  const agregarAlias = () => {
+    const limpio = limpiarAlias(aliasInput)
+    if (!limpio) {
+      setAliasInput('')
+      return
+    }
+    if (!formData.alias.some((a) => a.toLowerCase() === limpio.toLowerCase())) {
+      setFormData({ ...formData, alias: [...formData.alias, limpio] })
+    }
+    setAliasInput('')
+  }
 
   // Modal: crear un campo nuevo desde el formulario
   const [isCampoModalOpen, setIsCampoModalOpen] = useState(false)
@@ -200,6 +221,7 @@ export default function LoteDetalle() {
     const duenoSel = usuarios.find((u) => u.uid === formData.idUsuario)
     const payload: Record<string, unknown> = {
       descripcion: formData.descripcion || null,
+      alias: formData.alias,
       idCampo: formData.idCampo,
       idUsuario: formData.idUsuario,
       nombreUsuario:
@@ -409,6 +431,56 @@ export default function LoteDetalle() {
               disabled={!editable}
               className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-60"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="lote-alias" className="text-xs font-medium text-foreground">
+              Nombres alternativos <span className="font-normal text-muted-foreground">(para reconocer por voz)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="lote-alias"
+                type="text"
+                value={aliasInput}
+                onChange={(e) => setAliasInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarAlias() } }}
+                placeholder="Ej: la loma del fondo"
+                maxLength={100}
+                disabled={!editable}
+                className="flex-1 px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={agregarAlias}
+                disabled={!editable || !aliasInput.trim()}
+                className="inline-flex items-center justify-center size-9 shrink-0 bg-primary text-primary-foreground rounded-md shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                aria-label="Agregar nombre alternativo"
+                title="Agregar"
+              >
+                <Plus className="size-4" strokeWidth={2} />
+              </button>
+            </div>
+            {formData.alias.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {formData.alias.map((a) => (
+                  <span
+                    key={a.toLowerCase()}
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-xs font-medium bg-primary/10 text-foreground border border-primary/30"
+                  >
+                    {a}
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, alias: formData.alias.filter((x) => x !== a) })}
+                      disabled={!editable}
+                      className="inline-flex items-center justify-center size-5 rounded-full text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors cursor-pointer disabled:opacity-50"
+                      aria-label={`Quitar ${a}`}
+                    >
+                      <X className="size-3" strokeWidth={2.5} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
