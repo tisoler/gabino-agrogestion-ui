@@ -1096,16 +1096,16 @@ export default function CampaniaDetalle() {
   return (
     <div className="space-y-5 pb-20 md:pb-0">
       {/* Header */}
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           onClick={volver}
-          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer shrink-0"
           aria-label="Volver"
         >
           <ArrowLeft className="size-4" strokeWidth={1.75} />
         </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+        <div className="min-w-0 min-[880px]:flex-none">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight truncate">
             {isNew
               ? 'Nueva producción'
               : campania
@@ -1118,12 +1118,29 @@ export default function CampaniaDetalle() {
               : 'Cosecha, costos y márgenes por lote.'}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        {!isNew && campaniaId !== null && (
+          <div
+            className="flex flex-1 min-w-0 items-center justify-end gap-2.5 px-4 py-2 bg-success-soft border border-success/30 rounded-md min-[880px]:flex-none min-[880px]:basis-auto min-[880px]:justify-center min-[880px]:mx-auto min-[880px]:min-w-[210px] min-[880px]:px-5"
+            title={resultados.rendimientoQqHa === 0 ? 'Ingresá producción neta y superficie cosechada para calcularlo' : undefined}
+          >
+            <Sprout className="size-4 text-primary shrink-0" strokeWidth={1.75} />
+            <div className="leading-tight">
+              <p className="hidden min-[480px]:block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Rendimiento
+              </p>
+              <p className="text-base font-semibold text-foreground tabular-nums whitespace-nowrap">
+                {fmtNumero(resultados.rendimientoQqHa, 2)}
+                <span className="text-xs text-muted-foreground font-normal ml-1">qq/ha</span>
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2 shrink-0 ml-auto basis-full justify-end min-[880px]:basis-auto">
           {!isNew && (
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               title="Exportar a XLS"
             >
               {isExporting ? (
@@ -1364,29 +1381,6 @@ export default function CampaniaDetalle() {
       {/* RESTO (solo si ya hay campaniaId) */}
       {campaniaId !== null && (
         <>
-          {/* Rendimiento (qq/ha) destacado entre los inputs y la tabla de Labores.
-              Misma fórmula que el footer de Resultados económicos; se duplica
-              acá para que quede a la vista mientras se cargan las labores. */}
-          <section className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <Sprout className="size-4 text-primary" strokeWidth={1.75} />
-              <span className="text-[16px] font-semibold tracking-wider text-muted-foreground">
-                Rendimiento (qq/ha)
-              </span>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-semibold text-foreground tabular-nums">
-                {fmtNumero(resultados.rendimientoQqHa, 2)}
-                <span className="text-sm text-muted-foreground font-normal ml-1">qq/ha</span>
-              </p>
-              {resultados.rendimientoQqHa === 0 && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Ingresá producción neta y superficie cosechada para calcularlo
-                </p>
-              )}
-            </div>
-          </section>
-
           <DetalleTable
             title="Labores"
             icon={Pickaxe}
