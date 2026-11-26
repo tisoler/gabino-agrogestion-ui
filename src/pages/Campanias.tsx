@@ -580,10 +580,10 @@ export default function Campanias() {
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
                     Rend.
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
+                  <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right whitespace-nowrap sticky top-0 z-10 bg-muted">
                     Margen / ha
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right sticky top-0 z-10 bg-muted">
+                  <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right whitespace-nowrap sticky top-0 z-10 bg-muted">
                     Margen lote
                   </th>
                 </tr>
@@ -642,17 +642,17 @@ export default function Campanias() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
                         {fmtNumero(c.totales.supSembrada, 2)}
                         <span className="text-[10px] text-muted-foreground ml-0.5">ha</span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-sm">
+                      <td className="px-4 py-3 text-right tabular-nums text-sm whitespace-nowrap">
                         {fmtQQHa(c.totales.rendimientoQqHa, 2)}
                       </td>
-                      <td className={`px-4 py-3 text-right tabular-nums text-sm font-medium ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
+                      <td className={`px-3 py-3 text-right tabular-nums text-sm font-medium whitespace-nowrap ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
                         {fmtMoneda(c.totales.margenBrutoSAlquilerHa, 0)}
                       </td>
-                      <td className={`px-4 py-3 text-right tabular-nums text-sm font-medium ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
+                      <td className={`px-3 py-3 text-right tabular-nums text-sm font-medium whitespace-nowrap ${margenNegativo ? 'text-destructive' : 'text-success'}`}>
                         {fmtMoneda(c.totales.margenBrutoSAlquilerLote, 0)}
                       </td>
                     </tr>
